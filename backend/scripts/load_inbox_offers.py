@@ -16,6 +16,7 @@ import argparse
 import sys
 from datetime import date, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -29,6 +30,16 @@ from inbox_files import delete_loaded  # noqa: E402
 # Compatibilidad con ficheros anteriores a los tracks configurables: alias -> clase de track.
 # "puente" usa el primer track aislado de la config.
 LEGACY_TIPOS = {"sap": "standard", "ia": "standard", "puente": "isolated"}
+
+# Portal de la URL -> valor de `source`; el resto (webs de empresa, otros portales) queda como "inbox".
+KNOWN_SOURCES = ("indeed", "linkedin", "infojobs", "tecnoempleo", "computrabajo", "glassdoor",
+                 "remotive", "remoteok", "arbeitnow", "welcometothejungle", "stepstone")
+
+
+def source_from_url(url: str) -> str:
+    """Fuente de una oferta del inbox según el dominio de su URL ('inbox' si no es un portal conocido)."""
+    host = (urlparse(url or "").hostname or "").lower()
+    return next((s for s in KNOWN_SOURCES if s in host.split(".")), "inbox")
 
 
 def resolve_tipo(tipo: str) -> tuple[str, Track | None] | None:
@@ -97,7 +108,7 @@ def main() -> None:
                 continue
             desc = ". ".join(x for x in (o["contract"], o["nota"]) if x) or None
             offer = {"title": o["title"], "company_name": o["company_name"], "location": o["location"],
-                     "url": o["url"], "posted_at": o["posted_at"], "description": desc, "source": "indeed"}
+                     "url": o["url"], "posted_at": o["posted_at"], "description": desc, "source": source_from_url(o["url"])}
             kind, track = resolve_tipo(o["tipo"])
             if kind == "isolated":
                 s = score_isolated({**offer, "description": o["contract"] or None}, track) if track else None
@@ -129,7 +140,7 @@ def main() -> None:
 
     saved = skipped = 0
     for o in plan:
-        cid = upsert_company(conn, {"name": o["company_name"], "source": "indeed"})
+        cid = upsert_company(conn, {"name": o["company_name"], "source": o["source"]})
         base = {k: o[k] for k in ("title", "location", "url", "posted_at", "description", "source")}
         if o.get("isolated"):
             r = upsert_generic_offer(conn, {**base, "company_id": cid, "generic_score": o["score"]}, o["track_id"])

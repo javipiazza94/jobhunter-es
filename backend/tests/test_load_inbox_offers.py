@@ -66,3 +66,24 @@ def test_track_id_tipo_is_saved(tmp_path, monkeypatch):
     assert not f.exists()
     row = sqlite3.connect(tmp_path / "t.db").execute("SELECT title FROM job_offers").fetchall()
     assert row == [("AI Engineer remoto",)]
+
+
+def test_source_comes_from_the_url_domain():
+    assert loader.source_from_url("https://es.indeed.com/viewjob?jk=1") == "indeed"
+    assert loader.source_from_url("https://www.linkedin.com/jobs/view/1") == "linkedin"
+    assert loader.source_from_url("https://www.infojobs.net/x/of-i1") == "infojobs"
+    assert loader.source_from_url("https://www.tecnoempleo.com/x.php") == "tecnoempleo"
+    assert loader.source_from_url("https://co.computrabajo.com/ofertas") == "computrabajo"
+
+
+def test_unknown_or_missing_url_is_inbox():
+    assert loader.source_from_url("https://careers.acme.test/job/1") == "inbox"
+    assert loader.source_from_url("") == "inbox"
+    assert loader.source_from_url("no es una url") == "inbox"
+
+
+def test_saved_offer_keeps_its_real_source(tmp_path, monkeypatch):
+    line = "ia_dev|AI Engineer remoto|ACME|Remoto|https://www.linkedin.com/jobs/view/9|2026-10-01|indefinido|nota\n"
+    _run(tmp_path, monkeypatch, line, "--save")
+    row = sqlite3.connect(tmp_path / "t.db").execute("SELECT source FROM job_offers").fetchall()
+    assert row == [("linkedin",)]
