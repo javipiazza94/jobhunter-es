@@ -1,0 +1,42 @@
+{% set greetings = [
+  "Estimado/a equipo de selección de " ~ company_name ~ ",",
+  "Estimado/a equipo de " ~ company_name ~ ",",
+  "Me dirijo al departamento de RRHH de " ~ company_name ~ ","
+] %}
+{% set extra_closings = [
+  "Quedo disponible para una entrevista cuando lo estimen oportuno.",
+  "Estaré encantado de ampliar los detalles de mi perfil SAP en una entrevista.",
+  "Me pongo a su disposición para iniciar el proceso de selección cuando lo consideren."
+] %}
+{{ greetings[variant_index] }}
+
+Me dirijo a ustedes para expresar mi interés en unirme al equipo de {{ company_name }} en un rol SAP.
+Cuento con formación en SAP Public Cloud (SAP BTP Practitioner) y experiencia práctica en consultoría de procesos de negocio y planificación de proyectos.
+
+{% if job_title %}
+He revisado la oferta para **{{ job_title }}** y encaja directamente con mi formación y perfil funcional SAP.
+{% endif %}
+
+Mi experiencia en el entorno SAP incluye:
+- Formación certificada en **SAP Public Cloud** (SAP BTP, S/4HANA Cloud)
+- Conocimiento funcional de módulos **PS (Project Systems)**, **FI/CO** y procesos de gestión de proyectos
+- Experiencia en consultoría de procesos de negocio e implantación de sistemas ERP
+- Capacidad técnica complementaria: desarrollo Python, APIs e integración de sistemas
+
+{% for exp in experience %}
+- **{{ exp.role }} en {{ exp.company }} ({{ exp.duration_months }} meses):** {{ exp.description }}
+{% endfor %}
+
+{% if tech_stack %}
+Tecnologías y módulos relevantes de la oferta: *{{ tech_stack }}*.
+{% endif %}
+
+{{ extra_closings[variant_index] }}
+
+{{ cover_letter_closing }}
+
+—
+{{ name }}
+{{ email }}{% if phone %} · {{ phone }}{% endif %}
+{% if linkedin %}LinkedIn: {{ linkedin }}{% endif %}
+{% if portfolio %}Portfolio: {{ portfolio }}{% endif %}

@@ -1,0 +1,40 @@
+\documentclass[]{cover}
+\usepackage{fancyhdr}
+
+\pagestyle{fancy}
+\fancyhf{}
+
+\rfoot{Page \thepage \hspace{0pt}}
+\thispagestyle{empty}
+\renewcommand{\headrulewidth}{0pt}
+\begin{document}
+
+\namesection{}{((( personal.name | latex_escape )))} {
+  \href{mailto:((( personal.email )))}{((( personal.email | latex_escape )))} | ((( personal.phone | latex_escape ))) | \urlstyle{same}(* if personal.linkedin *)\href{((( personal.linkedin )))}{LinkedIn}(* endif *)
+}
+
+\currentdate{((( current_date | latex_escape )))}
+\lettercontent{Estimado/a responsable de selección de ((( company_name | latex_escape ))),}
+
+\lettercontent{((( opening_paragraph | latex_escape )))}
+
+\lettercontent{((( body_paragraph | latex_escape )))}
+
+((* if bullets *))
+{\raggedright\fontspec[Path = OpenFonts/fonts/raleway/]{Raleway-Medium}\fontsize{11pt}{13pt}\selectfont
+\begin{itemize}
+((* for bullet in bullets *))
+  \item {((( bullet | latex_escape )))}
+((* endfor *))
+\end{itemize}
+}
+((* endif *))
+
+\lettercontent{((( connection_paragraph | latex_escape )))}
+
+\lettercontent{((( closing_paragraph | latex_escape )))}
+
+\lettercontent{Atentamente,\\[10pt]
+\textbf{((( personal.name | latex_escape )))}}
+
+\end{document}

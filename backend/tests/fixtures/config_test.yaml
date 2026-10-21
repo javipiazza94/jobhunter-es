@@ -1,0 +1,377 @@
+# Configuración neutra para la suite pública: ciudad ficticia (Villanova) y empresas inventadas.
+# Mismos mecanismos que una config real: 2 tracks estándar + 1 aislado, grupos de keywords, empresas seguidas.
+scoring:
+  min_relevance: 0.55
+  detail_fetch_min_score: 0.3
+  profile_confidence_threshold: 0.2
+  keyword_groups:
+  - id: core_skills
+    weight: 0.35
+    keywords:
+    - sap
+    - s/4hana
+    - s4hana
+    - sap s/4hana
+    - hana
+    - sap public cloud
+    - rise with sap
+    - sap btp
+    - sap fiori
+    - abap
+    - sap ps
+    - project system
+    - sap mm
+    - materials management
+    - sap sd
+    - sales & distribution
+    - sales and distribution
+    - sap fi
+    - financial accounting
+    - successfactors
+    - consultor sap
+    - sap consultant
+    - consultor funcional
+    - s/4hana cloud
+    - public edition
+    - sap professional services
+    - wbs
+    - billing plan
+    - intercompany
+    - business partner
+    - order-to-cash
+    - order to cash
+    - fit-to-standard
+    - acdoca
+    - universal journal
+    - edi
+    - sap business ai
+  - id: stack
+    weight: 0.2
+    keywords:
+    - python
+    - c#
+    - .net
+    - dotnet
+    - sql
+    - postgresql
+    - sqlite
+    - mysql
+    - git
+    - github
+    - gitlab
+    - devops
+    - ci/cd
+    - docker
+    - fastapi
+    - llm
+    - rag
+    - langchain
+    - llamaindex
+    - pgvector
+    - ollama
+    - embeddings
+    - generative ai
+    - ia generativa
+    - genai
+    - nlp
+    - pytorch
+    - fine-tuning
+    - qlora
+    - redis
+    - ai agents
+  location:
+    weight: 0.2
+    city: villanova
+    area:
+    - villanova
+    - valdemar
+    - costa lira
+    - san remo del valle
+    - monteclaro
+    - puerto alba
+  experience:
+    weight: 0.15
+    priority_max_years: 2
+  salary:
+    weight: 0.1
+    min_base: 22000
+  negative_keywords:
+  - +10 años
+  - 10 years
+  - c++ senior
+  - java ee
+  - cobol
+  - mainframe
+  - pl/sql dba
+  negative_title_keywords:
+  - director
+  - cto
+  - ceo
+tracks:
+- id: ia_dev
+  label:
+    es: IA / Desarrollo
+    en: AI / Development
+  cv: {default: cv_ia_path}
+  cover_template: tech
+  cover_letter_docx_key: software_ia
+  summary_key: ia
+  followed_companies:
+  - {name: Acme Robotics, tier: 1}
+  - {name: Globex Data, tier: 2}
+  classify_keywords:
+  - python
+  - fastapi
+  - django
+  - react
+  - next.js
+  - nextjs
+  - typescript
+  - javascript
+  - llm
+  - machine learning
+  - ml
+  - data scientist
+  - data engineer
+  - ai engineer
+  - ia
+  - inteligencia artificial
+  - full stack
+  - fullstack
+  - backend developer
+  - frontend developer
+  - devops
+  - automatización
+  - scraping
+  - playwright
+  - rag
+- id: sap
+  label:
+    es: SAP
+    en: SAP
+  cv:
+    default: cv_sap_path
+    by_tag: {FI_CO: cv_sap_modules.FI_CO, MM: cv_sap_modules.MM, SD: cv_sap_modules.SD}
+    tag_aliases: {FI: FI_CO, FI-CO: FI_CO, FI-CA: FI_CO, MM: MM, MM-PP: MM, SD: SD, CO-PS: null, Otro: null}
+    tag_patterns:
+    - {tag: FI_CO, regex: '\b(fico|fi[/\- ]?co|financier[oa]s?|finanzas|fi)\b'}
+    - {tag: SD, regex: '\b(sd|ventas|sales distribution)\b'}
+    - {tag: MM, regex: '\b(mm|logístic[oa]s?|logistic[oa]s?|materiales|compras)\b'}
+  cover_template: sap
+  cover_letter_docx_key: sap_es
+  summary_key: sap
+  followed_companies:
+  - {name: Globex Data, tier: 2}
+  - {name: Initech Systems, tier: 3}
+  search_keywords:
+  - SAP Public Cloud
+  - SAP BTP
+  - S/4HANA
+  - Rise with SAP
+  - SAP Fiori
+  - ABAP
+  - SAP SuccessFactors
+  - SAP consultant
+  - consultor SAP
+  - SAP MM
+  - SAP SD
+  - SAP FI
+  - SAP CO
+  classify_keywords:
+  - sap
+  - abap
+  - btp
+  - s/4hana
+  - s4hana
+  - hana
+  - fiori
+  - sap ps
+  - sap mm
+  - sap sd
+  - sap fi
+  - sap co
+  - sap pp
+  - successfactors
+  - rise with sap
+  - sap public cloud
+  - consultor funcional
+  - consultor sap
+  - sap consultant
+  - erp
+  - sap cloud
+- id: generic
+  label:
+    es: Trabajo puente
+    en: Bridge jobs
+  kind: isolated
+  cv: {default: cv_general_path}
+  cover_template: tech
+  cover_letter_docx_key: generica
+  summary_key: general
+  search_keywords: [atención al cliente, teleoperador, call center, back office, auxiliar administrativo, administrativo junior, recepcionista, handling aeropuerto, agente de rampa, dependiente, cajero, reponedor, camarero, ayudante de cocina, mozo de almacén]
+  remote_search_keywords: [atención al cliente, teleoperador, back office, administrativo]
+  isolated:
+    min_score: 0.4
+    role_families:
+      atencion_cliente:
+      - atención al cliente
+      - atencion al cliente
+      - servicio al cliente
+      - customer service
+      - customer support
+      - teleoperador
+      - teleoperadora
+      - call center
+      - contact center
+      - telemarketing
+      - back office
+      - backoffice
+      - agente de atención
+      - agente telefónico
+      - soporte al cliente
+      aeropuerto:
+      - handling
+      - aeropuerto
+      - agente de rampa
+      - operador de pista
+      - rampa
+      - auxiliar de rampa
+      - atención en tierra
+      - pasajeros
+      - aerolínea
+      - aerolinea
+      administrativo:
+      - auxiliar administrativo
+      - administrativo
+      - administrativa
+      - gestión de pedidos
+      - facturación
+      - facturacion
+      - data entry
+      - grabador de datos
+      - recepcionista
+      - recepción
+      - secretaria
+      - secretario
+      hosteleria_retail:
+      - dependiente
+      - dependienta
+      - cajero
+      - cajera
+      - reponedor
+      - reponedora
+      - camarero
+      - camarera
+      - ayudante de cocina
+      - ayudante de camarero
+      - personal de sala
+      - barista
+      - tpv
+      - vendedor
+      - vendedora
+      - tienda
+      baja_cualificacion:
+      - mozo de almacén
+      - mozo de almacen
+      - mozo
+      - peón
+      - peon
+      - repartidor
+      - operario
+      - auxiliar de almacén
+      - preparador de pedidos
+      - limpieza
+      - ayudante
+      - personal de apoyo
+    exclude_title_regex: \b(senior|sr\.?|lead|responsable|jefe|jefa|director|directora|gerente|manager|coordinador|coordinadora|supervisor|supervisora|ingenier[oa]|arquitect[oa]|desarrollador|desarrolladora|programador|programadora|developer|analista|consultor|consultora|sap|abogad[oa]|enfermer[oa]|médic[oa]|medic[oa]|profesor|profesora|docente|contable|financier[oa])\b
+    exclude_text_regex: (prácticas|practicas|becari[oa]|\bbeca\b|internship|trainee|garantía juvenil|garantia juvenil|contrato
+      formativo|contrato para la formación|contrato para la formacion|programa de empleo|menores de \d{2}|hasta
+      \d{2} años|discapacidad|minusval[ií]a|100\s?%\s?comisi|solo comisi|únicamente comisi|unicamente comisi|sin
+      sueldo fijo|multinivel|autónomo/?a?\s+(?:obligatorio|dado de alta)|freelance|titulación universitaria|titulacion
+      universitaria|licenciatura|grado universitario|máster obligatorio|master obligatorio|nivel de inglés (?:c1|c2)|inglés
+      (?:c1|c2)|ingles (?:c1|c2))
+    exclude_lang_regex: (deutsch|german|alemán|aleman|czech|checo|polish|polaco|dutch|neerland|holand|french|francés|frances|japon|japan|catal[aá]n|swedish|sueco|danish|dan[eé]s|norwegian|noruego|finnish|finland|\(m/w/d\)|\(m/f/d\))
+    capital_names:
+    - villanova
+    - villanova capital
+    province_regex: villanova|vilanova
+    province_towns:
+    - villanova
+    - valdemar
+    - costa lira
+    - san remo del valle
+    - monteclaro
+    - puerto alba
+    - alto verde
+    - rio seco
+    - la fuente nueva
+    - santa brisa
+    - torrelago
+    - ventosa
+    - bajo pinar
+    remote_regex: remot|teletrabaj|desde casa|100\s?%\s?online|home\s?office
+    nationwide_regex: toda españa|toda espana|toda españa
+    location_scores:
+      capital: 1.0
+      nationwide: 0.8
+      province: 0.7
+      unknown: 0.5
+    reject_levels:
+    - senior
+    - lead
+    - mid
+    unknown_level_score: 0.6
+    salary_floor: 16000
+    salary_scores:
+      above: 1.0
+      below: 0.3
+      unknown: 0.5
+    weights:
+      role: 0.4
+      location: 0.25
+      experience: 0.15
+      salary: 0.05
+      recency: 0.15
+    recency:
+    - - 14
+      - 1.0
+    - - 30
+      - 0.7
+    - - 60
+      - 0.3
+sources:
+  tecnoempleo:
+    keywords: [python, fastapi, django, data scientist, machine learning, devops, react, next.js, sap, consultor ia, implantacion ia]
+    locations: [Villanova, Costa Lira, remoto]
+  indeed:
+    keywords: [python developer, fullstack, data scientist, machine learning, devops, react, SAP consultor]
+    locations: [Villanova, Remoto]
+  infojobs:
+    keywords: [python, fastapi, django, data scientist, machine learning, devops, react, next.js, sap, consultor ia, implantacion ia]
+  linkedin:
+    searches:
+    - {keywords: SAP Public Cloud, location: España, track: sap}
+    - {keywords: consultor SAP BTP, location: España, track: sap}
+    - {keywords: SAP S/4HANA, location: Villanova, track: sap}
+    - {keywords: SAP Public Cloud SD, location: España, track: sap}
+    - {keywords: SAP Public Cloud MM, location: España, track: sap}
+    - {keywords: SAP Public Cloud PS, location: España, track: sap}
+    - {keywords: SAP Public Cloud FI, location: España, track: sap}
+    - {keywords: python developer, location: España, track: ia_dev}
+    - {keywords: data scientist, location: España, track: ia_dev}
+    - {keywords: machine learning LLM, location: España, track: ia_dev}
+    - {keywords: AI engineer fastapi, location: España, track: ia_dev}
+    - {keywords: fullstack react, location: "Villanova, España", track: ia_dev}
+    - {keywords: devops kubernetes, location: España, track: ia_dev}
+  company_direct:
+    keywords: [SAP Public Cloud, SAP BTP, S/4HANA, Rise with SAP, SAP Fiori, ABAP, SAP SuccessFactors, SAP consultant, consultor SAP, SAP MM, SAP SD, SAP FI, SAP CO]
+    companies:
+    - {name: Acme Robotics, careers_url: "https://careers.acme-robotics.test/jobs"}
+    - {name: Globex Data, careers_url: "https://jobs.globex-data.test/"}
+    - {name: Initech Systems, careers_url: "https://careers.initech-systems.test/"}
+    - {name: Umbrella Consulting, careers_url: "https://umbrella-consulting.test/careers"}
+    - {name: Hooli Iberia, careers_url: "https://hooli-iberia.test/empleo"}
+    - {name: Stark Cloud, careers_url: "https://stark-cloud.test/talento"}
+  generic:
+    indeed_locations: [Villanova, Remoto]
+    infojobs_province_ids: ["99"]

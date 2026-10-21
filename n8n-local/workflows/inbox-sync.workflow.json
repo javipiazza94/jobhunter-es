@@ -1,0 +1,115 @@
+{
+ "name": "Job Hunter - Inbox nuevo .txt a carga en la BD",
+ "nodes": [
+  {
+   "parameters": {
+    "triggerOn": "folder",
+    "path": "/inbox",
+    "events": [
+     "add"
+    ],
+    "options": {
+     "awaitWriteFinish": true
+    }
+   },
+   "id": "a1c3f6d0-0a11-4c11-9a01-000000000001",
+   "name": "Nuevo archivo en inbox",
+   "type": "n8n-nodes-base.localFileTrigger",
+   "typeVersion": 1,
+   "position": [
+    0,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": false,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 2
+     },
+     "conditions": [
+      {
+       "id": "c1",
+       "leftValue": "={{ $json.path }}",
+       "rightValue": ".txt",
+       "operator": {
+        "type": "string",
+        "operation": "endsWith"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "id": "a1c3f6d0-0a11-4c11-9a01-000000000002",
+   "name": "Solo .txt",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.2,
+   "position": [
+    224,
+    0
+   ]
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "http://127.0.0.1:8020/api/inbox/sync",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "X-JH-Client",
+       "value": "dashboard"
+      }
+     ]
+    },
+    "options": {
+     "timeout": 600000
+    }
+   },
+   "id": "a1c3f6d0-0a11-4c11-9a01-000000000003",
+   "name": "Cargar inbox en job-hunter",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    448,
+    -16
+   ],
+   "retryOnFail": true,
+   "maxTries": 3,
+   "waitBetweenTries": 10000,
+   "onError": "continueRegularOutput"
+  }
+ ],
+ "connections": {
+  "Nuevo archivo en inbox": {
+   "main": [
+    [
+     {
+      "node": "Solo .txt",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Solo .txt": {
+   "main": [
+    [
+     {
+      "node": "Cargar inbox en job-hunter",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ }
+}

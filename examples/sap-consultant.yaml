@@ -1,0 +1,77 @@
+# Consultor/a SAP (anonimizado). Cópialo a JH_HOME/jobhunter.yaml y adáptalo.
+scoring:
+  min_relevance: 0.55
+  detail_fetch_min_score: 0.30
+  keyword_groups:
+    - id: sap_master
+      weight: 0.40
+      keywords:
+        - sap
+        - s/4hana
+        - s4hana
+        - hana
+        - sap public cloud
+        - rise with sap
+        - sap btp
+        - sap fiori
+        - abap
+        - sap mm
+        - sap sd
+        - sap fi
+        - sap co
+        - successfactors
+        - consultor sap
+        - sap consultant
+        - consultor funcional
+        - fit-to-standard
+        - order to cash
+    - id: related_tools
+      weight: 0.15
+      keywords: [sql, excel, power bi, erp, integración, integration, python, jira]
+  location:
+    weight: 0.20
+    city: madrid
+    area: [madrid, alcobendas, las rozas, pozuelo de alarcón, tres cantos]
+  experience:
+    weight: 0.15
+  salary:
+    weight: 0.10
+    min_base: 30000
+  negative_keywords: [cobol, mainframe, "+10 años", "10 years"]
+  negative_title_keywords: [director, cto, ceo]
+
+tracks:
+  - id: sap
+    label: {es: SAP, en: SAP}
+    cover_template: sap
+    classify_keywords:
+      - sap
+      - abap
+      - btp
+      - s/4hana
+      - hana
+      - fiori
+      - sap mm
+      - sap sd
+      - sap fi
+      - sap co
+      - successfactors
+      - consultor funcional
+      - consultor sap
+      - sap consultant
+      - erp
+    search_keywords: [SAP S/4HANA, SAP consultant, consultor SAP, SAP FI, SAP MM, SAP SD, SAP Fiori, SAP BTP]
+    cv:
+      by_tag: {}
+      tag_aliases: {}
+      tag_patterns: []
+
+sources:
+  tecnoempleo:
+    keywords: [SAP, S/4HANA, consultor SAP]
+    locations: [Madrid, Remoto]
+  indeed:
+    keywords: [SAP consultant, consultor SAP, SAP S/4HANA]
+    locations: [Madrid, Remoto]
+  infojobs:
+    keywords: [SAP, S/4HANA, consultor SAP]

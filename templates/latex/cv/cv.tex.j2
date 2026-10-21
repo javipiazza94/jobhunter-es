@@ -1,0 +1,136 @@
+%% CV Jinja Template - Job Hunter Spain
+%% Adapted from moderncv banking style (ai-job-search upstream, MIT)
+\documentclass[11pt,a4paper,sans]{moderncv}
+\moderncvstyle{banking}
+\moderncvcolor{blue}
+
+\renewcommand*{\namefont}{\fontsize{30}{34}\bfseries\upshape}
+\colorlet{firstnamecolor}{color1}
+\colorlet{lastnamecolor}{color1}
+\colorlet{namecolor}{color1}
+\renewcommand*{\sectionstyle}[1]{{\sectionfont\color{color1}#1}}
+
+\usepackage[utf8]{inputenc}
+\ifpdftex\usepackage[T1]{fontenc}\fi
+
+\AtEndPreamble{\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=blue,
+    pdftitle={((( personal.name | latex_escape ))) - CV},
+    pdfpagemode=UseNone,
+}}
+\usepackage[scale=0.80]{geometry}
+\usepackage{import}
+
+% Personal data
+\name{((( personal.first_name | latex_escape )))}{((( personal.last_name | latex_escape )))}
+((* if personal.city or personal.country *))
+\address{((( personal.city | latex_escape )))((* if personal.province and personal.province != personal.city *)), ((( personal.province | latex_escape )))((* endif *))((* if personal.country *)), ((( personal.country | latex_escape )))((* endif *))}{}{}
+((* endif *))
+((* if personal.phone *))
+\phone[mobile]{((( personal.phone | latex_escape )))}
+((* endif *))
+((* if personal.email *))
+\email{((( personal.email | latex_escape )))}
+((* endif *))
+((* if personal.linkedin or personal.github *))
+\extrainfo{((* if personal.linkedin *))\href{((( personal.linkedin )))}{LinkedIn}((* endif *))((* if personal.linkedin and personal.github *)), ((* endif *))((* if personal.github *))\href{((( personal.github )))}{GitHub}((* endif *))}
+((* endif *))
+
+\begin{document}
+
+\makecvtitle
+
+((* if summary_text *))
+% ============================================================
+%     PROFILE STATEMENT
+% ============================================================
+\vspace{4pt}
+\small{((( summary_text | latex_escape )))}
+((* endif *))
+
+((* if competencies *))
+% ============================================================
+%     CORE COMPETENCIES
+% ============================================================
+\section{Core Competencies}
+\vspace{1pt}
+\begin{itemize}
+((* for cat_name, skills in competencies *))
+\item \textbf{((( cat_name | latex_escape )))}: ((( skills | latex_escape )))
+((* endfor *))
+\end{itemize}
+((* endif *))
+
+((* if experience *))
+% ============================================================
+%     PROFESSIONAL EXPERIENCE
+% ============================================================
+\section{Professional Experience}
+\vspace{2pt}
+\begin{itemize}
+((* for exp in experience *))
+\item{\cventry{((( exp.date_range | latex_escape )))}{((( exp.role | latex_escape )))}{((( exp.company | latex_escape )))}{((( exp.location | latex_escape )))}{}{%
+((* if exp.bullets *))
+\vspace{1pt}%
+\begin{itemize}%
+((* for bullet in exp.bullets *))
+    \item {((( bullet | latex_escape )))}%
+((* endfor *))
+\end{itemize}%
+((* elif exp.description *))
+\vspace{1pt}%
+((( exp.description | latex_escape )))%
+((* endif *))
+}}
+\vspace{2pt}
+((* endfor *))
+\end{itemize}
+((* endif *))
+
+((* if education *))
+% ============================================================
+%     EDUCATION
+% ============================================================
+\section{Education}
+\vspace{1pt}
+\begin{itemize}
+((* for edu in education *))
+\item{\cventry{((( edu.date_range | latex_escape )))}{((( edu.title | latex_escape )))}{((( edu.institution | latex_escape )))}{((( edu.location | latex_escape )))}{}{%
+((* if edu.details *))
+\vspace{1pt}%
+((( edu.details | latex_escape )))%
+((* endif *))
+}}
+\vspace{2pt}
+((* endfor *))
+\end{itemize}
+((* endif *))
+
+((* if languages *))
+% ============================================================
+%     LANGUAGES
+% ============================================================
+\section{Languages}
+\vspace{1pt}
+\begin{itemize}
+\item {((( languages_line | latex_escape )))}
+\end{itemize}
+((* endif *))
+
+((* if certifications *))
+% ============================================================
+%     CERTIFICATIONS
+% ============================================================
+\section{Certifications}
+\vspace{1pt}
+\begin{itemize}
+((* for cert in certifications *))
+\item{((( cert | latex_escape )))}
+((* endfor *))
+\end{itemize}
+((* endif *))
+
+\end{document}

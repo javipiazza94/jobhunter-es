@@ -1,0 +1,20 @@
+Estimado/a equipo de {{ company_name }},
+
+{{ cover_letter_intro }}
+
+{% if job_title %}
+He visto con interés el puesto de **{{ job_title }}** y creo que encaja bien con mi perfil técnico y mis objetivos profesionales.
+{% else %}
+Me pongo en contacto con ustedes para explorar posibles oportunidades de colaboración que encajen con mi perfil.
+{% endif %}
+
+{{ cover_letter_stack }}
+
+Actualmente me encuentro en búsqueda activa y estoy disponible para incorporarme de forma inmediata. Estoy abierto tanto a modalidad presencial como a trabajo en remoto o híbrido.
+
+{{ cover_letter_closing }}
+
+—
+{{ name }}
+{{ email }}{% if phone %} · {{ phone }}{% endif %}
+{% if linkedin %}LinkedIn: {{ linkedin }}{% endif %}

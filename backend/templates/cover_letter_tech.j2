@@ -1,0 +1,39 @@
+{% set greetings = [
+  "Estimado/a equipo de selección de " ~ company_name ~ ",",
+  "Estimado/a equipo de " ~ company_name ~ ",",
+  "Me dirijo al equipo de " ~ company_name ~ ","
+] %}
+{% set extra_closings = [
+  "Quedo disponible para una entrevista o prueba técnica cuando lo estimen oportuno.",
+  "Estaré encantado de ampliar mi perfil en una entrevista cuando lo consideren conveniente.",
+  "Me pongo a su disposición para cualquier proceso de selección que estimen adecuado."
+] %}
+{{ greetings[variant_index] }}
+
+{{ cover_letter_intro }}
+
+{% if job_title %}
+He visto la oferta para **{{ job_title }}** y me parece muy alineada con mi trayectoria.
+{% endif %}
+
+{{ cover_letter_stack }}
+
+Mi experiencia más relevante:
+
+{% for exp in experience %}
+- **{{ exp.role }} en {{ exp.company }} ({{ exp.duration_months }} meses):** {{ exp.description }}
+{% endfor %}
+
+{% if tech_stack %}
+Tecnologías mencionadas en la oferta donde tengo experiencia: *{{ tech_stack }}*.
+{% endif %}
+
+{{ extra_closings[variant_index] }}
+
+{{ cover_letter_closing }}
+
+—
+{{ name }}
+{{ email }}{% if phone %} · {{ phone }}{% endif %}
+{% if linkedin %}LinkedIn: {{ linkedin }}{% endif %}
+{% if portfolio %}Portfolio: {{ portfolio }}{% endif %}

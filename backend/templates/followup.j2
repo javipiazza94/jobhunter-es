@@ -1,0 +1,18 @@
+{% if channel == "email" %}Asunto: Seguimiento de mi candidatura – {{ job_title or "candidatura espontánea" }}
+
+{% endif %}{% if channel == "linkedin" %}Hola, equipo de {{ company_name }}:
+El {{ sent_date }} envié mi candidatura{% if job_title %} para {{ job_title }}{% endif %} y sigo muy interesado. {% if reminder %}{{ reminder }} {% endif %}¿Saben en qué punto está el proceso?
+Gracias,
+{{ first_name or name }}{% else %}Hola, equipo de selección de {{ company_name }}:
+
+El {{ sent_date }} les envié mi candidatura{% if job_title %} para el puesto de {{ job_title }}{% endif %} y quería confirmar que la recibieron. Sigo muy interesado en la posición.
+{% if reminder %}
+{{ reminder }}
+{% endif %}
+¿Podrían indicarme en qué punto está el proceso o cuáles son los próximos pasos?
+
+Muchas gracias por su tiempo.
+
+—
+{{ name }}
+{{ email }}{% if phone %} · {{ phone }}{% endif %}{% endif %}

@@ -1,0 +1,12 @@
+# Linter mínimo: solo errores reales (sintaxis, imports/variables sin usar).
+# Los avisos de estilo preexistentes (E741 `l`, E402 en application_engine) se ignoran a propósito.
+line-length = 120
+target-version = "py311"
+extend-exclude = ["backend/.venv", "frontend", "graphify-out"]
+
+[lint]
+select = ["F", "E4", "E7", "E9"]
+ignore = ["E741", "E402"]
+
+[lint.per-file-ignores]
+"**/tests/*" = ["F401", "F841"]

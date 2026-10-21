@@ -1,0 +1,41 @@
+.env
+.env.*
+*.db
+*.pem
+__pycache__/
+.venv
+node_modules/
+.next/
+backend/cv
+data/
+backend/profile.json
+*memoria_profesional*.md
+*.log
+.claude/settings.local.json
+backend/sessions/*
+!backend/sessions/.gitkeep
+*.db.bak*
+backend/backups/
+*.db-shm
+*.db-wal
+backend/logs/
+
+# graphify (grafo local, derivado)
+graphify-out/
+credentials.json
+
+# Ficheros de Cowork con datos personales (no se versionan)
+TASKS.md
+candidaturas.md
+dashboard.html
+memory/
+entrevista-*.md
+backend/interview_prep/
+n8n_data.tgz
+n8n-local/workflow-*.json
+n8n-local/*.json
+
+# Estado interno de n8n en el inbox
+backend/inbox/.n8n_watermark
+job-hunter-archivo/
+

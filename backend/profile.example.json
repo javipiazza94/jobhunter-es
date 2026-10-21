@@ -1,0 +1,102 @@
+{
+  "personal": {
+    "name": "Nombre Apellido1 Apellido2",
+    "short_name": "Nombre Apellido1",
+    "first_name": "Nombre",
+    "last_name": "Apellido1 Apellido2",
+    "email": "tu@email.com",
+    "phone": "+34 600 000 000",
+    "phone_country_code": "+34",
+    "address": "Calle Ejemplo 1",
+    "city": "Ciudad",
+    "province": "Provincia",
+    "postal_code": "00000",
+    "country": "España",
+    "country_code": "ES",
+    "dni_nie": "00000000T",
+    "birth_date": null,
+    "nationality": null,
+    "driving_license": null,
+    "linkedin": "https://www.linkedin.com/in/tu-usuario/",
+    "github": "https://github.com/tu-usuario",
+    "portfolio": "",
+    "photo_path": "./cv/photo.png"
+  },
+  "availability": {
+    "start_date": null,
+    "notice_period": null,
+    "work_mode_preference": "remoto",
+    "relocation_notes": "",
+    "willing_to_relocate": false
+  },
+  "salary_expectation": {
+    "amount": null,
+    "currency": "EUR",
+    "period": "annual_gross",
+    "amount_remote_or_target_city": 26000,
+    "amount_onsite_or_hybrid_outside_target_city": 30000
+  },
+  "cv_path": "./cv/CV IA/cv_ia.pdf",
+  "cv_sap_path": "./cv/cv_sap_generico.pdf",
+  "cv_ia_path": "./cv/CV IA/cv_ia.pdf",
+  "cv_general_path": "./cv/cv_general.pdf",
+  "cover_letter_docx": {},
+  "summary": {
+    "sap": "",
+    "ia": "",
+    "general": ""
+  },
+  "stack": {
+    "sap_modules": [],
+    "sap_tools": [],
+    "programming": [
+      "Python"
+    ],
+    "frameworks": [],
+    "ai_ml": [],
+    "data": [],
+    "devops_cloud": [],
+    "other_tools": []
+  },
+  "languages": [
+    {
+      "language": "Español",
+      "level": "Nativo"
+    },
+    {
+      "language": "Inglés",
+      "level": "B2"
+    }
+  ],
+  "certifications": [],
+  "education": [
+    {
+      "title": "Título",
+      "institution": "Institución",
+      "start": "2020",
+      "end": "2024"
+    }
+  ],
+  "experience": [
+    {
+      "company": "Empresa",
+      "role": "Puesto",
+      "start": "2023-01",
+      "end": "2024-01",
+      "duration_months": 12,
+      "description": "Descripción breve de las responsabilidades y logros.",
+      "stack": [
+        "Python"
+      ]
+    }
+  ],
+  "cover_letter_intro": "Me dirijo a ustedes para expresar mi interés en unirme al equipo de {company_name}.",
+  "cover_letter_stack": "Mi stack principal incluye ...",
+  "cover_letter_closing": "Quedo a su disposición para cualquier proceso de selección o entrevista.\n\nAtentamente,\nNombre Apellido",
+  "cv_ia_path_en": "./cv/CV IA/cv_ia_en.pdf",
+  "cv_sap_modules": {
+    "FI_CO": "./cv/CV modulos/cv_sap_fi_co.pdf",
+    "MM": "./cv/CV modulos/cv_sap_mm.pdf",
+    "SD": "./cv/CV modulos/cv_sap_sd.pdf"
+  }
+}

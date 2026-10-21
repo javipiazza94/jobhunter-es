@@ -1,0 +1,52 @@
+# Perfil de desarrollador genérico. Cópialo a JH_HOME/jobhunter.yaml y adáptalo.
+# Los pesos (grupos de keywords + location + experience + salary) deben sumar 1.0.
+scoring:
+  min_relevance: 0.55
+  detail_fetch_min_score: 0.30
+  keyword_groups:
+    - id: skills
+      weight: 0.40
+      keywords: [python, javascript, typescript, react, node, java, sql, api, backend, frontend, fullstack]
+    - id: stack
+      weight: 0.20
+      keywords: [git, docker, ci/cd, linux, postgresql, aws, azure, kubernetes, devops, agile, testing]
+  location:
+    weight: 0.20
+    city: madrid
+    area: [madrid, alcobendas, getafe, leganés, pozuelo de alarcón]
+  experience:
+    weight: 0.10
+  salary:
+    weight: 0.10
+    min_base: 28000
+  negative_keywords: [cobol, mainframe, "+10 años", "10 years"]
+  negative_title_keywords: [director, cto, ceo]
+
+tracks:
+  - id: developer
+    label: {es: Desarrollo, en: Development}
+    cover_template: tech
+    classify_keywords:
+      - python
+      - javascript
+      - typescript
+      - react
+      - java
+      - developer
+      - desarrollador
+      - backend
+      - frontend
+      - full stack
+      - fullstack
+      - devops
+    search_keywords: [python developer, backend developer, fullstack developer, desarrollador web]
+
+sources:
+  tecnoempleo:
+    keywords: [python, backend, fullstack]
+    locations: [Madrid, Remoto]
+  indeed:
+    keywords: [python developer, backend developer, fullstack developer]
+    locations: [Madrid, Remoto]
+  infojobs:
+    keywords: [python, backend, fullstack, desarrollador web]

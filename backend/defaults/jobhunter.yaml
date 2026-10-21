@@ -1,0 +1,59 @@
+# Configuración de búsqueda por defecto (genérica). Cópiala a JH_HOME/jobhunter.yaml y adáptala a tu perfil.
+# Los pesos de scoring (grupos de keywords + location + experience + salary) deben sumar 1.0.
+scoring:
+  min_relevance: 0.55
+  detail_fetch_min_score: 0.30
+  keyword_groups:
+    - id: skills
+      weight: 0.40
+      keywords: [python, javascript, typescript, react, java, sql, api, backend, frontend, fullstack]
+    - id: stack
+      weight: 0.20
+      keywords: [git, docker, ci/cd, linux, postgresql, aws, azure, devops, agile, testing]
+  location:
+    weight: 0.20
+    city: null
+  experience:
+    weight: 0.10
+  salary:
+    weight: 0.10
+
+tracks:
+  - id: developer
+    label: {es: Desarrollo, en: Development}
+    classify_keywords:
+      - python
+      - javascript
+      - typescript
+      - react
+      - java
+      - developer
+      - desarrollador
+      - backend
+      - frontend
+      - full stack
+      - fullstack
+      - devops
+    # Qué se busca en los portales con `python -m scraper.runner --track developer`
+    search_keywords: [python, javascript, react, java, devops, data]
+
+# Parámetros de búsqueda por portal. Sin keywords/ubicaciones los scrapers no encuentran nada (y lo avisan en el log).
+sources:
+  tecnoempleo:
+    keywords: [python, javascript, react, java, devops, data]
+    locations: [remoto]
+    # Filtro de provincia (parámetro pr=): nombre de ubicación (de `locations`) -> id de provincia.
+    # Busca el id en el filtro lateral de Tecnoempleo. Una ubicación sin id se busca a nivel nacional.
+    # province_ids:
+    #   <tu ciudad>: "<id del filtro lateral de Tecnoempleo>"
+  indeed:
+    keywords: [python developer, javascript developer, react developer, java developer, devops]
+    locations: [Remoto]
+  infojobs:
+    keywords: [python, javascript, react, java, devops, data]
+    # Filtro de ubicación opcional. province_id (parámetro provinceIds) sí filtra; normalized_location
+    # apenas filtra. Busca el id en el filtro de provincia de InfoJobs. Sin ninguno: búsqueda nacional.
+    # province_id: "<id de provincia de InfoJobs>"
+    # normalized_location: <tu-ciudad>
+  # computrabajo:
+  #   location: <tu ciudad>   # se añade como ?l=<slug>; sin él, búsqueda nacional

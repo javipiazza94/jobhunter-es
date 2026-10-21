@@ -1,0 +1,62 @@
+# Perfil de datos / IA. Cópialo a JH_HOME/jobhunter.yaml y adáptalo.
+scoring:
+  min_relevance: 0.55
+  detail_fetch_min_score: 0.30
+  keyword_groups:
+    - id: data_ai
+      weight: 0.40
+      keywords:
+        - machine learning
+        - data scientist
+        - data engineer
+        - llm
+        - rag
+        - nlp
+        - pytorch
+        - tensorflow
+        - mlops
+        - generative ai
+        - ia generativa
+        - langchain
+        - inteligencia artificial
+    - id: tooling
+      weight: 0.20
+      keywords: [python, sql, pandas, spark, airflow, dbt, docker, aws, azure, gcp, fastapi]
+  location:
+    weight: 0.15
+    city: barcelona
+    area: [barcelona, l'hospitalet, badalona, sant cugat]
+  experience:
+    weight: 0.15
+  salary:
+    weight: 0.10
+    min_base: 30000
+  negative_keywords: [cobol, mainframe, "+10 años", "10 years"]
+  negative_title_keywords: [director, cto, ceo]
+
+tracks:
+  - id: data_ai
+    label: {es: Datos / IA, en: Data / AI}
+    cover_template: tech
+    classify_keywords:
+      - machine learning
+      - data scientist
+      - data engineer
+      - ai engineer
+      - llm
+      - rag
+      - nlp
+      - mlops
+      - inteligencia artificial
+      - python
+    search_keywords: [data scientist, machine learning engineer, data engineer, AI engineer, LLM]
+
+sources:
+  tecnoempleo:
+    keywords: [data scientist, machine learning, data engineer]
+    locations: [Barcelona, Remoto]
+  indeed:
+    keywords: [data scientist, machine learning engineer, data engineer]
+    locations: [Barcelona, Remoto]
+  infojobs:
+    keywords: [data scientist, machine learning, data engineer]
