@@ -11,34 +11,26 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-SOURCES = ("seed", "tecnoempleo", "contacts", "indeed", "manfred", "linkedin", "infojobs", "inbox", "inbox-apply")
+from scraper import sources as source_registry  # noqa: E402
+
+# Trabajos que no son portales; los portales salen del registro (scraper/sources, los que se lanzan sueltos).
+_NON_SOURCE_JOBS = ("seed", "contacts", "inbox", "inbox-apply")
+SOURCES = (*_NON_SOURCE_JOBS, *source_registry.standalone_ids())
 # `track:<id>[,<id>…]`: pipeline multi-portal de uno o varios tracks (uno detrás de otro, en el mismo proceso),
 # limitado a las fuentes activadas en jobhunter.yaml.
 TRACK_JOB_PREFIX = "track:"
-# Portales que recorre el pipeline de un track (los que tienen fuente suelta propia): el trabajo los reserva.
-TRACK_PIPELINE_SOURCES = ("tecnoempleo", "infojobs", "computrabajo", "linkedin")
+# Portales que recorre el pipeline de un track y que dependen de estar activados: el trabajo los reserva.
+TRACK_PIPELINE_SOURCES = tuple(s.id for s in source_registry.track_pipeline() if not s.track_always)
 
 
 def _fetch_offers(source: str) -> list[dict]:
-    if source == "indeed":
-        from scraper.indeed import run_indeed
-        from search_config import source_settings
-        settings = source_settings("indeed")
-        return asyncio.run(run_indeed(settings.get("keywords", []), settings.get("locations", []), max_pages=3))
-    if source == "manfred":
-        from scraper.manfred import run_manfred
-        return run_manfred()
-    if source == "tecnoempleo":
-        from scraper.tecnoempleo import run_tecnoempleo
-        return asyncio.run(run_tecnoempleo(max_pages=3))
-    if source == "linkedin":
-        from scraper.linkedin_jobs import run_linkedin_jobs
-        return asyncio.run(run_linkedin_jobs())
-    if source == "infojobs":
-        from scraper.infojobs import run_infojobs
-        from search_config import source_settings
-        return asyncio.run(run_infojobs(keywords=source_settings("infojobs").get("keywords", []), max_pages=3))
-    return []
+    """Ofertas de una fuente suelta del registro, con sus ajustes de jobhunter.yaml (3 páginas)."""
+    from search_config import source_settings
+
+    spec = source_registry.get(source)
+    settings = source_settings(source)
+    ctx = source_registry.RunContext(settings=settings, keywords=list(settings.get("keywords", [])), max_pages=3)
+    return asyncio.run(source_registry.execute(spec, ctx))
 
 
 def run(source: str) -> None:

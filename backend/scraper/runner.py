@@ -16,6 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from database import get_conn, init_db, stats
+from scraper import sources as source_registry
 from scraper.persist import save_scored_offers
 from scraper.seed_loader import load_seed
 from search_config import get_config, source_settings
@@ -44,21 +45,26 @@ def _save_source(name: str, offers: list[dict], source: str, dry_run: bool) -> N
     logger.info("%s: %d offers saved to DB", name, saved)
 
 
+async def run_source(source_id: str, dry_run: bool, max_pages: int) -> None:
+    """Una fuente suelta del registro (scraper/sources) con sus ajustes de jobhunter.yaml; guarda con su id."""
+    spec = source_registry.get(source_id)
+    settings = source_settings(source_id)
+    ctx = source_registry.RunContext(settings=settings, keywords=list(settings.get("keywords", [])),
+                                     max_pages=max_pages, dry_run=dry_run)
+    _save_source(spec.label_for("es"), await source_registry.execute(spec, ctx), spec.id, dry_run)
+
+
+# Nombres históricos del CLI (y de sus tests): delegan en el registro.
 async def run_tecnoempleo_source(dry_run: bool, max_pages: int):
-    from scraper.tecnoempleo import run_tecnoempleo
-    _save_source("Tecnoempleo", await run_tecnoempleo(max_pages=max_pages), "tecnoempleo", dry_run)
+    await run_source("tecnoempleo", dry_run, max_pages)
 
 
 async def run_indeed_source(dry_run: bool, max_pages: int):
-    from scraper.indeed import run_indeed
-    settings = source_settings("indeed")
-    offers = await run_indeed(settings.get("keywords", []), settings.get("locations", []), max_pages)
-    _save_source("Indeed", offers, "indeed", dry_run)
+    await run_source("indeed", dry_run, max_pages)
 
 
 def run_manfred_source(dry_run: bool):
-    from scraper.manfred import run_manfred
-    _save_source("Manfred", run_manfred(), "manfred", dry_run)
+    asyncio.run(run_source("manfred", dry_run, 3))  # Manfred usa su propio número de páginas
 
 
 def run_resolve_websites_source(dry_run: bool, limit: int | None):
@@ -94,17 +100,13 @@ async def _isolated(label: str, step) -> None:
 
 
 async def run_track_source(track_id: str, dry_run: bool, max_pages: int, only_sources: set[str] | None = None):
-    """Pipeline multi-portal de un track: sus `search_keywords` y las búsquedas de LinkedIn de ese track.
+    """Pipeline multi-portal de un track: las fuentes del registro con `track_pipeline`, en orden, con las
+    `search_keywords` del track (LinkedIn: las búsquedas de ese track). Lo encontrado se guarda con source = id del
+    track.
 
     `only_sources` (lanzado desde la API): solo los portales activados en `sources:` de jobhunter.yaml; así una
-    fuente con aviso (InfoJobs, LinkedIn) no se usa sin haberla aceptado. La web de empresas seguidas va siempre.
-    Sin él (CLI `--track`), todos los portales como hasta ahora."""
-    from scraper.tecnoempleo import TecnoempleoScraper
-    from scraper.infojobs import run_infojobs
-    from scraper.computrabajo import run_computrabajo
-    from scraper.company_direct import run_company_direct
-    from scraper.linkedin_jobs import run_linkedin_jobs
-
+    fuente con aviso (InfoJobs, LinkedIn) no se usa sin haberla aceptado. Las fuentes `track_always` (web de
+    empresas seguidas) van siempre. Sin él (CLI `--track`), todos los portales como hasta ahora."""
     track = get_config().track(track_id)
     if track is None:
         raise ValueError(f"track desconocido: {track_id}")
@@ -117,44 +119,19 @@ async def run_track_source(track_id: str, dry_run: bool, max_pages: int, only_so
         logger.warning("Track '%s': sources.tecnoempleo.locations vacío en jobhunter.yaml; "
                        "Tecnoempleo no buscará nada", track_id)
 
-    def save(offers: list[dict], source_name: str):
-        _save_source(source_name, offers, track_id, dry_run)
-
-    async def tecnoempleo():
-        scraper = TecnoempleoScraper()
-        seen: set[str] = set()
-        offers: list[dict] = []
-        for kw in keywords:
-            for loc in locations:
-                for o in await scraper.scrape_keyword(kw, loc, max_pages):
-                    if o.get("url") and o["url"] not in seen:
-                        seen.add(o["url"])
-                        offers.append(o)
-        save(offers, f"Tecnoempleo-{track_id}")
-
-    async def infojobs():
-        save(await run_infojobs(keywords, max_pages), "InfoJobs")
-
-    async def computrabajo():
-        save(await run_computrabajo(keywords, max_pages), "Computrabajo")
-
-    async def company_direct():
-        found, contacts = await run_company_direct(dry_run)
-        logger.info("Company direct: %d offers, %d contacts", found, contacts)
-
-    async def linkedin():
-        save(await run_linkedin_jobs(track=track_id), "LinkedIn")
-
-    for label, source_id, step in (
-        (f"Tecnoempleo {track_id}", "tecnoempleo", tecnoempleo),
-        ("InfoJobs", "infojobs", infojobs),
-        ("Computrabajo", "computrabajo", computrabajo),
-        ("Company direct", None, company_direct),
-        ("LinkedIn", "linkedin", linkedin),
-    ):
-        if only_sources is not None and source_id is not None and source_id not in only_sources:
+    for spec in source_registry.track_pipeline():
+        label = spec.label_for("es")
+        if only_sources is not None and not spec.track_always and spec.id not in only_sources:
             logger.info("%s: fuente no activada en jobhunter.yaml; se omite", label)
             continue
+
+        async def step(spec=spec, label=label):
+            ctx = source_registry.RunContext(settings=source_settings(spec.id), keywords=list(keywords),
+                                             track_id=track_id, max_pages=max_pages, dry_run=dry_run)
+            offers = await source_registry.execute(spec, ctx)
+            if not spec.persists_itself:
+                _save_source(label, offers, track_id, dry_run)
+
         await _isolated(label, step)
 
 
@@ -209,6 +186,13 @@ def _step_linkedin_login(args):
     asyncio.run(run_linkedin_login())
 
 
+def _source_step(source_id: str):
+    """Paso del CLI para una fuente suelta del registro sin paso propio."""
+    def step(args):
+        asyncio.run(run_source(source_id, args.dry_run, args.max_pages))
+    return step
+
+
 # fuente → (título en el log, paso)
 _STEPS = {
     "seed": ("Seed loader", _step_seed),
@@ -220,6 +204,10 @@ _STEPS = {
     "resolve-websites": ("Website resolver (DDG search)", _step_resolve_websites),
     "linkedin-login": ("LinkedIn login (headful)", _step_linkedin_login),
 }
+# Cualquier otra fuente suelta del registro se puede lanzar con --source <id>.
+for _spec in source_registry.registry().values():
+    if _spec.standalone and _spec.id not in _STEPS:
+        _STEPS[_spec.id] = (_spec.label_for("es"), _source_step(_spec.id))
 _ALL_SOURCES = ("seed", "tecnoempleo", "indeed", "manfred", "contacts")  # lo que ejecuta --source all
 _NO_STATS = {"linkedin-login"}  # abre un navegador para iniciar sesión; no scrapea nada
 

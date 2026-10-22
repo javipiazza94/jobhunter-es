@@ -9,17 +9,16 @@ y los grupos de keywords se reparten el resto a partes iguales, sumando exactame
 """
 import re
 import unicodedata
-from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-import yaml
 from pydantic import BaseModel, Field, field_validator
 
 from automation.language_gate import LANGUAGES, canonical_language
 from automation.profile_proposal import ProfileDraft, draft_from_dict
 from profile_store import load_profile, save_profile
 import search_config
+from scraper import sources as source_registry
 from search_config import (
     DEFAULT_CONFIG_PATH,
     RESERVED_TRACK_IDS,
@@ -35,7 +34,6 @@ from search_config import (
     save_config,
 )
 
-MARKETS_PATH = Path(__file__).parent / "defaults" / "markets.yaml"
 TOOLS_GROUP_ID = "tools"
 _FALLBACK_ID = "target"
 _MODALITY_ES = {"remote": "remoto", "hybrid": "híbrido", "onsite": "presencial"}
@@ -87,21 +85,21 @@ class SetupAnswers(BaseModel):
 # ── Mercados y fuentes ──────────────────────────────────────────────────────────
 
 
-@lru_cache(maxsize=1)
-def _load_markets_cached() -> dict[str, list[dict]]:
-    raw = yaml.safe_load(MARKETS_PATH.read_text(encoding="utf-8")) or {}
-    return raw.get("markets") or {}
+_MARKET_SOURCE_KEYS = ("id", "label", "requires_ack", "default_on")
 
 
 def load_markets() -> dict[str, list[dict]]:
-    """Mercados → fuentes sugeridas `[{id, label, requires_ack, default_on}]` (copia, se puede modificar)."""
-    return {m: [dict(s) for s in sources] for m, sources in _load_markets_cached().items()}
+    """Mercados → fuentes sugeridas `[{id, label, requires_ack, default_on}]`, generado del registro de fuentes
+    (scraper/sources; antes defaults/markets.yaml). Copia: se puede modificar."""
+    return {m: [{k: s[k] for k in _MARKET_SOURCE_KEYS} for s in sources]
+            for m, sources in source_registry.market_catalog("es").items()}
 
 
 def source_catalog() -> dict[str, dict]:
-    """Fuentes conocidas por el asistente (id → ficha); una fuente es `requires_ack` si lo es en algún mercado."""
+    """Fuentes conocidas por el asistente (id → ficha): las del registro que se sugieren en algún mercado; una
+    fuente es `requires_ack` si lo es en algún mercado."""
     catalog: dict[str, dict] = {}
-    for sources in _load_markets_cached().values():
+    for sources in load_markets().values():
         for s in sources:
             entry = catalog.setdefault(s["id"], dict(s))
             entry["requires_ack"] = bool(entry.get("requires_ack")) or bool(s.get("requires_ack"))
