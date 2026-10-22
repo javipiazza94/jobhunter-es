@@ -42,9 +42,9 @@
 - `document_generator.generate_deterministic_documents(...)` gains `output_dir` default `config.APPLICATIONS_DIR / "_preview"` when None (never inside the repo), `cv_pages: int = 2`, `letter_pages: int = 1`, verification requires email **and** phone literal, CV page count `<= cv_pages` (trimming loop: drop least relevant experience bullets/entries — relevance = keyword overlap with the offer — until it fits or nothing left to trim), letter exactly 1; returns also `verification: dict` (pages, missing_keywords, layout_warnings or "skipped").
 - `verify_layout` called when Poppler exists; otherwise `layout: "skipped: poppler no instalado"`.
 
-- [ ] First step: compile `cv.tex.j2` and `cover.tex.j2` rendered from `profile.example.json` with **Tectonic** (local `~/.local/bin/tectonic`) and record the result in the report (works / what had to change). If a template fails with Tectonic, fix the template (XeTeX-compatible) — not the engine.
-- [ ] Tests: skip markers when no engine/poppler; LaTeX escaping of `& % _ # $ { } ~ ^ \` and emoji (stripped or replaced); trimming loop with a synthetic long profile yields ≤2 pages; missing phone → verification failure; keyword_coverage cases.
-- [ ] Commit `feat(docs): motor LaTeX comprobado con Tectonic, verificación completa y recorte a 2 páginas`.
+- [x] First step: compile `cv.tex.j2` and `cover.tex.j2` rendered from `profile.example.json` with **Tectonic** (local `~/.local/bin/tectonic`) and record the result in the report (works / what had to change). If a template fails with Tectonic, fix the template (XeTeX-compatible) — not the engine.
+- [x] Tests: skip markers when no engine/poppler; LaTeX escaping of `& % _ # $ { } ~ ^ \` and emoji (stripped or replaced); trimming loop with a synthetic long profile yields ≤2 pages; missing phone → verification failure; keyword_coverage cases.
+- [x] Commit `feat(docs): motor LaTeX comprobado con Tectonic, verificación completa y recorte a 2 páginas`.
 
 ### Task 2: Application documents service, archive and API (deterministic path)
 
@@ -57,8 +57,8 @@
 - `_send_approved` keeps using `get_application_attachments` (archive first, old selection fallback) — add a test proving prepared PDFs are attached.
 - Interview pack (`ai_writing.generate_interview_pack`) and `application_archive.save_interview_prep` unified on `interview.md`.
 
-- [ ] Tests (engine-dependent ones skipped without engine; others monkeypatch `generate_deterministic_documents`): prepare writes archive atomically; failure leaves the previous archive intact; whitelist blocks `../`; approve attaches archived PDFs (fake SMTP); no engine → 409.
-- [ ] Commit `feat(applications): preparar candidatura con CV y carta en PDF archivados`.
+- [x] Tests (engine-dependent ones skipped without engine; others monkeypatch `generate_deterministic_documents`): prepare writes archive atomically; failure leaves the previous archive intact; whitelist blocks `../`; approve attaches archived PDFs (fake SMTP); no engine → 409.
+- [x] Commit `feat(applications): preparar candidatura con CV y carta en PDF archivados`.
 
 ### Task 3: AI writer + reviewer flow
 
@@ -72,8 +72,8 @@
 - `run_ai_flow(profile, offer, provider, max_rounds=2) -> (cv_ctx, letter_ctx, warnings)`; `prepare_application` uses it when `use_ai`, renders with the same templates, compiles, verifies (2/1 pages, keywords), and on page overflow asks one more revision ("shorten") then falls back to the trimming loop; any AIError → deterministic path with warning `"IA no disponible: …"`.
 - Research: `company_research.get_cached_research(company)` passed to writer/reviewer when present (Task 6 fills it).
 
-- [ ] Tests with a scripted fake provider: happy path (draft → review revise → revised → ok); invented company removed by honesty validator; AIError → deterministic; overflow → shorten request issued.
-- [ ] Commit `feat(ai): redactor y revisor de CV y carta adaptados a la oferta`.
+- [x] Tests with a scripted fake provider: happy path (draft → review revise → revised → ok); invented company removed by honesty validator; AIError → deterministic; overflow → shorten request issued.
+- [x] Commit `feat(ai): redactor y revisor de CV y carta adaptados a la oferta`.
 
 ### Task 4: Eligibility as hard requirement (opt-in)
 
@@ -81,8 +81,8 @@
 
 **Interfaces:** When the flag is true and `eligibility_gate` returns `"reject"`, the persisted offer gets `relevance_score = 0`, `is_relevant = 0`, and a review flag `"elegibilidad: <reason>"`; `"flag"` only warns (as today). Flag false → identical to today (test with the existing fixture config).
 
-- [ ] Tests: flag false → unchanged scores; flag true + US-only offer + ES permit → 0; doubtful → flag only; wizard config has flag true.
-- [ ] Commit `feat(eligibility): requisitos duros dejan la oferta a 0 (opcional, activado por el asistente)`.
+- [x] Tests: flag false → unchanged scores; flag true + US-only offer + ES permit → 0; doubtful → flag only; wizard config has flag true.
+- [x] Commit `feat(eligibility): requisitos duros dejan la oferta a 0 (opcional, activado por el asistente)`.
 
 ### Task 5: AI evaluation of offers (/rank in the app)
 
@@ -90,8 +90,8 @@
 
 **Interfaces:** `evaluate_offer(offer_id, provider=None) -> Evaluation` (weights technical .30, experience .25, behavioral .15, career .30 and bands from `rank_state` reused); stored; never touches `relevance_score`. API: `POST /api/offers/{id}/evaluate` (409 with `none`), `GET /api/offers/{id}/evaluation`, `POST /api/offers/evaluate-batch` (`{ids}` sequential with AIBudget). OfferOut gains optional `evaluation` summary (verdict, score) — contract types updated.
 
-- [ ] Tests: migration applies on a v5 DB; evaluation stored; relevance unchanged; 409 on none; batch respects budget.
-- [ ] Commit `feat(rank): evaluación detallada con IA de las ofertas marcadas`.
+- [x] Tests: migration applies on a v5 DB; evaluation stored; relevance unchanged; 409 on none; batch respects budget.
+- [x] Commit `feat(rank): evaluación detallada con IA de las ofertas marcadas`.
 
 ### Task 6: Company research cache
 
@@ -99,8 +99,8 @@
 
 **Interfaces:** `research_company(name, website: str | None, provider) -> dict` — fetches the website home/about page with `fetch_page` (robots respected, size/time limits; fetch failures tolerated) and asks the provider for a JSON summary `{summary, products, culture_signals, tech_stack, size_hint, sources: [url]}`; cached 30 days via `save_cached_research`; `get_or_research(...)` used by reviewer, evaluation and interview pack.
 
-- [ ] Tests: cache hit avoids provider call; robots disallow → summary from offer text only with warning; expired cache refreshed.
-- [ ] Commit `feat(research): caché de investigación de empresas compartida`.
+- [x] Tests: cache hit avoids provider call; robots disallow → summary from offer text only with warning; expired cache refreshed.
+- [x] Commit `feat(research): caché de investigación de empresas compartida`.
 
 ### Task 7: Screening answers
 
@@ -108,8 +108,8 @@
 
 **Interfaces:** `answer_questions(questions, profile, offer, provider) -> list[{question, answer, source: "profile"|"ai"|"needs_input"}]` — exact/fuzzy match against `screening_answers` first; AI only with profile facts; respects `max_chars` (truncate at sentence boundary); unknown factual questions (salary, notice period not in profile) → `needs_input`.
 
-- [ ] Tests: saved answer reused; max_chars respected; AI none → needs_input for unmatched; form_filler gets answers (unit, no browser).
-- [ ] Commit `feat(forms): respuestas de cribado basadas en el perfil`.
+- [x] Tests: saved answer reused; max_chars respected; AI none → needs_input for unmatched; form_filler gets answers (unit, no browser).
+- [x] Commit `feat(forms): respuestas de cribado basadas en el perfil`.
 
 ### Task 8: Upskill and expand
 
@@ -117,8 +117,8 @@
 
 **Interfaces:** Upskill: deterministic gap count (offer keywords from track keyword groups + offer text vs profile skills) → top gaps; AI (if available) adds study plan + resources (resources only as names/URLs the model gives, marked "sin verificar"); Markdown saved to `JH_HOME/reports/upskill-<date>.md`. Expand: for each URL, `fetch_page` (robots) → GitHub: repos/languages via public API `https://api.github.com/users/<u>/repos` (GET, no token) when the URL is a GitHub profile; others: page text → AI JSON `{skills:[{name, evidence, source_url}]}`; nothing saved until accepted.
 
-- [ ] Tests: gap counting deterministic; report written; expand proposals carry source; accept merges without duplicates; no network (mock fetch).
-- [ ] Commit `feat(profile): mapa de huecos (upskill) y ampliación del perfil con fuentes`.
+- [x] Tests: gap counting deterministic; report written; expand proposals carry source; accept merges without duplicates; no network (mock fetch).
+- [x] Commit `feat(profile): mapa de huecos (upskill) y ampliación del perfil con fuentes`.
 
 ### Task 9: Custom templates (add-template)
 
@@ -126,8 +126,8 @@
 
 **Interfaces:** Templates live in `JH_HOME/templates/<kind>/<name>/` with `template.json`; registering runs a mandatory test compile with `profile.example.json` (fail → not registered, error returned); Typst requires `typst` on PATH (409 otherwise); built-ins `moderncv-banking` (cv) and `cover-cls` (letter) always listed; active selection stored in `jobhunter.yaml` `documents: {cv_template, letter_template, cv_pages: 2, letter_pages: 1}` (new config section, defaults = built-ins).
 
-- [ ] Tests: register valid template (skip w/o engine), invalid one rejected, zip path traversal blocked, activate changes the template used.
-- [ ] Commit `feat(templates): plantillas propias de CV y carta con compilación de prueba`.
+- [x] Tests: register valid template (skip w/o engine), invalid one rejected, zip path traversal blocked, activate changes the template used.
+- [x] Commit `feat(templates): plantillas propias de CV y carta con compilación de prueba`.
 
 ### Task 10: Frontend wiring for applications
 
@@ -135,8 +135,8 @@
 
 **Interfaces:** PendingCard: "Preparar candidatura" (toggle "con IA" when provider ≠ none) → shows status, warnings, verification summary (pages, missing keywords) and links to open `cv.pdf`/`cover.pdf`; "Aprobar y enviar" states which attachments will be sent. Offer detail: "Evaluar con IA", "Investigar empresa", evaluation panel. Screening answers panel per application. All errors surfaced.
 
-- [ ] Tests: helpers + static markup + happy-dom click tests where behaviour matters.
-- [ ] Commit `feat(frontend): preparar candidatura, evaluación e investigación desde el dashboard`.
+- [x] Tests: helpers + static markup + happy-dom click tests where behaviour matters.
+- [x] Commit `feat(frontend): preparar candidatura, evaluación e investigación desde el dashboard`.
 
 ### Task 11: Claude Code commands/agents adapted + attribution
 
@@ -146,11 +146,11 @@
 - Test: parse every `.claude/commands/*.md` and `.claude/agents/*.md`, extract backtick paths/`python -m` modules and assert each exists/imports; assert no `seen_jobs.json`/`salary_lookup` strings.
 - Attribution rows for `document_generator`, `latex_compiler`, `application_archive`, `eligibility_gate`, LaTeX templates, new derived modules.
 
-- [ ] Commit `docs(claude): comandos y agentes adaptados al repo y atribución completa`.
+- [x] Commit `docs(claude): comandos y agentes adaptados al repo y atribución completa`.
 
 ### Task 12: Finish line
 
 **Files:** `backend/tests/test_sp3_e2e.py`; README/README.es sections ("Preparing an application", templates, Tectonic install hint per OS); CONTRIBUTING (templates, commands).
 
-- [ ] E2E (skipped without engine): fresh JH_HOME + wizard-applied profile (invented) + one offer + draft application → `POST /prepare` with `use_ai=false` → CV 2 pages / letter 1 page, `verify_pdf` passes; with `use_ai=true` and a scripted fake provider → same; approve with fake SMTP → email has both PDFs from the archive. Without engine → 409 path tested always.
-- [ ] Docs; all suites green; commit `test(sp3): candidatura completa con y sin IA`.
+- [x] E2E (skipped without engine): fresh JH_HOME + wizard-applied profile (invented) + one offer + draft application → `POST /prepare` with `use_ai=false` → CV 2 pages / letter 1 page, `verify_pdf` passes; with `use_ai=true` and a scripted fake provider → same; approve with fake SMTP → email has both PDFs from the archive. Without engine → 409 path tested always.
+- [x] Docs; all suites green; commit `test(sp3): candidatura completa con y sin IA`.
