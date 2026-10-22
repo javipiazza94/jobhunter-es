@@ -17,7 +17,7 @@ from pathlib import Path
 
 from ai import AIError, AIUnavailable, Provider, get_provider
 from automation.ai_documents import _research_block
-from automation.company_researcher import get_or_research
+from automation.company_researcher import RESEARCH_BUDGET_SECONDS, get_or_research
 from database import get_conn
 
 logger = logging.getLogger(__name__)
@@ -199,7 +199,8 @@ def generate_interview_pack(application_id: str) -> Path:
     from profile_store import load_profile
 
     profile = load_profile()
-    research = get_or_research(application.get("company_name"), None, provider, application.get("description"))
+    research = get_or_research(application.get("company_name"), None, provider, application.get("description"),
+                            timeout=RESEARCH_BUDGET_SECONDS)
     sent_letter = application.get("cover_letter_edited") or application.get("cover_letter_used") or ""
     headings = "\n".join(f"## {s}" for s in INTERVIEW_SECTIONS)
     prompt = (

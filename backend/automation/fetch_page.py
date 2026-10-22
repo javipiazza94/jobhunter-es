@@ -8,12 +8,15 @@ Uso: python -m automation.fetch_page <url> [--out PATH] [--text] [--max-chars N]
 """
 
 import argparse
+import functools
 import gzip
 import hashlib
 import html
+import http.client
 import os
 import re
 import shutil
+import socket
 import string
 import subprocess
 import sys
@@ -27,10 +30,12 @@ if __package__ is None or __package__ == "":
 
 from urllib.error import HTTPError
 from urllib.parse import quote, urljoin, urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import (
+    HTTPHandler, HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener,
+)
 
 from automation.page_decode import decode_page
-from automation.robots_check import BROWSER, gate
+from automation.robots_check import BROWSER, curl_network_flags, gate, pinned_port, resolve_public
 
 ROOT = Path(__file__).resolve().parents[2]
 ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
@@ -40,10 +45,12 @@ MAX_REDIRECTS = 5
 MAX_BYTES = 10 * 1024 * 1024
 
 
-def build_curl_argv(url: str, out: Path, headers: Path, timeout: float) -> list:
-    """One GET without automatic redirects, so the next hop can be gated."""
+def build_curl_argv(url: str, out: Path, headers: Path, timeout: float, ip: str | None = None) -> list:
+    """One GET without automatic redirects, so the next hop can be gated. With `ip`, the connection is pinned
+    to that already-checked address (`--resolve`), so a DNS answer that changes cannot reach another host."""
+    pin = curl_network_flags(urlsplit(url), ip) if ip else ["--proto", "=http,https", "--proto-redir", "=http,https", "--noproxy", "*"]
     return [
-        "curl", "-sS",
+        "curl", "-sS", *pin,
         "--max-redirs", "0",
         "--max-time", str(timeout),
         "--max-filesize", str(MAX_BYTES),
@@ -70,13 +77,13 @@ def _location(header_text: str) -> str | None:
     return None
 
 
-def fetch_with_curl(url: str, out: Path, timeout: float) -> tuple[int, str | None]:
+def fetch_with_curl(url: str, out: Path, timeout: float, ip: str | None = None) -> tuple[int, str | None]:
     fd, header_name = tempfile.mkstemp(prefix=".fetch_page_headers.")
     os.close(fd)  # curl must be able to open it on Windows too
     headers = Path(header_name)
     try:
         proc = subprocess.run(
-            build_curl_argv(url, out, headers, timeout),
+            build_curl_argv(url, out, headers, timeout, ip),
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=timeout + 15,
         )
@@ -98,8 +105,48 @@ class _NoRedirects(HTTPRedirectHandler):
         return None
 
 
-def fetch_with_urllib(url: str, out: Path, timeout: float) -> tuple[int, str | None]:
-    """Fallback for machines without curl. One GET, gzip/deflate only."""
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    """Conecta siempre a `pinned_ip` (la ya comprobada); Host y SNI siguen siendo el nombre."""
+
+    def __init__(self, *args, pinned_ip: str, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pinned_ip = pinned_ip
+
+    def connect(self):
+        self.sock = socket.create_connection((self._pinned_ip, self.port), self.timeout, self.source_address)
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(self, *args, pinned_ip: str, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pinned_ip = pinned_ip
+
+    def connect(self):
+        sock = socket.create_connection((self._pinned_ip, self.port), self.timeout, self.source_address)
+        self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+
+
+class _PinnedHTTPHandler(HTTPHandler):
+    def __init__(self, ip: str):
+        super().__init__()
+        self._ip = ip
+
+    def http_open(self, req):
+        return self.do_open(functools.partial(_PinnedHTTPConnection, pinned_ip=self._ip), req)
+
+
+class _PinnedHTTPSHandler(HTTPSHandler):
+    def __init__(self, ip: str):
+        super().__init__()
+        self._ip = ip
+
+    def https_open(self, req):
+        return self.do_open(functools.partial(_PinnedHTTPSConnection, pinned_ip=self._ip), req)
+
+
+def fetch_with_urllib(url: str, out: Path, timeout: float, ip: str | None = None) -> tuple[int, str | None]:
+    """Fallback for machines without curl. One GET, gzip/deflate only. With `ip` it connects to that
+    checked address (Host/SNI keep the hostname); without proxies from the environment."""
     request = Request(url, headers={
         "User-Agent": BROWSER,
         "Accept": ACCEPT,
@@ -107,7 +154,10 @@ def fetch_with_urllib(url: str, out: Path, timeout: float) -> tuple[int, str | N
         "Accept-Encoding": "gzip, deflate",
     })
     try:
-        response = build_opener(_NoRedirects()).open(request, timeout=timeout)  # noqa: S310
+        handlers = [_NoRedirects(), ProxyHandler({})]
+        if ip:
+            handlers += [_PinnedHTTPHandler(ip), _PinnedHTTPSHandler(ip)]
+        response = build_opener(*handlers).open(request, timeout=timeout)  # noqa: S310
     except HTTPError as exc:
         response = exc
     with response:
@@ -158,12 +208,16 @@ class RobotsRefused(Exception):
     """robots.txt no permite la ruta pedida (o la de una redirección)."""
 
 
-def download(url: str, out: Path, say=print, check=None) -> str:
+def download(url: str, out: Path, say=print, timeout: float | None = None) -> str:
     """GET `url` (siguiendo redirecciones una a una, con robots.txt en cada salto) y guarda el cuerpo en `out`.
 
     Devuelve «HTTP <código> size=<bytes>». Lanza `RobotsRefused` si robots lo impide y cualquier otra
-    excepción ante fallos de transporte. `say` recibe los mensajes de robots; `check(url)` (opcional) se
-    llama antes de cada salto y puede lanzar para rechazarlo (p. ej. destinos de red interna).
+    excepción ante fallos de transporte. `say` recibe los mensajes de robots.
+
+    En cada salto el destino se resuelve una vez, se exige que sea una dirección pública
+    (`robots_check.BlockedAddress` si no) y la conexión se fija a esa IP, así que un DNS que cambia entre la
+    comprobación y la conexión no puede llevar la petición a la red interna. `timeout` (segundos) acota el
+    total (por defecto TIMEOUT_SECONDS), robots incluido.
     """
     current = url
     deadline = None
@@ -171,14 +225,17 @@ def download(url: str, out: Path, say=print, check=None) -> str:
         scheme = urlsplit(current).scheme.lower()
         if scheme not in ("http", "https"):
             raise ValueError(f"redirect target must be http(s), got scheme {scheme!r}")
-        if check is not None:
-            check(current)
-        rc, message = gate(current)
+        parts = urlsplit(current)
+        ip = resolve_public(parts.hostname, pinned_port(parts))
+        if deadline is None:
+            deadline = time.monotonic() + min(TIMEOUT_SECONDS, timeout if timeout is not None else TIMEOUT_SECONDS)
+        left = deadline - time.monotonic()
+        if left <= 0:
+            raise TimeoutError("fetch exceeded the time limit")
+        rc, message = gate(current) if timeout is None else gate(current, timeout=min(12, left))
         say(message)
         if rc != 0:
             raise RobotsRefused(current)
-        if deadline is None:
-            deadline = time.monotonic() + TIMEOUT_SECONDS
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError("fetch exceeded the time limit")
@@ -188,8 +245,8 @@ def download(url: str, out: Path, say=print, check=None) -> str:
         body = Path(body_name)
         try:
             code, location = (
-                fetch_with_curl(current, body, remaining)
-                if shutil.which("curl") else fetch_with_urllib(current, body, remaining)
+                fetch_with_curl(current, body, remaining, ip)
+                if shutil.which("curl") else fetch_with_urllib(current, body, remaining, ip)
             )
             if code in (301, 302, 303, 307, 308) and location:
                 if redirects == MAX_REDIRECTS:

@@ -21,7 +21,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "backend"))
-from automation import fetch_page  # noqa: E402
+from automation import fetch_page, robots_check  # noqa: E402
 
 PAGE = (
     "<!doctype html><html><head><title>Posting</title>"
@@ -135,6 +135,10 @@ class FetchPageFixture(unittest.TestCase):
         self._orig_gate = fetch_page.gate
         fetch_page.gate = self.allow_gate
         self.addCleanup(setattr, fetch_page, "gate", self._orig_gate)
+        # El servidor de pruebas escucha en 127.0.0.1: aquí no se exige IP pública (ver tests/test_company_researcher.py)
+        for module in (fetch_page, robots_check):
+            self.addCleanup(setattr, module, "resolve_public", module.resolve_public)
+            module.resolve_public = lambda host, port=None: host
 
     def allow_gate(self, url):
         self.gate_calls.append(url)

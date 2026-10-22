@@ -16,10 +16,8 @@ Garantías:
 """
 from __future__ import annotations
 
-import ipaddress
 import logging
 import re
-import socket
 import tempfile
 import time
 from pathlib import Path
@@ -28,7 +26,7 @@ from urllib.parse import urljoin, urlsplit
 
 from ai import AIError, AIUnavailable, Provider, get_provider
 from automation import fetch_page
-from automation.company_research import get_cached_research, save_cached_research
+from automation.company_research import get_cached_research, normalize_company_name, save_cached_research
 from automation.page_decode import decode_page
 from database import get_conn
 
@@ -39,6 +37,8 @@ MAX_OFFER_CHARS = 4000
 MAX_FIELD_CHARS = 600
 MAX_SUMMARY_CHARS = 1500
 MAX_ITEMS = 8
+RESEARCH_BUDGET_SECONDS = 40.0   # tope de la fase de investigación dentro de otra operación (documentos, evaluación…)
+MIN_BUDGET_TO_RESEARCH = 60.0    # con menos tiempo restante en la preparación de documentos no se investiga
 FAILURE_COOLDOWN_SECONDS = 600.0  # tras un fallo, get_or_research no reintenta la misma empresa durante este tiempo
 
 SYSTEM_PROMPT = (
@@ -63,12 +63,12 @@ RESEARCH_SCHEMA: dict[str, Any] = {
 _ABOUT_HINT = re.compile(r"about|nosotros|quienes|quiénes|empresa|company|compania|compañia|who-we", re.I)
 
 
+class ResearchTimeout(TimeoutError):
+    """Se agotó el presupuesto de tiempo de la investigación."""
+
+
 class ResearchUnavailable(ValueError):
     """No hay ninguna fuente (web ni texto de oferta) de la que resumir la empresa."""
-
-
-class FetchBlocked(Exception):
-    """El destino no es una web pública (red interna, esquema no http…)."""
 
 
 # ── Lectura de páginas ────────────────────────────────────────────────────────
@@ -86,27 +86,14 @@ def _normalize_url(website: str | None) -> str | None:
     return raw
 
 
-def _check_public(url: str) -> None:
-    """Rechaza destinos de red interna (localhost, 10.x, 192.168.x, enlace local…): la web viene de datos scrapeados."""
-    host = urlsplit(url).hostname or ""
-    try:
-        infos = socket.getaddrinfo(host, None)
-    except OSError as exc:
-        raise FetchBlocked(f"no se pudo resolver {host}") from exc
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0].split("%")[0])
-        if not ip.is_global:
-            raise FetchBlocked(f"{host} no es una dirección pública")
-
-
-def fetch_html(url: str) -> str:
-    """HTML de `url` con `fetch_page.download` (robots, límites, redirecciones comprobadas una a una).
+def fetch_html(url: str, timeout: float | None = None) -> str:
+    """HTML de `url` con `fetch_page.download` (robots, límites, redirecciones comprobadas una a una, IP pública fijada).
 
     Lanza `fetch_page.RobotsRefused` si robots.txt lo impide y otra excepción si no se puede leer.
     """
     with tempfile.TemporaryDirectory(prefix="jh-research-") as tmp:
         out = Path(tmp) / "page.html"
-        status = fetch_page.download(url, out, say=lambda _msg: None, check=_check_public)
+        status = fetch_page.download(url, out, say=lambda _msg: None, timeout=timeout)
         code = int(status.split()[1])
         if code >= 400:
             raise RuntimeError(f"HTTP {code}")
@@ -125,7 +112,7 @@ def _about_link(html: str, base: str) -> str | None:
     return None
 
 
-def _read_site(website: str | None, warnings: list[str]) -> tuple[list[tuple[str, str]], list[str]]:
+def _read_site(website: str | None, warnings: list[str], left=lambda: None) -> tuple[list[tuple[str, str]], list[str]]:
     """[(url, texto)] de las páginas leídas y sus URLs. Los fallos quedan como avisos, nunca como excepción."""
     start = _normalize_url(website)
     if start is None:
@@ -133,12 +120,12 @@ def _read_site(website: str | None, warnings: list[str]) -> tuple[list[tuple[str
         return [], []
     pages: list[tuple[str, str]] = []
     try:
-        html = fetch_html(start)
+        html = fetch_html(start, left())
         pages.append((start, fetch_page.strip_tags(html, MAX_PAGE_CHARS)))
         about = _about_link(html, start)
-        if about:
+        if about and (left() is None or left() > 1):
             try:
-                pages.append((about, fetch_page.strip_tags(fetch_html(about), MAX_PAGE_CHARS)))
+                pages.append((about, fetch_page.strip_tags(fetch_html(about, left()), MAX_PAGE_CHARS)))
             except Exception:  # noqa: BLE001 — la página extra es opcional
                 logger.info("No se pudo leer la página «sobre nosotros» de %s", start)
     except fetch_page.RobotsRefused:
@@ -202,24 +189,37 @@ def _prompt(name: str, pages: list[tuple[str, str]], offer_text: str | None) -> 
     )
 
 
-def research_company(name: str, website: str | None, provider: Provider, offer_text: str | None = None) -> dict:
+def research_company(
+    name: str, website: str | None, provider: Provider, offer_text: str | None = None,
+    timeout: float | None = None, clock=time.monotonic,
+) -> dict:
     """
     Investiga `name`, guarda el resultado en la caché (30 días) y lo devuelve:
     {company, summary, products, culture_signals, tech_stack, size_hint, sources: [url], warnings, fetched_date, provider}.
 
     Lanza `ResearchUnavailable` sin ninguna fuente, y `AIUnavailable`/`AIError` si el proveedor no puede o falla
     (entonces no se guarda nada). Los fallos de lectura de la web no son excepción: quedan en `warnings`.
+
+    `timeout` (segundos, reloj `clock`) acota la lectura de la web; si se agota antes de llamar a la IA, lanza
+    `ResearchTimeout`. La llamada a la IA en sí no se interrumpe: depende del plazo del proveedor.
     """
+    deadline = None if timeout is None else clock() + timeout
+
+    def left() -> float | None:
+        return None if deadline is None else max(deadline - clock(), 0.0)
+
     name = (name or "").strip()
     if not name:
         raise ResearchUnavailable("Falta el nombre de la empresa")
     warnings: list[str] = []
-    pages, sources = _read_site(website, warnings)
+    pages, sources = _read_site(website, warnings, left)
     offer_text = (offer_text or "").strip() or None
     if not pages and not offer_text:
         raise ResearchUnavailable(
             "No hay fuentes para investigar la empresa: añade su web o guarda una oferta con descripción"
         )
+    if deadline is not None and left() <= 0:
+        raise ResearchTimeout("Se agotó el tiempo de investigación antes de llamar a la IA")
     data = provider.generate_json(_prompt(name, pages, offer_text), RESEARCH_SCHEMA, system=SYSTEM_PROMPT)
     if not isinstance(data, dict):
         raise AIError("La IA no devolvió un objeto")
@@ -243,6 +243,25 @@ def research_company(name: str, website: str | None, provider: Provider, offer_t
 # ── API usada por los consumidores ────────────────────────────────────────────
 
 _FAILED_AT: dict[str, float] = {}
+MAX_FAILURES_KEPT = 500
+
+
+def _note_failure(company: str, clock=time.monotonic) -> None:
+    """Anota el fallo (clave = nombre normalizado) y descarta los ya enfriados, para que el dict no crezca."""
+    now = clock()
+    for key in [k for k, t in _FAILED_AT.items() if now - t >= FAILURE_COOLDOWN_SECONDS]:
+        del _FAILED_AT[key]
+    while len(_FAILED_AT) >= MAX_FAILURES_KEPT:
+        del _FAILED_AT[next(iter(_FAILED_AT))]
+    _FAILED_AT[normalize_company_name(company)] = now
+
+
+def cached_research(company: str | None) -> dict | None:
+    """Investigación vigente en caché; una entrada sin resumen (formato antiguo o incompleta) cuenta como no hay."""
+    if not (company or "").strip():
+        return None
+    data = get_cached_research(company)
+    return data if data and str(data.get("summary") or "").strip() else None
 
 
 def reset_failures() -> None:
@@ -286,22 +305,25 @@ def resolve_provider(provider: Provider | None) -> Provider:
 
 def get_or_research(
     company: str | None, website: str | None = None, provider: Provider | None = None,
-    offer_text: str | None = None,
+    offer_text: str | None = None, timeout: float | None = RESEARCH_BUDGET_SECONDS, clock=time.monotonic,
 ) -> dict | None:
     """
     Investigación vigente de `company` (caché de 30 días) o, si no hay y la IA está disponible, la hace y la guarda.
 
     Pensada para el redactor/revisor, la evaluación y el pack de entrevista: **nunca lanza**; sin empresa, sin IA,
     sin fuentes o ante cualquier fallo devuelve la caché si la hay o None. Tras un fallo no reintenta la misma
-    empresa durante `FAILURE_COOLDOWN_SECONDS`. `website` y `offer_text` se leen de la BD si no se dan.
+    empresa durante `FAILURE_COOLDOWN_SECONDS`. `timeout` acota la lectura de la web (por defecto
+    `RESEARCH_BUDGET_SECONDS`; `timeout <= 0` no investiga). `website` y `offer_text` se leen de la BD si no se dan.
     """
     if not (company or "").strip():
         return None
     try:
-        cached = get_cached_research(company)
+        cached = cached_research(company)
         if cached is not None:
             return cached
-        failed = _FAILED_AT.get(company.strip().lower())
+        if timeout is not None and timeout <= 0:
+            return None
+        failed = _FAILED_AT.get(normalize_company_name(company))
         if failed is not None and time.monotonic() - failed < FAILURE_COOLDOWN_SECONDS:
             return None
         try:
@@ -313,9 +335,9 @@ def get_or_research(
             website = website if website is not None else db_site
             offer_text = offer_text if offer_text is not None else db_text
         try:
-            return research_company(company, website, provider, offer_text)
+            return research_company(company, website, provider, offer_text, timeout=timeout, clock=clock)
         except Exception as exc:  # noqa: BLE001 — la investigación es opcional para los consumidores
-            _FAILED_AT[company.strip().lower()] = time.monotonic()
+            _note_failure(company, clock)
             logger.info("Sin investigación de %s (%s)", company, type(exc).__name__)
             return None
     except Exception:  # noqa: BLE001 — ni la caché ni la BD deben romper al consumidor

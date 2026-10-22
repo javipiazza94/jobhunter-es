@@ -20,26 +20,93 @@ Usage:  python -m automation.robots_check <url>
 Exit 0 = the retry may proceed. Exit 1 = do not retry; go to escalation step 3.
 """
 
+import ipaddress
+import os
 import re
+import socket
 import subprocess
 import sys
-from urllib.parse import unquote, urlsplit
+import tempfile
+from urllib.parse import quote, unquote, urljoin, urlsplit
 
 BROWSER = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
            '(KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36')
 
 
-def _fetch(url, ua):
+MAX_ROBOTS_REDIRECTS = 5
+
+
+class BlockedAddress(Exception):
+    """El destino no es una dirección pública (red interna, enlace local, no resuelve…)."""
+
+
+def resolve_public(host, port=None):
+    """Resuelve `host` y devuelve la IP a la que hay que conectar, **comprobada**: todas las direcciones
+    devueltas deben ser públicas. Quien la use debe conectar a esa IP (curl --resolve) y no volver a resolver,
+    o un DNS que cambia entre la comprobación y la conexión (rebinding) esquivaría la comprobación."""
+    if not host:
+        raise BlockedAddress("sin host")
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except OSError as exc:
+        raise BlockedAddress(f"no se pudo resolver {host}") from exc
+    ips = [info[4][0].split("%")[0] for info in infos]
+    if not ips:
+        raise BlockedAddress(f"{host} no resuelve")
+    for ip in ips:
+        if not ipaddress.ip_address(ip).is_global:
+            raise BlockedAddress(f"{host} no es una dirección pública")
+    return ips[0]
+
+
+def pinned_port(parts):
+    """Puerto efectivo de una URL ya partida."""
+    return parts.port or (443 if parts.scheme.lower() == 'https' else 80)
+
+
+def curl_network_flags(parts, ip):
+    """Opciones de curl comunes: solo http(s) (también en redirecciones), sin proxies del entorno y conexión
+    fijada a la IP ya comprobada."""
+    host = parts.hostname
+    return ['--proto', '=http,https', '--proto-redir', '=http,https', '--noproxy', '*',
+            '--resolve', f'{host}:{pinned_port(parts)}:{ip}']
+
+
+def _fetch(url, ua, timeout=12):
     """curl, not urllib: some hosts (jobup.ch) hang urllib indefinitely while
-    answering curl in under a second, and --max-time is a hard ceiling."""
-    r = subprocess.run(
-        ['curl', '-sS', '-L', '--max-redirs', '5', '--max-time', '12', '-A', ua,
-         '-H', 'Accept: text/plain,*/*', '-w', '\n%{http_code}', '--', url],
-        capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=20)
-    if r.returncode != 0:
-        raise RuntimeError('curl exit %d' % r.returncode)
-    body, _, code = r.stdout.rpartition('\n')
-    return body, int(code or 0)
+    answering curl in under a second, and --max-time is a hard ceiling.
+
+    Sin -L: cada redirección se sigue a mano (máx. 5) comprobando que su destino es público y fijando la IP
+    resuelta en la conexión."""
+    for _ in range(MAX_ROBOTS_REDIRECTS + 1):
+        parts = urlsplit(url)
+        if parts.scheme.lower() not in ('http', 'https'):
+            raise RuntimeError('redirect to a non-http(s) scheme')
+        ip = resolve_public(parts.hostname, pinned_port(parts))
+        fd, header_name = tempfile.mkstemp(prefix='.robots_headers.')
+        os.close(fd)
+        try:
+            r = subprocess.run(
+                ['curl', '-sS', '--max-redirs', '0', '--max-time', str(timeout), '-A', ua,
+                 *curl_network_flags(parts, ip),
+                 '-H', 'Accept: text/plain,*/*', '-D', header_name, '-w', '\n%{http_code}', '--', url],
+                capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout + 8)
+            headers = open(header_name, encoding='iso-8859-1').read()
+        finally:
+            os.unlink(header_name)
+        if r.returncode != 0:
+            raise RuntimeError('curl exit %d' % r.returncode)
+        body, _, code = r.stdout.rpartition('\n')
+        status = int(code or 0)
+        if status in (301, 302, 303, 307, 308):
+            location = next((line.partition(':')[2].strip() for line in headers.splitlines()
+                             if line.lower().startswith('location:')), None)
+            if not location:
+                return body, status
+            url = urljoin(url, quote(location, encoding='iso-8859-1', safe="!#$%&'()*+,/:;=?@[]~"))
+            continue
+        return body, status
+    raise RuntimeError('too many redirects')
 
 
 def is_robots_body(text):
@@ -117,7 +184,7 @@ def allowed(text, agent, path):
     return True if best_len < 0 else best_allow
 
 
-def gate(url):
+def gate(url, timeout=12):
     parts = urlsplit(url)
     path = unquote(parts.path) or '/'
     if parts.query:
@@ -126,7 +193,7 @@ def gate(url):
     body, last = None, 'no attempt'
     for ua in ('Claude-User', BROWSER):
         try:
-            text, code = _fetch(robots, ua)
+            text, code = _fetch(robots, ua, timeout) if timeout != 12 else _fetch(robots, ua)
         except Exception as e:
             last = type(e).__name__
             continue

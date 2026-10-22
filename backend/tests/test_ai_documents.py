@@ -136,7 +136,7 @@ def test_respuesta_con_forma_invalida_es_error_de_ia():
 
 def test_la_investigacion_en_cache_llega_al_redactor_y_al_revisor(monkeypatch):
     monkeypatch.setattr(ai_documents, "get_or_research",
-                        lambda company, website, provider, offer_text=None: {
+                        lambda company, website, provider, offer_text=None, **kw: {
                             "company": company, "summary": "Fabrica turbinas eólicas en Villanova"})
     provider = ScriptedProvider([draft_payload(), REVIEW_OK])
     ai_documents.run_ai_flow(PROFILE, OFFER, provider)

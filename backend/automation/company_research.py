@@ -10,6 +10,7 @@ Conforme a §5.11 del spec y 04-job-evaluation.md de ai-job-search:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import date, datetime
@@ -19,6 +20,7 @@ from typing import Any
 import config
 
 DEFAULT_TTL_DAYS = 30
+MAX_SLUG_CHARS = 100
 
 
 def _research_dir() -> Path:
@@ -38,6 +40,9 @@ def normalize_company_name(name: str) -> str:
     # Sustituir caracteres que no sean letras o números por guiones
     slug = re.sub(r"[^a-z0-9]+", "-", slug)
     slug = slug.strip("-")
+    if len(slug) > MAX_SLUG_CHARS:  # nombre de fichero acotado; el hash evita que dos nombres largos choquen
+        digest = hashlib.sha1(slug.encode("utf-8")).hexdigest()[:8]
+        slug = f"{slug[:MAX_SLUG_CHARS].rstrip('-')}-{digest}"
     return slug or "unknown-company"
 
 

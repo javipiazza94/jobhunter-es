@@ -32,7 +32,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from ai import AIError, Provider
-from automation.company_researcher import get_or_research
+from automation.company_researcher import (
+    MIN_BUDGET_TO_RESEARCH, RESEARCH_BUDGET_SECONDS, cached_research, get_or_research,
+)
 from automation.document_generator import (
     PageOverflow,
     prepare_cover_letter_context,
@@ -656,9 +658,22 @@ def _draft_from_contexts(cv_ctx: dict, letter_ctx: dict) -> DocsDraft:
     )
 
 
-def _research_for(offer: dict, provider: Provider) -> dict | None:
-    """Investigación de la empresa (caché de 30 días o nueva); None si no se puede obtener: nunca bloquea."""
-    return get_or_research(offer.get("company_name"), None, provider, offer.get("description")) if offer.get("company_name") else None
+def _research_for(offer: dict, provider: Provider, deadline: float | None = None,
+                  clock: Callable[[], float] = time.monotonic) -> dict | None:
+    """Investigación de la empresa (caché de 30 días o nueva); None si no se puede obtener: nunca bloquea.
+
+    Dentro del plazo de la preparación (`deadline`), investigar solo si quedan ≥ MIN_BUDGET_TO_RESEARCH s y
+    como mucho RESEARCH_BUDGET_SECONDS; si no, se usa solo lo que ya esté en caché."""
+    company = offer.get("company_name")
+    if not company:
+        return None
+    timeout = RESEARCH_BUDGET_SECONDS
+    if deadline is not None:
+        remaining = deadline - clock()
+        if remaining < MIN_BUDGET_TO_RESEARCH:
+            return cached_research(company)
+        timeout = min(RESEARCH_BUDGET_SECONDS, remaining)
+    return get_or_research(company, None, provider, offer.get("description"), timeout=timeout, clock=clock)
 
 
 def run_ai_flow(profile: dict, offer: dict, provider: Provider, max_rounds: int = 2, track: str = "general",
@@ -671,7 +686,7 @@ def run_ai_flow(profile: dict, offer: dict, provider: Provider, max_rounds: int 
     `deadline` (en el reloj `clock`): pasado ese instante no se hacen más revisiones (aviso).
     Devuelve (contexto del CV, contexto de la carta, avisos). Lanza AIError si la IA falla.
     """
-    research = _research_for(offer, provider)
+    research = _research_for(offer, provider, deadline, clock)
     warnings: list[str] = []
     claims: list[str] = []
 

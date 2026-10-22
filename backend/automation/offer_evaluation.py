@@ -28,7 +28,7 @@ from ai import AIError, AIUnavailable, Provider, get_provider
 from automation import rank_state
 from automation.ai_documents import _offer_block, _research_block
 from automation.ai_writing import AIBudget, _profile_facts
-from automation.company_researcher import get_or_research
+from automation.company_researcher import RESEARCH_BUDGET_SECONDS, get_or_research
 from database import get_conn
 
 MAX_POINTS = 3
@@ -154,7 +154,7 @@ def _load_offer(conn: sqlite3.Connection, offer_id: str) -> dict:
 
 
 def _build_prompt(offer: dict, profile: dict, provider: Provider) -> str:
-    research = get_or_research(offer.get("company_name"), None, provider, offer.get("description"))
+    research = get_or_research(offer.get("company_name"), None, provider, offer.get("description"), timeout=RESEARCH_BUDGET_SECONDS)
     location = f"\nUbicación: {offer.get('location')}" if offer.get("location") else ""
     return (
         f"{_RUBRIC}\n\n"

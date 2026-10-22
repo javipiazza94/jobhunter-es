@@ -428,10 +428,13 @@ class TestNonAsciiCurlOutput(unittest.TestCase):
             return real_run([sys.executable, "-c", write, raw.hex()], **kwargs)
 
         robots_check.subprocess.run = fake_curl
+        real_resolve = robots_check.resolve_public
+        robots_check.resolve_public = lambda host, port=None: host  # sin DNS en los tests
         try:
             return robots_check.gate(url)
         finally:
             robots_check.subprocess.run = real_run
+            robots_check.resolve_public = real_resolve
 
     def test_rule_holding_a_cp1254_undefined_byte_is_read_and_obeyed(self):
         """The rule is verbatim from tr.indeed.com/robots.txt: 職 is e8 81 b7.
