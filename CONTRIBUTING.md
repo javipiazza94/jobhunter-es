@@ -92,6 +92,7 @@ Custom templates for CVs and cover letters live in `JH_HOME/templates/<kind>/<na
 - Supported engines: LaTeX (`.tex.j2`, compiled with Tectonic / XeLaTeX) and Typst (`.typ.j2`, compiled with `typst compile`).
 - Registering a template (`POST /api/templates` or `python -m automation.templates_registry add ...`) runs a **mandatory test compilation** against `backend/profile.example.json` to verify valid syntax, macros, and page limits before activation.
 - Templates must respect page limits (default: CV ≤ 2 pages, cover letter = 1 page) and use ATS-friendly text formatting without custom binary dependencies.
+- The compiler comes from a closed list (`tectonic`, `xelatex`, `lualatex`, `typst`) and its argv is built in code with safe flags; custom templates render in a sandboxed Jinja environment with escaping by default. Keep it that way: never add a free-form compile command, `latexmk`, or shell-escape.
 - Unit and integration tests for template management are in `backend/tests/test_templates_registry.py`.
 
 ### Claude Code Commands and Agents

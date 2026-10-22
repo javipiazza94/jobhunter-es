@@ -152,23 +152,23 @@ The **"Preparar candidatura"** button in the dashboard (or `POST /api/applicatio
 
 To compile LaTeX templates to PDF, **Tectonic** is recommended (a modern, self-contained engine that fetches necessary packages on demand without requiring a full TeX Live install). If no engine is found on the system, preparation returns a 409 status with installation instructions:
 
-- **Linux:**
+Installation methods from the [official guide](https://tectonic-typesetting.github.io/book/latest/installation/):
+
+- **Linux / macOS (official installer):** downloads the prebuilt `tectonic` binary into the current directory; move it to a folder on your `PATH` (e.g. `~/.local/bin`):
   ```bash
-  curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.tectonic-typesetting.github.io/install-sh | sh
-  # Or via package manager / cargo:
-  # sudo apt install tectonic   # Ubuntu/Debian
-  # sudo pacman -S tectonic     # Arch
-  # cargo install tectonic
+  curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh
   ```
-- **macOS:**
-  ```bash
-  brew install tectonic
-  ```
-- **Windows:**
+- **macOS / Linux with Homebrew:** `brew install tectonic`
+- **Arch Linux:** `sudo pacman -S tectonic`
+- **Any OS with conda:** `conda install -c conda-forge tectonic`
+- **Windows:** the official PowerShell installer or the prebuilt binary from [GitHub Releases](https://github.com/tectonic-typesetting/tectonic/releases):
   ```powershell
-  winget install Tectonic.Tectonic
-  # Or via Scoop: scoop install tectonic
+  [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+  iex ((New-Object System.Net.WebClient).DownloadString('https://drop-ps1.fullyjustified.net'))
   ```
+- **From source (any OS):** `cargo install tectonic` (needs a Rust toolchain plus the system libraries listed in the official guide).
+
+Debian/Ubuntu have no `tectonic` apt package: use the installer, Homebrew or conda.
 
 *Note:* Standard system engines like `xelatex` or `lualatex` are also detected and supported if present on your `PATH`.
 
@@ -178,6 +178,9 @@ JobHunter provides built-in templates based on `moderncv` (banking) for CVs and 
 - From the dashboard in **Perfil > Plantillas**.
 - Via the API with `POST /api/templates` or the Claude Code command `/add-template`.
 - Every registered template undergoes a **mandatory test compilation** against `profile.example.json` to verify correctness before being saved to `JH_HOME/templates/<kind>/<name>/`.
+- Each template picks a compiler from a fixed list (`tectonic`, `xelatex`, `lualatex`, `typst`) and may set its own page limit and style rules (passed to the AI writer as formatting guidance). There is no free-form compile command.
+- **A template is code: install only templates from sources you trust.** As a safety net, custom templates render in a sandboxed Jinja environment, every `((( value )))` is escaped by default (`|safe_raw` opts out), compilers run without shell-escape (Tectonic `--untrusted`, xelatex/lualatex in paranoid mode, Typst with `--root` on the work folder), `latexmkrc`/`texmf.cnf` files are dropped and `\input`/`\include`/`\openin` of absolute or `..` paths is rejected at registration.
+- If a custom template fails while preparing an application, the error is shown with a one-click retry using the built-in templates.
 
 ---
 

@@ -142,23 +142,23 @@ El botón **"Preparar candidatura"** en la tarjeta de revisión (o el endpoint `
 
 Para compilar las plantillas LaTeX a PDF se recomienda **Tectonic** (motor autónomo y moderno que descarga paquetes bajo demanda sin necesidad de instalar TeX Live completo). Si no hay ningún motor en el sistema, la preparación responde con un aviso 409 indicando cómo instalarlo:
 
-- **Linux:**
+Métodos de instalación de la [guía oficial](https://tectonic-typesetting.github.io/book/latest/installation/):
+
+- **Linux / macOS (instalador oficial):** descarga el binario `tectonic` en la carpeta actual; muévelo a una carpeta del `PATH` (p. ej. `~/.local/bin`):
   ```bash
-  curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.tectonic-typesetting.github.io/install-sh | sh
-  # O vía gestor de paquetes / cargo:
-  # sudo apt install tectonic   # Ubuntu/Debian
-  # sudo pacman -S tectonic     # Arch
-  # cargo install tectonic
+  curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh
   ```
-- **macOS:**
-  ```bash
-  brew install tectonic
-  ```
-- **Windows:**
+- **macOS / Linux con Homebrew:** `brew install tectonic`
+- **Arch Linux:** `sudo pacman -S tectonic`
+- **Cualquier sistema con conda:** `conda install -c conda-forge tectonic`
+- **Windows:** el instalador oficial de PowerShell o el binario de [GitHub Releases](https://github.com/tectonic-typesetting/tectonic/releases):
   ```powershell
-  winget install Tectonic.Tectonic
-  # O con Scoop: scoop install tectonic
+  [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+  iex ((New-Object System.Net.WebClient).DownloadString('https://drop-ps1.fullyjustified.net'))
   ```
+- **Desde el código (cualquier sistema):** `cargo install tectonic` (requiere Rust y las bibliotecas del sistema que indica la guía oficial).
+
+Debian/Ubuntu no tienen paquete apt `tectonic`: usa el instalador, Homebrew o conda.
 
 *Nota:* También se detectan y soportan motores tradicionales como `xelatex` o `lualatex` si ya están en el `PATH`.
 
@@ -168,6 +168,9 @@ JobHunter incluye por defecto plantillas integradas basadas en `moderncv` (banki
 - Desde el dashboard en **Perfil > Plantillas**.
 - Vía API con `POST /api/templates` o el comando Claude Code `/add-template`.
 - Cada plantilla registrada realiza una **compilación de prueba obligatoria** contra el perfil de ejemplo (`profile.example.json`) para garantizar que compila sin errores antes de guardarse en `JH_HOME/templates/<kind>/<name>/`.
+- Cada plantilla elige compilador de una lista cerrada (`tectonic`, `xelatex`, `lualatex`, `typst`) y puede fijar su límite de páginas y reglas de estilo (llegan a la IA como indicaciones de forma). No hay comando de compilación libre.
+- **Una plantilla es código: instala solo plantillas de fuentes de confianza.** Como red de seguridad, las plantillas propias se renderizan en un entorno Jinja aislado, toda salida `((( valor )))` se escapa por defecto (`|safe_raw` para texto crudo a propósito), los compiladores van sin shell-escape (Tectonic `--untrusted`, xelatex/lualatex en modo paranoico, Typst con `--root` en la carpeta de trabajo), los `latexmkrc`/`texmf.cnf` se descartan y se rechaza al registrar cualquier `\input`/`\include`/`\openin` con ruta absoluta o con `..`.
+- Si una plantilla propia falla al preparar una candidatura, se muestra el error con un botón para reintentar con las plantillas integradas.
 
 ---
 
