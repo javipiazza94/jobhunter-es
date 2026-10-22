@@ -2,7 +2,9 @@
 """State helper for /rank: select candidates and write results back.
 
 Portado y adaptado de MadsLorentzen/ai-job-search @ e16acee (tools/rank_state.py, licencia MIT,
-Copyright (c) 2026 Mads Lorentzen). Adaptado para soporte nativo de SQLite data/job_hunter.db.
+Copyright (c) 2026 Mads Lorentzen). Adaptado para soporte nativo de SQLite: sin seen_jobs.json en JH_HOME
+se lee la BD de `config.DB_PATH` y las puntuaciones se guardan en `offer_evaluations` (nunca en
+relevance_score). Las rutas (JH_HOME, BD, tracker) se resuelven desde `config` al llamar, no al importar.
 
 /rank reads the whole of seen_jobs.json into the model's context to filter it
 by eye (Step 1), then re-emits the whole file to record scores (Step 4). That
@@ -51,10 +53,45 @@ from datetime import date, datetime, timedelta, timezone
 from fractions import Fraction
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-ROOT = REPO_ROOT
-STATE = ROOT / "job_scraper" / "seen_jobs.json"
-TRACKER = ROOT / "job_search_tracker.csv"
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+
+
+def _config():
+    """`config` del backend (también cuando este archivo se ejecuta como script)."""
+    if str(BACKEND_DIR) not in sys.path:
+        sys.path.insert(0, str(BACKEND_DIR))
+    import config
+
+    return config
+
+
+def db_path() -> Path:
+    """BD del usuario (`config.DB_PATH`), leída en cada llamada."""
+    return Path(_config().DB_PATH)
+
+
+def default_state() -> Path:
+    """seen_jobs.json opcional en JH_HOME; si no existe, el estado sale de la BD."""
+    return Path(_config().JH_HOME) / "seen_jobs.json"
+
+
+def default_tracker() -> Path:
+    return Path(_config().JH_HOME) / "job_search_tracker.csv"
+
+
+def _connect_db():
+    """Conexión a la BD del usuario con el esquema al día (crea offer_evaluations si falta)."""
+    import sqlite3
+
+    _config()
+    import database
+
+    conn = sqlite3.connect(str(db_path()))
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=10000")
+    database.init_db(conn)
+    return conn
 
 # 04-job-evaluation.md
 WEIGHTS = {"technical": 0.30, "experience": 0.25, "behavioral": 0.15, "career": 0.30}
@@ -62,6 +99,8 @@ BANDS = ((75, "Strong Fit"), (60, "Good Fit"), (45, "Moderate Fit"), (30, "Weak 
 
 DEFAULT_LIMIT = 10
 URGENT_DAYS = 7
+# Autor de las evaluaciones que /rank (Claude Code) escribe en la BD.
+RANK_PROVIDER = "claude-code"
 ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # The statuses a /rank scoring agent may return (rank.md Step 2). This module
@@ -97,44 +136,47 @@ def load_state(path: Path) -> tuple[dict, dict]:
             sys.exit(f"{path}: expected an object of job entries")
         return doc, seen
 
-    if path == STATE:
-        db_path = REPO_ROOT / "data" / "job_hunter.db"
-        if db_path.is_file():
-            import sqlite3
-            conn = sqlite3.connect(str(db_path))
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            rows = cur.execute("""
+    if path == default_state() and db_path().is_file():
+        conn = _connect_db()
+        try:
+            rows = conn.execute("""
                 SELECT jo.id, jo.title, jo.location, jo.url, jo.source, jo.posted_at,
-                       jo.is_relevant, jo.relevance_score, jo.review_flags, jo.discard_status,
-                       jo.job_key, c.name as company_name
+                       jo.discard_status, jo.job_key, c.name as company_name,
+                       ev.verdict, ev.score_0_100, ev.strengths, ev.gaps, ev.evaluated_at
                 FROM job_offers jo
                 LEFT JOIN companies c ON c.id = jo.company_id
+                LEFT JOIN offer_evaluations ev ON ev.offer_id = jo.id
             """).fetchall()
-            seen = {}
-            for r in rows:
-                key = r["job_key"] or r["id"]
-                if r["discard_status"] == "expired":
-                    status = "expired"
-                elif r["relevance_score"] and r["relevance_score"] > 0:
-                    status = "ranked"
-                else:
-                    status = "new"
-                seen[key] = {
-                    "id": r["id"],
-                    "key": key,
-                    "title": r["title"],
-                    "company": r["company_name"] or "",
-                    "location": r["location"] or "",
-                    "url": r["url"] or "",
-                    "portal": r["source"] or "",
-                    "posted_date": r["posted_at"] or "",
-                    "deadline": None,
-                    "status": status,
-                    "score": r["relevance_score"],
-                }
+        finally:
             conn.close()
-            return {"seen": seen, "_source": "sqlite"}, seen
+        seen = {}
+        for r in rows:
+            key = r["job_key"] or r["id"]
+            if key in seen:  # dos filas con la misma clave: cada oferta conserva la suya
+                key = r["id"]
+            if r["discard_status"] == "expired":
+                status = "expired"
+            elif r["verdict"]:
+                status = "ranked"
+            else:
+                status = "new"
+            entry = {
+                "id": r["id"],
+                "key": key,
+                "title": r["title"],
+                "company": r["company_name"] or "",
+                "location": r["location"] or "",
+                "url": r["url"] or "",
+                "portal": r["source"] or "",
+                "posted_date": r["posted_at"] or "",
+                "deadline": None,
+                "status": status,
+            }
+            if r["verdict"]:
+                entry.update(rank_score=r["score_0_100"], rank_verdict=r["verdict"],
+                             strengths=json.loads(r["strengths"] or "[]"), gaps=json.loads(r["gaps"] or "[]"))
+            seen[key] = entry
+        return {"seen": seen, "_source": "sqlite"}, seen
 
     sys.exit(f"{path} not found - run /scrape or populate database first")
 
@@ -142,33 +184,38 @@ def load_state(path: Path) -> tuple[dict, dict]:
 def save_state(path: Path, doc: dict) -> None:
     """Atomic replace: a half-written seen_jobs.json loses the scrape history."""
     if doc.get("_source") == "sqlite":
-        db_path = REPO_ROOT / "data" / "job_hunter.db"
-        import sqlite3
-        conn = sqlite3.connect(str(db_path))
-        seen = doc.get("seen", {})
-        for key, entry in seen.items():
-            if entry.get("status") == "expired":
-                conn.execute(
-                    "UPDATE job_offers SET discard_status = 'expired' WHERE job_key = ? OR id = ?",
-                    (key, entry.get("id", key)),
-                )
-            elif entry.get("status") == "ranked":
-                conn.execute(
-                    """UPDATE job_offers
-                       SET relevance_score = ?,
-                           is_relevant = CASE WHEN ? >= 60 THEN 1 ELSE is_relevant END,
-                           review_flags = ?
-                       WHERE job_key = ? OR id = ?""",
-                    (
-                        entry.get("rank_score", 0),
-                        entry.get("rank_score", 0),
-                        json.dumps({"guard": entry.get("guard"), "strengths": entry.get("strengths"), "gaps": entry.get("gaps")}, ensure_ascii=False),
-                        key,
-                        entry.get("id", key),
-                    ),
-                )
-        conn.commit()
-        conn.close()
+        # Las puntuaciones de /rank van a offer_evaluations; relevance_score e is_relevant no se tocan.
+        today = date.today()
+        stamp = datetime.now(timezone.utc).strftime(TIMESTAMP)
+        conn = _connect_db()
+        try:
+            with conn:
+                for entry in doc.get("seen", {}).values():
+                    offer_id = entry.get("id")
+                    if not offer_id:
+                        continue
+                    if entry.get("status") == "expired":
+                        conn.execute("UPDATE job_offers SET discard_status = 'expired' WHERE id = ?", (offer_id,))
+                    elif entry.get("status") == "ranked" and entry.get("rank_date"):  # puntuada en esta pasada
+                        urgency, expired = deadline_urgency(entry.get("deadline"), today)
+                        conn.execute(
+                            """INSERT INTO offer_evaluations
+                                   (offer_id, verdict, score_0_100, strengths, gaps, urgency, expired, evaluated_at, provider)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               ON CONFLICT(offer_id) DO UPDATE SET
+                                   verdict = excluded.verdict, score_0_100 = excluded.score_0_100,
+                                   strengths = excluded.strengths, gaps = excluded.gaps, urgency = excluded.urgency,
+                                   expired = excluded.expired, evaluated_at = excluded.evaluated_at,
+                                   provider = excluded.provider""",
+                            (
+                                offer_id, entry["rank_verdict"], int(entry["rank_score"]),
+                                json.dumps(entry.get("strengths") or [], ensure_ascii=False),
+                                json.dumps(entry.get("gaps") or [], ensure_ascii=False),
+                                urgency, int(expired), stamp, RANK_PROVIDER,
+                            ),
+                        )
+        finally:
+            conn.close()
         return
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -212,6 +259,19 @@ def parse_iso(value) -> date | None:
         return None
 
 
+def deadline_urgency(deadline, today: date, expired: bool = False) -> tuple[str, bool]:
+    """(urgencia, caducada) a partir de una fecha límite YYYY-MM-DD (rule 6: lo demás no se compara).
+
+    Urgencia: `expired` (pasó la fecha o se sabe cerrada), `urgent` (≤ URGENT_DAYS días), `normal`
+    (fecha más lejana) o `unknown` (sin fecha válida)."""
+    parsed = parse_iso(deadline)
+    if expired or (parsed is not None and parsed < today):
+        return "expired", True
+    if parsed is None:
+        return "unknown", False
+    return ("urgent" if (parsed - today).days <= URGENT_DAYS else "normal"), False
+
+
 def norm(text) -> str:
     """Ignore case and separators without discarding non-Latin identity."""
     text = unicodedata.normalize("NFC", str(text or "").casefold())
@@ -236,10 +296,10 @@ def tracker_pairs(path: Path) -> set[tuple[str, str]]:
         except UnicodeDecodeError:
             sys.exit(f"{path} is not UTF-8 text - re-save it as CSV UTF-8")
 
-    db_path = REPO_ROOT / "data" / "job_hunter.db"
-    if db_path.is_file():
+    path_db = db_path()
+    if path_db.is_file():
         import sqlite3
-        conn = sqlite3.connect(str(db_path))
+        conn = sqlite3.connect(str(path_db))
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         try:
@@ -274,7 +334,7 @@ def entry_location_verdict(entry: dict) -> str | None:
 
 def cmd_candidates(args) -> int:
     _, seen = load_state(args.state)
-    excluded = tracker_pairs(args.tracker)
+    excluded = tracker_pairs(args.tracker or default_tracker())
 
     selected, skipped_tracker = [], 0
     for key, entry in seen.items():
@@ -626,7 +686,7 @@ def _force_utf8_output() -> None:
 def main() -> int:
     _force_utf8_output()
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--state", type=Path, default=STATE)
+    common.add_argument("--state", type=Path, default=None, help="default: JH_HOME/seen_jobs.json, o la BD si no existe")
     common.add_argument("--today", type=date.fromisoformat, default=date.today())
     common.add_argument(
         "--now", type=parse_now, default=datetime.now(timezone.utc),
@@ -637,7 +697,7 @@ def main() -> int:
     sub = ap.add_subparsers(dest="command", required=True)
 
     cand = sub.add_parser("candidates", parents=[common], help="select the entries to score")
-    cand.add_argument("--tracker", type=Path, default=TRACKER)
+    cand.add_argument("--tracker", type=Path, default=None, help="default: JH_HOME/job_search_tracker.csv")
     cand.add_argument("--all", action="store_true", help="include every non-skipped status")
     cand.add_argument("--focus", help="substring filter over title, company and stored fit notes")
     cand.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="0 for no cap")
@@ -654,6 +714,8 @@ def main() -> int:
     app.set_defaults(func=cmd_apply)
 
     args = ap.parse_args()
+    if args.state is None:
+        args.state = default_state()
     return args.func(args)
 
 

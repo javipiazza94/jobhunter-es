@@ -4,6 +4,8 @@ You are batch-scoring the jobs that `/scrape` has collected, so the user can dec
 
 `/rank` produces **triage scores**, not final evaluations. It scores from the posting text and the candidate profile only - no company research, no reviewer agent. `/apply`'s Step 1 evaluation (which adds company research) remains authoritative and always re-runs when the user applies.
 
+> **jobhunter-es:** el estado vive en `JH_HOME` (no en el repo). Sin `JH_HOME/seen_jobs.json`, `rank_state.py` lee las ofertas de la BD (`config.DB_PATH`) y guarda cada puntuación en la tabla `offer_evaluations` (la misma que el botón «Evaluar con IA» de la app); **nunca** cambia `relevance_score` ni `is_relevant`. Donde abajo pone `job_scraper/seen_jobs.json`, léase ese estado.
+
 Follow these steps **in order**.
 
 ---

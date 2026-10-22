@@ -3,6 +3,7 @@ import { MODALITY_BADGE, SOURCE_COLORS, parseReviewFlags, trackBadge, trackLabel
 import type { JobOffer, Track } from "@/lib/types";
 import { OFFER_SORT_LABELS, defaultDirection, sortOffers, type OfferSortKey } from "@/lib/sort";
 import type { OfferFilters } from "@/app/hooks/useOfferFilters";
+import { verdictClass, verdictLabel } from "@/app/components/OfferEvaluationPanel";
 
 const OFFERS_PER_PAGE = 100;
 
@@ -239,6 +240,11 @@ export function OffersTab({ offers, tracks, filters, selectedIds, onToggleSelect
                       const b = trackBadge(o.cv_profile, tracks);
                       return <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${b.className}`}>{b.label}</span>;
                     })()}
+                    {o.evaluation && (
+                      <span title={verdictLabel(o.evaluation.verdict)} className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${verdictClass(o.evaluation.score)}`}>
+                        IA {o.evaluation.score}
+                      </span>
+                    )}
                     <ReviewFlagsBadge raw={o.review_flags} />
                   </div>
                 </td>

@@ -163,3 +163,14 @@ test("revisión: la insignia del borrador usa la etiqueta del track", () => {
   expect(h).toContain("Beta EN");
   expect(h).not.toContain(">beta<");
 });
+
+test("ofertas: la evaluación con IA sale como insignia aparte del score", () => {
+  const html = offersHtml([
+    oferta("a", { relevance_score: 0.42, evaluation: { verdict: "Strong Fit", score: 78 } }),
+    oferta("b", { evaluation: null }),
+  ]);
+  expect(html).toContain("IA 78");
+  expect(html).toContain('title="Encaje fuerte"');
+  expect(html).toContain("42%"); // el score determinista no cambia
+  expect(html.match(/IA \d+/g)?.length).toBe(1);
+});

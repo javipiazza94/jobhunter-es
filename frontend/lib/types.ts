@@ -21,6 +21,13 @@ export interface JobOffer {
   job_kind: string | null;
   generic_score: number | null;
   review_flags: string | null; // JSON: avisos de posting_guard y del filtro de idiomas
+  evaluation?: EvaluationSummary | null; // evaluación con IA (null/ausente: sin evaluar)
+}
+
+/** Resumen de la evaluación con IA de una oferta (GET /api/offers). Nunca cambia relevance_score. */
+export interface EvaluationSummary {
+  verdict: string;
+  score: number;
 }
 
 export interface Application {
@@ -335,4 +342,38 @@ export interface JobStarted {
   status: string;
   source: string;
   job_id: string;
+}
+
+/** Evaluación detallada con IA (POST /api/offers/{id}/evaluate, GET /api/offers/{id}/evaluation). */
+export interface OfferEvaluation {
+  offer_id: string;
+  verdict: string;
+  score: number;
+  strengths: string[];
+  gaps: string[];
+  urgency: "expired" | "urgent" | "normal" | "unknown";
+  expired: boolean;
+  evaluated_at: string;
+  provider: string;
+}
+
+/** POST /api/offers/evaluate-batch: cuerpo. */
+export interface EvaluateBatchRequest {
+  ids: string[];
+}
+
+/** Resultado de una oferta del lote (`skipped`: presupuesto de IA agotado, se puede volver a pedir). */
+export interface EvaluationBatchItem {
+  offer_id: string;
+  status: "evaluated" | "skipped" | "not_found" | "error";
+  evaluation: OfferEvaluation | null;
+  error: string | null;
+}
+
+/** POST /api/offers/evaluate-batch: respuesta. */
+export interface EvaluationBatchResult {
+  results: EvaluationBatchItem[];
+  evaluated: number;
+  skipped: number;
+  failed: number;
 }

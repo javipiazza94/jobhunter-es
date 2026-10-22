@@ -54,6 +54,12 @@ class TrackOut(_Out):
     kind: str
 
 
+class EvaluationSummaryOut(_Out):
+    """Resumen de la evaluación con IA de una oferta (detalle en GET /api/offers/{id}/evaluation)."""
+    verdict: str
+    score: int
+
+
 class OfferOut(_Out):
     id: str
     company_id: str | None = None
@@ -84,6 +90,7 @@ class OfferOut(_Out):
     company_name: str | None = None
     is_applied: int = 0
     modality: str | None = None
+    evaluation: EvaluationSummaryOut | None = None  # opcional: None si no se ha evaluado con IA
 
 
 class ApplicationOut(_Out):
@@ -278,8 +285,8 @@ class SourceSettingOut(_Out):
 
 class SourcesIn(BaseModel):
     """PUT /api/settings/sources: fuentes activadas y fuentes `requires_ack` cuyo aviso aceptó el usuario."""
-    enabled: list[str] = Field(default_factory=list, max_length=50)
-    acknowledged: list[str] = Field(default_factory=list, max_length=50)
+    enabled: list[str] = Field(default_factory=list, max_length=50)  # = offer_evaluation.MAX_BATCH
+    acknowledged: list[str] = Field(default_factory=list, max_length=50)  # = offer_evaluation.MAX_BATCH
 
 
 class AIKeyIn(BaseModel):
@@ -376,3 +383,8 @@ class InterviewPackOut(_Out):
     """Pack de entrevista generado: ruta del archivo y su contenido Markdown."""
     path: str
     markdown: str
+
+
+class EvaluateBatchIn(BaseModel):
+    """POST /api/offers/evaluate-batch: ofertas a evaluar con IA, una tras otra."""
+    ids: list[str] = Field(min_length=1, max_length=50)  # = offer_evaluation.MAX_BATCH

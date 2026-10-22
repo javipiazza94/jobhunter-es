@@ -49,7 +49,8 @@ SOFTWARE.
 | `backend/automation/fetch_page.py` | `tools/fetch_page.py` | Reintento de fetch con cabeceras de navegador |
 | `backend/automation/verify_pdf.py` | `tools/verify_pdf.py` | Verificación de capas de texto ATS y conteo de páginas |
 | `backend/automation/verify_layout.py` | `tools/verify_layout.py` | Medición de cajas delimitadoras y maquetación de PDFs |
-| `backend/automation/rank_state.py` | `tools/rank_state.py` | Triage y ordenación de ofertas adaptado a SQLite |
+| `backend/automation/rank_state.py` | `tools/rank_state.py` | Triage y ordenación de ofertas adaptado a SQLite (rutas de `config`, puntuaciones en `offer_evaluations`) |
+| `backend/automation/offer_evaluation.py` | `.claude/commands/rank.md`, `.claude/agents/posting-scorer.md`, `.claude/skills/job-application-assistant/04-job-evaluation.md` | Evaluación con IA de una oferta en la app (rúbrica, pesos y bandas de `/rank`) |
 | `backend/automation/company_research.py` | `company_research/` | Caché con TTL de 30 días para datos de empresa |
 | `templates/latex/cover_letters/cover.cls` | `cover_letters/cover.cls` | Clase de documento para cartas de presentación |
 | `.claude/commands/` | `.claude/commands/` | Comandos `/apply`, `/rank`, `/expand`, `/add-template`, `/add-portal` |

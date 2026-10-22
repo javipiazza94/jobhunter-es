@@ -48,10 +48,10 @@ from schemas import (
     QuietApplicationOut, ResolveStaleIn, StatsOut, TrackOut,
     AISettingsIn, AISettingsOut, CheckOut, EmailSettingsIn, EmailSettingsOut, MarketSourceOut, SetupApplyOut,
     DocumentFileOut, InterviewPackOut, PrepareIn, ProfileIn, SetupProposalOut, SetupStatusOut, SetupTextIn,
-    AIKeyIn, AIKeyOut, SourceSettingOut, SourcesIn,
+    AIKeyIn, AIKeyOut, SourceSettingOut, SourcesIn, EvaluateBatchIn,
 )
 from scraper.jobs import SOURCES as SCRAPER_SOURCES, TRACK_JOB_PREFIX, TRACK_PIPELINE_SOURCES
-from automation import application_documents, cv_reader, email_sender, followup, profile_proposal
+from automation import application_documents, cv_reader, email_sender, followup, offer_evaluation, profile_proposal
 from automation.filter_engine import classify_track
 from automation.location import parse_modality
 from automation.experience_classifier import classify_experience, classify_contract
@@ -181,9 +181,11 @@ def get_offers(
         include_discarded=include_discarded, sort_by=sort_by, sort_dir=sort_dir,
         limit=None if computed_filters else limit,
     )
+    evaluations = offer_evaluation.summaries(conn)
     result = []
     for r in rows:
         offer = dict(r)
+        offer["evaluation"] = evaluations.get(offer["id"])
         cv_profile, _ = classify_track(offer)
         offer["cv_profile"] = cv_profile
         offer["modality"] = parse_modality(offer.get("location"), offer.get("title")) or "presencial"
@@ -242,6 +244,41 @@ def discard_offer_endpoint(offer_id: str, reason: str = "expired", conn: sqlite3
 def restore_offer_endpoint(offer_id: str, conn: sqlite3.Connection = Depends(get_db)):
     repository.restore_offer(conn, offer_id)
     return {"id": offer_id, "discard_status": None}
+
+
+# ── Evaluación detallada con IA (/rank en la app, automation/offer_evaluation.py) ──
+# Nunca cambia relevance_score: se guarda aparte, en offer_evaluations.
+
+_NO_AI = "IA no disponible: {}. Configura un proveedor en Perfil."
+
+
+@app.post("/api/offers/evaluate-batch", response_model=offer_evaluation.BatchResult)
+def evaluate_offers_batch(body: EvaluateBatchIn):
+    """Evalúa varias ofertas una tras otra; lo que no quepa en el presupuesto de IA vuelve como `skipped`."""
+    try:
+        return offer_evaluation.evaluate_batch(body.ids)
+    except ai.AIUnavailable as exc:
+        raise HTTPException(409, _NO_AI.format(exc)) from None
+
+
+@app.post("/api/offers/{offer_id}/evaluate", response_model=offer_evaluation.Evaluation)
+def evaluate_offer_endpoint(offer_id: str):
+    try:
+        return offer_evaluation.evaluate_offer(offer_id)
+    except offer_evaluation.OfferNotFound:
+        raise HTTPException(404, "Oferta no encontrada") from None
+    except ai.AIUnavailable as exc:
+        raise HTTPException(409, _NO_AI.format(exc)) from None
+    except ai.AIError as exc:
+        raise HTTPException(502, f"La IA no pudo evaluar la oferta ({type(exc).__name__})") from None
+
+
+@app.get("/api/offers/{offer_id}/evaluation", response_model=offer_evaluation.Evaluation | None)
+def get_offer_evaluation(offer_id: str, conn: sqlite3.Connection = Depends(get_db)):
+    """Última evaluación con IA de la oferta, o null si aún no se ha evaluado."""
+    if not repository.offer_exists(conn, offer_id):
+        raise HTTPException(404, "Oferta no encontrada")
+    return offer_evaluation.get_evaluation(conn, offer_id)
 
 
 @app.get("/api/applications", response_model=list[ApplicationOut])

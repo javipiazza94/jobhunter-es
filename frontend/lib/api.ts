@@ -7,11 +7,13 @@ import type {
   CheckResult,
   EmailSettingsUpdate,
   EmailSettingsView,
+  EvaluationBatchResult,
   InboxReport,
   InboxStatus,
   InterviewPack,
   JobStarted,
   MarketSource,
+  OfferEvaluation,
   QuietApplication,
   SetupAnswers,
   SetupApplyResult,
@@ -148,6 +150,20 @@ export async function testEmail(): Promise<CheckResult> {
 
 export async function generateInterviewPack(applicationId: string): Promise<InterviewPack> {
   return checked(await sendJson(`${BASE}/api/applications/${encodeURIComponent(applicationId)}/interview-pack`, "POST"));
+}
+
+// ── Evaluación con IA de ofertas (/rank en la app): nunca cambia relevance_score ──
+
+export async function evaluateOffer(offerId: string): Promise<OfferEvaluation> {
+  return checked(await sendJson(`${BASE}/api/offers/${encodeURIComponent(offerId)}/evaluate`, "POST"));
+}
+
+export async function fetchOfferEvaluation(offerId: string): Promise<OfferEvaluation | null> {
+  return checked(await request(`${BASE}/api/offers/${encodeURIComponent(offerId)}/evaluation`));
+}
+
+export async function evaluateOffersBatch(ids: string[]): Promise<EvaluationBatchResult> {
+  return checked(await sendJson(`${BASE}/api/offers/evaluate-batch`, "POST", { ids }));
 }
 
 export async function fetchStats() {

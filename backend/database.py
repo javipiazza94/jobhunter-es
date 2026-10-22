@@ -196,13 +196,32 @@ def _migration_005_job_key(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_006_offer_evaluations(conn: sqlite3.Connection) -> None:
+    """Evaluaciones detalladas con IA de las ofertas que marca el usuario (/rank en la app,
+    automation/offer_evaluation.py). Tabla aparte: nunca cambian relevance_score ni is_relevant.
+    Una fila por oferta (la última evaluación); se borra con la oferta."""
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS offer_evaluations (
+               offer_id     TEXT PRIMARY KEY REFERENCES job_offers(id) ON DELETE CASCADE,
+               verdict      TEXT NOT NULL,
+               score_0_100  INTEGER NOT NULL,
+               strengths    TEXT NOT NULL DEFAULT '[]',
+               gaps         TEXT NOT NULL DEFAULT '[]',
+               urgency      TEXT NOT NULL DEFAULT 'unknown',
+               expired      INTEGER NOT NULL DEFAULT 0,
+               evaluated_at TEXT NOT NULL,
+               provider     TEXT NOT NULL
+           )"""
+    )
+
+
 # Cada migración lleva la BD de la versión i a la i+1 (PRAGMA user_version) y se ejecuta una sola
 # vez, dentro de una transacción: si falla se deshace entera y la versión no sube.
 # Para cambiar el esquema: añade una función _migration_00N_… al final de esta lista y NO edites
 # las anteriores. Las funciones no deben hacer commit.
 MIGRATIONS = [_migration_001_baseline, _migration_002_application_indexes,
               _migration_003_review_flags_and_followups, _migration_004_generic_track_columns,
-              _migration_005_job_key]
+              _migration_005_job_key, _migration_006_offer_evaluations]
 
 
 def schema_version(conn: sqlite3.Connection) -> int:

@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building2, Briefcase, Send, Users, Play, Check, ChevronRight, Trash2 } from "lucide-react";
-import { fetchStats, fetchCompanies, fetchOffers, fetchTracks, fetchContacts, fetchApplications, triggerScraper, fetchPendingApplications, createDrafts, markOfferSent, unmarkOfferSent, updateApplicationStatus, discardOffer, fetchFollowups, fetchStaleApplications, fetchSetupStatus, ApiError, type PendingApplication } from "@/lib/api";
-import type { Application, Company, Contact, JobOffer, QuietApplication, Stats, Track } from "@/lib/types";
+import { Building2, Briefcase, Send, Users, Play, Check, ChevronRight, Sparkles, Trash2 } from "lucide-react";
+import { fetchStats, fetchCompanies, fetchOffers, fetchTracks, fetchContacts, fetchApplications, triggerScraper, fetchPendingApplications, createDrafts, markOfferSent, unmarkOfferSent, updateApplicationStatus, discardOffer, fetchFollowups, fetchStaleApplications, fetchSetupStatus, evaluateOffersBatch, ApiError, type PendingApplication } from "@/lib/api";
+import type { Application, Company, Contact, JobOffer, OfferEvaluation, QuietApplication, Stats, Track } from "@/lib/types";
 import { failureMessage, isObject, settle, type Failures } from "@/lib/safeLoad";
 import { MODALITY_BADGE, SOURCE_COLORS, STATUS_COLORS, parseReviewFlags, trackBadge, trackTabs } from "@/lib/ui";
 import { useInboxSync } from "@/app/hooks/useInboxSync";
@@ -21,6 +21,7 @@ import { FollowupsTab } from "@/app/components/tabs/FollowupsTab";
 import { ProfileTab } from "@/app/components/tabs/ProfileTab";
 import { SetupWizard } from "@/app/components/setup/SetupWizard";
 import { InterviewPackPanel } from "@/app/components/InterviewPackPanel";
+import { OfferEvaluationPanel, T as EVAL_T, batchSummary } from "@/app/components/OfferEvaluationPanel";
 import { setupPrompt, type RunSummary } from "@/lib/setup";
 
 // Matches the `valid` set in backend/main.py::update_application_status
@@ -239,6 +240,35 @@ export default function Dashboard() {
     return runBulk("Descartando", ids, id => discardOffer(id, "expired"));
   };
 
+  // Evaluación con IA (/rank): lotes secuenciales en el backend (máx. 50 por petición); nunca cambia el score.
+  const handleBulkEvaluate = async () => {
+    const ids = [...selectedIds];
+    setLoading(true);
+    setActionMsg(EVAL_T.bulkBusy(ids.length));
+    const total = { evaluated: 0, skipped: 0, failed: 0 };
+    try {
+      for (let i = 0; i < ids.length; i += 50) {
+        const r = await evaluateOffersBatch(ids.slice(i, i + 50));
+        total.evaluated += r.evaluated;
+        total.skipped += r.skipped;
+        total.failed += r.failed;
+      }
+      setActionMsg(batchSummary(total));
+    } catch (e) {
+      setActionMsg(total.evaluated ? `${batchSummary(total)}. ${(e as Error).message}` : (e as Error).message);
+    }
+    setSelectedIds(new Set());
+    await load();
+    setLoading(false);
+    setTimeout(() => setActionMsg(""), 8000);
+  };
+
+  const handleOfferEvaluated = (e: OfferEvaluation) => {
+    const withSummary = (o: JobOffer) => o.id === e.offer_id ? { ...o, evaluation: { verdict: e.verdict, score: e.score } } : o;
+    setOffers(prev => prev.map(withSummary));
+    mapTrackOffers(withSummary);
+  };
+
   const handleStatusChange = async (appId: string, newStatus: string) => {
     await updateApplicationStatus(appId, newStatus);
     setApplications(prev => prev.map(a => a.id === appId ? { ...a, status: newStatus } : a));
@@ -449,6 +479,9 @@ export default function Dashboard() {
             <button onClick={handleBulkUnmarkSent} disabled={loading} className="rounded-lg px-3 py-1.5 text-sm text-gray-300 border border-white/10 hover:bg-white/5 disabled:opacity-40">
               Quitar candidatura
             </button>
+            <button onClick={handleBulkEvaluate} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-500/15 px-3 py-1.5 text-sm font-medium text-indigo-200 border border-indigo-500/30 hover:bg-indigo-500/25 disabled:opacity-40">
+              <Sparkles className="w-4 h-4" /> {EVAL_T.button}
+            </button>
             <button onClick={handleBulkDiscard} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg bg-red-500/15 px-3 py-1.5 text-sm font-medium text-red-300 border border-red-500/30 hover:bg-red-500/25 disabled:opacity-40">
               <Trash2 className="w-4 h-4" /> Eliminar
             </button>
@@ -503,6 +536,8 @@ export default function Dashboard() {
                 {selectedOffer.cv_profile && <span className={`text-xs uppercase font-bold tracking-wider px-3 py-1 rounded-lg flex items-center ${trackBadge(selectedOffer.cv_profile, tracks).className}`}>Perfil: {trackBadge(selectedOffer.cv_profile, tracks).label}</span>}
                 {selectedOffer.source && <span className={`text-xs uppercase font-bold tracking-wider px-3 py-1 rounded-lg flex items-center border border-current ${SOURCE_COLORS[selectedOffer.source] || SOURCE_COLORS.seed}`}>{selectedOffer.source}</span>}
               </div>
+
+              <OfferEvaluationPanel key={selectedOffer.id} offerId={selectedOffer.id} onEvaluated={handleOfferEvaluated} />
 
               {parseReviewFlags(selectedOffer.review_flags).length > 0 && (
                 <div className="mb-6 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
