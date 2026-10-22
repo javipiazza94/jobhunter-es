@@ -119,3 +119,33 @@ def test_required_residence_other_country_rejects_non_spain_candidate():
 def test_inbox_loader_uses_same_helper(tmp_path):
     src = (Path(__file__).parent.parent / "scripts" / "load_inbox_offers.py").read_text(encoding="utf-8")
     assert "apply_hard_requirements" in src
+
+
+def _ext(desc, personal):
+    return eligibility_gate({"title": "Dev", "description": desc}, profile_data={"personal": personal}, extended=True)
+
+
+def test_sponsorship_old_regex_also_checks_needs_sponsorship():
+    de_needs = {"country_code": "DE", "needs_sponsorship": True}
+    verdict, reasons = _ext("No visa sponsorship available.", de_needs)
+    assert verdict == "reject" and any("patrocina visado" in r for r in reasons)
+    assert _ext("No visa sponsorship available.", {"country_code": "DE"})[0] == "ok"
+
+
+def test_no_sponsorship_needed_is_not_a_rejection():
+    needs = {"country_code": "DE", "needs_sponsorship": True}
+    for text in ("No sponsorship needed.", "No visa sponsorship required.", "No sponsorship is necessary."):
+        assert _ext(text, needs)[0] == "ok", text
+
+
+def test_residence_with_alternatives_only_flags():
+    fr = {"country_code": "FR"}
+    for text in ("Must be based in the UK or Ireland.", "Must be based in the US / Europe.",
+                 "Must be based in the US or Europe."):
+        assert _ext(text, fr)[0] == "flag", text
+    assert _ext("Must be based in the UK.", fr)[0] == "reject"
+
+
+def test_candidate_country_uk_is_normalised_to_gb():
+    assert _ext("Must be based in the United Kingdom.", {"country_code": "UK"})[0] == "ok"
+    assert _ext("Must be based in the UK.", {"country_code": "uk"})[0] == "ok"

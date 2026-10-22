@@ -60,7 +60,7 @@ _SPAIN_WORK_PERMIT_RX = re.compile(
 
 # Sin patrocinio de visado (genérico, de cualquier país): solo importa si el candidato lo necesita
 _SPONSORSHIP_UNAVAILABLE_RX = re.compile(
-    r"\b(no (visa )?sponsorship|sponsorship (is )?(not|un)available|unable to (offer |provide )?(visa )?sponsor\w*|"
+    r"\b(no (visa )?sponsorship(?!\s+(?:is\s+)?(?:needed|required|necessary|necesario))|sponsorship (is )?(not|un)available|unable to (offer |provide )?(visa )?sponsor\w*|"
     r"(do|does) not (offer|provide) (visa )?sponsorship|sin patrocinio de visado|no (ofrecemos|damos) patrocinio)\b",
     re.I,
 )
@@ -100,6 +100,16 @@ _RESIDENCE_CODES = {
 }
 _RESIDENCE_NAME_RX = re.compile(
     r"(?:based|located) in (?:the )?(\w+(?: \w+)?)|residencia obligatoria en (\w+(?: \w+)?)", re.I)
+
+
+_COUNTRY_ALIASES = {"UK": "GB"}  # el perfil puede traer UK; la tabla de residencias usa ISO (GB)
+_ALTERNATIVES_RX = re.compile(r"\s*(?:/|,|\b(?:or|and|o|y)\b)", re.I)
+
+
+def _has_residence_alternatives(line: str) -> bool:
+    """True si tras el país exigido hay alternativas ('UK or Ireland', 'US / Europe'): dudoso, no excluyente."""
+    m = _NON_EU_RESIDENCE_RX.search(line)
+    return bool(m and _ALTERNATIVES_RX.match(line, m.end()))
 
 
 def _required_residence_code(line: str) -> str:
@@ -196,7 +206,7 @@ def check_eligibility(offer: dict, profile_data: dict | None = None, extended: b
             if (personal.get("country_code") or "").upper() == "ES":
                 rejects.append("elegibilidad: requiere autorización de trabajo en EE.UU. sin patrocinio")
 
-        elif extended and _SPONSORSHIP_UNAVAILABLE_RX.search(line_clean) and _needs_sponsorship(personal, profile):
+        if extended and _SPONSORSHIP_UNAVAILABLE_RX.search(line_clean) and _needs_sponsorship(personal, profile):
             rejects.append("elegibilidad: la oferta no patrocina visado y lo necesitas")
 
         if _SPAIN_WORK_PERMIT_RX.search(line_clean) and bool(_REQUIRED.search(line_clean)):
@@ -211,8 +221,13 @@ def check_eligibility(offer: dict, profile_data: dict | None = None, extended: b
             required = _required_residence_code(line_clean)
             if country_code == "ES":
                 rejects.append("elegibilidad: exige residencia fuera de España/UE")
-            elif extended and country_code and required and country_code != required:
-                rejects.append(f"elegibilidad: exige residir en {required} y resides en {country_code}")
+            elif extended and country_code and required:
+                country_code = _COUNTRY_ALIASES.get(country_code, country_code)
+                if country_code != required:
+                    if _has_residence_alternatives(line_clean):
+                        flags.append("elegibilidad: exige residir en un país con alternativas; revisa si cumples")
+                    else:
+                        rejects.append(f"elegibilidad: exige residir en {required} y resides en {country_code}")
 
         # ── 4. Título universitario obligatorio ──────────────────────────────
         if _DEGREE_TERMS_RX.search(line_clean) and bool(_REQUIRED.search(line_clean)):
