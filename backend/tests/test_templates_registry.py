@@ -340,9 +340,8 @@ class TestCompilerArgv:
     def test_fixed_argv_per_compiler(self, tmp_path):
         src, out = tmp_path / "cv.tex", tmp_path / "out"
         assert templates_registry.compile_argv("xelatex", src, out) == [
-            "xelatex", "-no-shell-escape", "-interaction=nonstopmode", "-halt-on-error",
-            f"-output-directory={out}", str(src),
-        ]
+            "xelatex", "-no-shell-escape", "-interaction=nonstopmode", "-halt-on-error", "cv.tex",
+        ]  # rutas relativas: en modo paranoico kpathsea rechaza las absolutas
         assert templates_registry.compile_argv("tectonic", src, out, passes=1) == [
             "tectonic", "--untrusted", "-o", str(out), "--reruns", "0", str(src),
         ]

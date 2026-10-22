@@ -447,7 +447,8 @@ def _check_compiler(compiler: Any) -> str:
 def compile_argv(compiler: str, source: Path, out_dir: Path, passes: int = 1) -> list[str]:
     """Línea de órdenes fija y segura de cada compilador (sin shell ni opciones de la plantilla):
     - tectonic: `--untrusted` (desactiva shell-escape y demás funciones inseguras).
-    - xelatex: `-no-shell-escape -interaction=nonstopmode -halt-on-error -output-directory=<out>`.
+    - xelatex: `-no-shell-escape -interaction=nonstopmode -halt-on-error <fichero>` con rutas relativas a la
+      carpeta de trabajo (en modo paranoico kpathsea no lee ni escribe rutas absolutas); `_compile` mueve el PDF.
     - typst: `compile --root <carpeta del fuente>` (no puede leer fuera de la carpeta de trabajo).
     Nunca latexmk (ejecutaría el Perl de un latexmkrc)."""
     compiler = _check_compiler(compiler)
@@ -456,7 +457,7 @@ def compile_argv(compiler: str, source: Path, out_dir: Path, passes: int = 1) ->
         return ["tectonic", "--untrusted", "-o", out, *(["--reruns", "0"] if passes <= 1 else []), src]
     if compiler == "typst":
         return ["typst", "compile", "--root", str(Path(source).parent), src, str(Path(out_dir) / f"{Path(source).stem}.pdf")]
-    return [compiler, "-no-shell-escape", "-interaction=nonstopmode", "-halt-on-error", f"-output-directory={out}", src]
+    return [compiler, "-no-shell-escape", "-interaction=nonstopmode", "-halt-on-error", Path(source).name]
 
 
 def _resolve_binary(name: str) -> str | None:
@@ -540,6 +541,9 @@ def _compile(src: Path, out: Path, passes: int, engine: str, compiler: str | Non
     for _ in range(runs):
         _run(argv, src.parent, env)
     pdf = out / f"{src.stem}.pdf"
+    built = src.parent / f"{src.stem}.pdf"
+    if chosen not in ("tectonic", "typst") and built.is_file() and built.resolve() != pdf.resolve():
+        shutil.move(str(built), str(pdf))
     if not pdf.is_file():
         raise LaTeXCompilationError(f"El compilador terminó con éxito pero no se generó '{pdf}'")
     return pdf
