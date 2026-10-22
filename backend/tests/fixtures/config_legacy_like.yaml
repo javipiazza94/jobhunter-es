@@ -1,0 +1,60 @@
+# Configuración "como la de una instalación existente" (datos inventados) para los tests de caracterización
+# del registro de fuentes: tracks estándar con search_keywords y ajustes en tecnoempleo, infojobs,
+# computrabajo, linkedin, company_direct, indeed y manfred, sin `country` en ninguna fuente.
+scoring:
+  min_relevance: 0.5
+  keyword_groups:
+  - id: erp
+    weight: 0.35
+    keywords: [erp, odoo, consultor erp]
+  - id: datos
+    weight: 0.2
+    keywords: [python, sql, airflow]
+  location:
+    weight: 0.2
+    city: pradoverde
+    area: [pradoverde, lomaclara]
+  experience:
+    weight: 0.15
+    priority_max_years: 3
+  salary:
+    weight: 0.1
+    min_base: 24000
+tracks:
+- id: erp
+  label: {es: ERP, en: ERP}
+  cv: {default: cv_erp_path}
+  cover_template: tech
+  search_keywords: [Consultor Odoo, ERP funcional]
+  classify_keywords: [odoo, erp]
+  followed_companies:
+  - {name: Zentra Sistemas, tier: 1}
+- id: datos
+  label: {es: Datos, en: Data}
+  cv: {default: cv_datos_path}
+  cover_template: tech
+  search_keywords: [Ingeniero de datos]
+  classify_keywords: [python, airflow]
+sources:
+  tecnoempleo:
+    keywords: [odoo, airflow]
+    locations: [Pradoverde, remoto]
+    province_ids: {pradoverde: "321"}
+  infojobs:
+    keywords: [consultor odoo, data engineer]
+    province_id: 77
+    normalized_location: pradoverde
+  computrabajo:
+    location: Pradoverde
+  linkedin:
+    searches:
+    - {keywords: Consultor Odoo, location: Pradoverde, track: erp}
+    - {keywords: Data engineer, location: España, track: datos}
+  company_direct:
+    keywords: [odoo]
+    companies:
+    - {name: Zentra Sistemas, careers_url: "https://zentra-sistemas.test/empleo"}
+  indeed:
+    keywords: [odoo developer]
+    locations: [Pradoverde]
+  manfred: {}
