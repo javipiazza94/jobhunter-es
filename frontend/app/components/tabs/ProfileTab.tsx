@@ -14,6 +14,7 @@ import {
   testAI,
   testEmail,
 } from "@/lib/api";
+import { ExpandProfilePanel } from "@/app/components/ExpandProfilePanel";
 import { savedAnswers, withSavedAnswers } from "@/lib/screening";
 import type { ScreeningAnswerSaved } from "@/lib/types";
 import { formToProfile, profileToForm, secretStatus, type ProfileForm, type StoredProfile } from "@/lib/setup";
@@ -583,6 +584,7 @@ export function ProfileTab({ initial, onRerunWizard }: { initial?: Partial<Profi
     <div className="grid gap-6 lg:grid-cols-2 animate-fade-in">
       <SlotView slot={slots.profile} onRetry={() => retry("profile")}>{d => <ProfileSection initial={d} />}</SlotView>
       <SlotView slot={slots.profile} onRetry={() => retry("profile")}>{d => <ScreeningSection initial={d} />}</SlotView>
+      <SlotView slot={slots.profile} onRetry={() => retry("profile")}>{() => <ExpandProfilePanel />}</SlotView>
       <SlotView slot={slots.ai} onRetry={() => retry("ai")}>{d => <AISection initial={d} />}</SlotView>
       <SlotView slot={slots.email} onRetry={() => retry("email")}>{d => <EmailSection initial={d} />}</SlotView>
       <SlotView slot={slots.sources} onRetry={() => retry("sources")}>

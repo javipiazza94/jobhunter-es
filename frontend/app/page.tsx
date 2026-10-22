@@ -19,6 +19,7 @@ import { ContactsTab } from "@/app/components/tabs/ContactsTab";
 import { ApplicationsTab } from "@/app/components/tabs/ApplicationsTab";
 import { FollowupsTab } from "@/app/components/tabs/FollowupsTab";
 import { ProfileTab } from "@/app/components/tabs/ProfileTab";
+import { UpskillTab } from "@/app/components/tabs/UpskillTab";
 import { SetupWizard } from "@/app/components/setup/SetupWizard";
 import { InterviewPackPanel } from "@/app/components/InterviewPackPanel";
 import { CompanyResearchPanel } from "@/app/components/CompanyResearchPanel";
@@ -56,7 +57,7 @@ export default function Dashboard() {
   const [trackOffers, setTrackOffers] = useState<Record<string, JobOffer[]>>({});
   const [followups, setFollowups] = useState<QuietApplication[]>([]);
   const [staleApps, setStaleApps] = useState<QuietApplication[]>([]);
-  const [tab, setTab] = useState<"offers" | "companies" | "contacts" | "applications" | "pending" | "followups" | "profile" | `track:${string}`>("offers");
+  const [tab, setTab] = useState<"offers" | "companies" | "contacts" | "applications" | "pending" | "followups" | "upskill" | "profile" | `track:${string}`>("offers");
   // Asistente: a pantalla completa en el primer arranque (no se puede cerrar) o reabierto desde Perfil.
   const [wizard, setWizard] = useState<"closed" | "first-run" | "rerun">("closed");
   // Instalación con perfil pero sin jobhunter.yaml propio: aviso descartable que abre el asistente cancelable.
@@ -402,6 +403,7 @@ export default function Dashboard() {
               { id: "applications", label: "Candidaturas", count: applications.length },
               { id: "pending", label: "Revisión", count: pendingApps.length },
               { id: "followups", label: "Seguimiento", count: followups.length },
+              { id: "upskill", label: "Upskill" },
               { id: "profile", label: "Perfil" },
             ] as { id: typeof tab; label: string; count?: number }[]
           ).map(t => (
@@ -444,6 +446,8 @@ export default function Dashboard() {
         {tab === "pending" && <PendingTab pendingApps={pendingApps} tracks={tracks} onAction={load} />}
 
         {tab === "followups" && <FollowupsTab followups={followups} stale={staleApps} onAction={load} />}
+
+        {tab === "upskill" && <UpskillTab />}
 
         {tab === "profile" && <ProfileTab key={profileVersion} onRerunWizard={() => setWizard("rerun")} />}
         

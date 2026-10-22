@@ -9,6 +9,9 @@ import type {
   EmailSettingsView,
   CompanyResearch,
   EvaluationBatchResult,
+  ExpandAcceptResult,
+  ExpandProposal,
+  ExpandResult,
   InboxReport,
   InboxStatus,
   InterviewPack,
@@ -25,6 +28,8 @@ import type {
   Track,
   ScreeningQuestion,
   ScreeningResult,
+  UpskillReport,
+  UpskillScope,
 } from "@/lib/types";
 import { errorDetail, type StoredProfile } from "@/lib/setup";
 
@@ -186,6 +191,22 @@ export async function fetchCompanyResearch(name: string): Promise<CompanyResearc
 
 export async function researchCompany(name: string): Promise<CompanyResearch> {
   return checked(await sendJson(`${BASE}/api/companies/${encodeURIComponent(name)}/research`, "POST"));
+}
+
+// ── Upskill (mapa de huecos y plan de estudio) y «Ampliar perfil» (competencias desde fuentes enlazadas) ──
+
+export async function runUpskill(scope: UpskillScope, offerIds: string[] = []): Promise<UpskillReport> {
+  return checked(await sendJson(`${BASE}/api/upskill`, "POST", { scope, offer_ids: offerIds }));
+}
+
+/** Propone competencias desde las URLs dadas; no guarda nada en el perfil. */
+export async function expandProfile(sources: string[]): Promise<ExpandResult> {
+  return checked(await sendJson(`${BASE}/api/profile/expand`, "POST", { sources }));
+}
+
+/** Guarda en el perfil solo las propuestas aceptadas. */
+export async function acceptExpansion(items: ExpandProposal[]): Promise<ExpandAcceptResult> {
+  return checked(await sendJson(`${BASE}/api/profile/expand/accept`, "POST", { items }));
 }
 
 export async function fetchStats() {
