@@ -21,6 +21,7 @@ import {
   type WizardStep,
 } from "@/lib/setup";
 import { KEY_PROVIDERS } from "@/lib/settings";
+import { OllamaNotice } from "@/app/components/OllamaNotice";
 import type {
   AIProviderId,
   AISettings,
@@ -227,6 +228,7 @@ export function AIPicker({ ai, keyStatus, keyBusy, onChange, onSaveKey }: {
           <p className="text-xs text-gray-500">{T.aiKeyHint}</p>
         </div>
       )}
+      {ai.provider === "ollama" && <OllamaNotice />}
       <p className="text-xs text-gray-500">{T.aiHint}</p>
     </div>
   );

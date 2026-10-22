@@ -17,6 +17,7 @@ import type {
   InterviewPack,
   JobStarted,
   MarketSource,
+  OllamaStatus,
   OfferEvaluation,
   DocumentFile,
   PreparedDocs,
@@ -39,8 +40,10 @@ import type {
   UpskillScope,
 } from "@/lib/types";
 import { errorDetail, type StoredProfile } from "@/lib/setup";
+import { resolveApiBase } from "@/lib/apiBase";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8020";
+// En escritorio la URL (con puerto dinámico) la inyecta Tauri; ver lib/apiBase.ts.
+const BASE = resolveApiBase();
 
 // La API (sin login, solo local) exige esta cabecera en POST/PUT/PATCH/DELETE. Al no ser una
 // cabecera «simple», el navegador hace preflight y CORS lo rechaza para webs ajenas.
@@ -499,4 +502,9 @@ export interface HistoryEntry {
   outcome: string;
   notes: string | null;
   application_id: string | null;
+}
+
+// ── App de escritorio ───────────────────────────────────────────────────────────────────────────
+export async function fetchOllamaStatus(): Promise<OllamaStatus> {
+  return checked(await request(`${BASE}/api/ai/ollama`));
 }

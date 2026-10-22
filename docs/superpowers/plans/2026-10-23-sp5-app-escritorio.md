@@ -93,11 +93,11 @@ Tauri 2 (desktop/src-tauri, Rust)
 
 **Ficheros:** modificar `frontend/next.config.ts`, `frontend/lib/api.ts`; crear `frontend/lib/apiBase.ts` + test, `frontend/app/components/OllamaNotice.tsx` + test (solo escritorio).
 
-- [ ] `apiBase.ts`: `resolveApiBase(win?, env?)` → `window.__JH_API_URL__` > `NEXT_PUBLIC_API_URL` > `http://localhost:8020`; sin barras finales. `api.ts` lo usa en lugar de la constante.
-- [ ] `next.config.ts`: `output: "export"` + `images.unoptimized` si `JH_DESKTOP_EXPORT=1`.
-- [ ] `OllamaNotice`: se pinta solo si `window.__JH_DESKTOP__`; avisa si Ollama falta, con el enlace de instalación y la indicación de elegir otro proveedor en «Perfil». Montado en el paso de IA del asistente con una sola línea.
-- [ ] Verificar: `JH_DESKTOP_EXPORT=1 bun run build` produce `frontend/out/index.html` y el JS no contiene `localhost:8020` fijo como única opción (queda solo como respaldo documentado).
-- [ ] Commit `feat(desktop): dashboard exportable como web estática con la URL de la API en tiempo de ejecución`.
+- [x] `apiBase.ts`: `resolveApiBase(win?, env?)` → `window.__JH_API_URL__` > `NEXT_PUBLIC_API_URL` > `http://localhost:8020`; sin barras finales. `api.ts` lo usa en lugar de la constante.
+- [x] `next.config.ts`: `output: "export"` + `images.unoptimized` si `JH_DESKTOP_EXPORT=1`.
+- [x] `OllamaNotice`: se pinta solo si `window.__JH_DESKTOP__`; avisa si Ollama falta, con el enlace de instalación y la indicación de elegir otro proveedor en «Perfil». Montado en el paso de IA del asistente con una sola línea.
+- [x] Verificar: `JH_DESKTOP_EXPORT=1 bun run build` produce `frontend/out/index.html` y el JS no contiene `localhost:8020` fijo como única opción (queda solo como respaldo documentado).
+- [x] Commit `feat(desktop): dashboard exportable como web estática con la URL de la API en tiempo de ejecución`.
 
 ### Tarea 6: Congelado del backend con PyInstaller
 
