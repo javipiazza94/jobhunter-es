@@ -33,6 +33,7 @@ from automation.verify_pdf import VerificationError, extract_text_layer, keyword
 from config import REPO_ROOT
 
 LAYOUT_SKIPPED = "skipped: poppler no instalado"
+TRIM_BISECT_STEPS = 3  # compilaciones de bisección como mucho al recortar el CV
 
 _SPANISH_MONTHS = (
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -68,11 +69,29 @@ _EMOJI_REGEX = re.compile(
 )
 
 
+# Caracteres de control, separadores de línea/párrafo Unicode, marcas de dirección (bidi) y BOM:
+# invisibles en el PDF pero capaces de romper la compilación o desordenar el texto que lee un ATS.
+_CONTROL_REGEX = re.compile("[\x00-\x08\x0b-\x1f\x7f\u2028\u2029\u202a-\u202e\u2066-\u2069\ufeff]")
+_NEWLINE_REGEX = re.compile(r"\s*\n\s*")
+
+
 def latex_escape(value: Any) -> str:
-    """Escapa caracteres especiales de LaTeX y elimina emoji para evitar inyección o errores de sintaxis."""
+    """Convierte texto del usuario en texto LaTeX seguro (sin inyección ni errores de sintaxis).
+
+    - Escapa los especiales de LaTeX: \\ & % $ # _ { } ~ ^.
+    - Elimina emoji y pictogramas (rangos U+1F000-U+1FBFF, símbolos varios y dingbats
+      U+2600-U+27BF, flechas/estrellas U+2B00-U+2BFF) junto con sus modificadores: selectores de
+      variación U+FE00-U+FE0F, unión de anchura cero U+200D y keycap U+20E3. Las fuentes de las
+      plantillas no tienen esos glifos: saldrían como huecos o romperían la compilación.
+    - Elimina caracteres de control (salvo tabulador), separadores U+2028/U+2029, marcas bidi
+      U+202A-U+202E y U+2066-U+2069 y el BOM U+FEFF.
+    - Une los saltos de línea (con los espacios que los rodeen) en un solo espacio: un salto
+      doble en LaTeX abriría un párrafo nuevo dentro de un argumento y rompería \\cventry.
+    """
     if value is None:
         return ""
-    text = _EMOJI_REGEX.sub("", str(value))
+    text = _CONTROL_REGEX.sub("", _EMOJI_REGEX.sub("", str(value)))
+    text = _NEWLINE_REGEX.sub(" ", text)
     return _LATEX_REGEX.sub(lambda m: _LATEX_ESCAPES[m.group(0)], text)
 
 
@@ -103,20 +122,57 @@ def _spanish_date(day: date) -> str:
     return f"{day.day} de {_SPANISH_MONTHS[day.month - 1]} de {day.year}"
 
 
-def format_date_range(start: str | None, end: str | None) -> str:
+PRESENT_LABELS = {"es": "Actualidad", "en": "Present"}
+_OPEN_END_WORDS = {"present", "presente", "actualidad", "actual", "current", "now", "hoy", "today"}
+_YEAR_MONTH_RE = re.compile(r"^(\d{4})-(\d{1,2})(?:-\d{1,2})?$")
+_MONTH_YEAR_RE = re.compile(r"^(\d{1,2})/(\d{4})$")
+_YEAR_RE = re.compile(r"^(\d{4})$")
+
+
+def _is_open_end(value: str) -> bool:
+    return value.strip().casefold() in _OPEN_END_WORDS
+
+
+def _format_date(value: str) -> str:
+    """«2023-01» o «2023-01-15» -> «01/2023»; «2023» y «01/2023» tal cual; el resto sin tocar."""
+    m = _YEAR_MONTH_RE.match(value)
+    if m:
+        return f"{int(m.group(2)):02d}/{m.group(1)}"
+    m = _MONTH_YEAR_RE.match(value)
+    if m:
+        return f"{int(m.group(1)):02d}/{m.group(2)}"
+    return value
+
+
+def _date_key(value: Any) -> tuple[int, int] | None:
+    """Clave ordenable (año, mes) de una fecha del perfil; None si no se entiende."""
+    v = str(value or "").strip()
+    for regex, year_group, month_group in ((_YEAR_MONTH_RE, 1, 2), (_MONTH_YEAR_RE, 2, 1), (_YEAR_RE, 1, None)):
+        m = regex.match(v)
+        if m:
+            return int(m.group(year_group)), int(m.group(month_group)) if month_group else 0
+    return None
+
+
+def format_date_range(start: str | None, end: str | None, lang: str = "es") -> str:
     """
-    Formatea un rango de fechas con guion ASCII simple (-)
-    para satisfacer la verificación de verify_pdf (--ascii-dates).
+    Formatea un rango de fechas como «MM/YYYY - MM/YYYY» con guion ASCII (verify_pdf --ascii-dates).
+
+    Un final vacío o «Present/Actualidad» se escribe en el idioma de la plantilla
+    (`lang`: "es" -> «Actualidad», "en" -> «Present»).
     """
-    s = (start or "").strip()
-    e = (end or "").strip()
+    present = PRESENT_LABELS.get(lang, PRESENT_LABELS["es"])
+    s = str(start or "").strip()
+    e = str(end or "").strip()
     if not s and not e:
         return ""
-    if s and not e:
-        return f"{s}-Present"
-    if s == e:
-        return s
-    return f"{s}-{e}"
+    s_fmt = _format_date(s)
+    e_fmt = present if (not e or _is_open_end(e)) else _format_date(e)
+    if not s:
+        return e_fmt
+    if s_fmt == e_fmt:
+        return s_fmt
+    return f"{s_fmt} - {e_fmt}"
 
 
 def _get_jinja_env(template_dir: Path) -> jinja2.Environment:
@@ -138,10 +194,11 @@ def _get_jinja_env(template_dir: Path) -> jinja2.Environment:
     return env
 
 
-def prepare_cv_context(profile: dict, track: str = "general") -> dict:
+def prepare_cv_context(profile: dict, track: str = "general", lang: str = "es") -> dict:
     """
     Prepara el diccionario de contexto para la plantilla de CV a partir de profile.json.
     Aplica las reglas de honestidad: solo incluye información presente en el perfil.
+    `lang` es el idioma de la plantilla (afecta a «Actualidad»/«Present» en las fechas).
     """
     personal = dict(profile.get("personal", {}))
     full_name = personal.get("name", "")
@@ -186,7 +243,7 @@ def prepare_cv_context(profile: dict, track: str = "general") -> dict:
     for item in profile.get("experience", []):
         start = item.get("start", "")
         end = item.get("end", "")
-        date_range = format_date_range(start, end)
+        date_range = format_date_range(start, end, lang=lang)
         bullets = item.get("bullets", [])
         desc = item.get("description", "")
         if not bullets and desc:
@@ -205,7 +262,7 @@ def prepare_cv_context(profile: dict, track: str = "general") -> dict:
     for item in profile.get("education", []):
         start = str(item.get("start", ""))
         end = str(item.get("end", ""))
-        date_range = format_date_range(start, end)
+        date_range = format_date_range(start, end, lang=lang)
         edu_list.append({
             "title": item.get("title", ""),
             "institution": item.get("institution", ""),
@@ -241,6 +298,12 @@ def prepare_cv_context(profile: dict, track: str = "general") -> dict:
     }
 
 
+def _fill_placeholders(text: str, company_name: str, role_title: str) -> str:
+    """Sustituye {company_name} y {role_title} literalmente. No usa str.format: con texto del
+    usuario, «{x}» lanzaría KeyError y «{company_name.__class__}» accedería a atributos."""
+    return str(text).replace("{company_name}", company_name).replace("{role_title}", role_title)
+
+
 def prepare_cover_letter_context(
     profile: dict,
     company_name: str,
@@ -256,14 +319,14 @@ def prepare_cover_letter_context(
     intro_template = profile.get("cover_letter_intro") or (
         "Me dirijo a ustedes para presentar mi candidatura al puesto de {role_title} en {company_name}."
     )
-    opening = intro_template.format(company_name=company_name, role_title=role_title)
+    opening = _fill_placeholders(intro_template, company_name, role_title)
 
     # Párrafo de cuerpo / stack
     body_template = profile.get("cover_letter_stack") or (
         "Cuento con sólida experiencia en desarrollo de software y análisis de datos, "
         "aplicando buenas prácticas de ingeniería y orientación a resultados."
     )
-    body = body_template.format(company_name=company_name, role_title=role_title)
+    body = _fill_placeholders(body_template, company_name, role_title)
 
     # Bullets de logros más relevantes desde experience
     bullets = []
@@ -286,7 +349,7 @@ def prepare_cover_letter_context(
         "Agradezco de antemano su tiempo y consideración, y quedo a su entera disposición "
         "para profundizar en mi trayectoria en una entrevista."
     )
-    closing = closing_template.format(company_name=company_name, role_title=role_title)
+    closing = _fill_placeholders(closing_template, company_name, role_title)
 
     return {
         "personal": personal,
@@ -301,12 +364,12 @@ def prepare_cover_letter_context(
     }
 
 
-def render_cv_latex(profile: dict, track: str = "general") -> str:
+def render_cv_latex(profile: dict, track: str = "general", lang: str = "es") -> str:
     """Renderiza el código fuente LaTeX del CV determinista."""
     tpl_path = resolve_template_path("cv/cv.tex.j2")
     env = _get_jinja_env(tpl_path.parent)
     template = env.get_template(tpl_path.name)
-    context = prepare_cv_context(profile, track=track)
+    context = prepare_cv_context(profile, track=track, lang=lang)
     return template.render(**context)
 
 
@@ -351,7 +414,9 @@ def plan_trim_operations(profile: dict, keywords: list[str] | None = None) -> li
 
     Fase 1: viñetas de experiencia, salvo la primera de cada empleo, por relevancia ascendente
     (empate: empleo más antiguo y última viñeta primero) -> ("bullet", i_empleo, j_viñeta).
-    Fase 2: empleos completos, salvo el más relevante, igual criterio -> ("entry", i_empleo).
+    Fase 2: empleos completos, igual criterio -> ("entry", i_empleo). Nunca se quitan ni el
+    empleo más reciente (fin abierto o fecha más tardía; si no hay fechas, experience[0]) ni el
+    más relevante para la oferta.
     Nunca se reescribe ni se inventa nada: solo se quita contenido del perfil.
     """
     kws = [k for k in (keywords or []) if k and str(k).strip()]
@@ -366,9 +431,25 @@ def plan_trim_operations(profile: dict, keywords: list[str] | None = None) -> li
         entry_scores.append((_relevance(entry_text, kws), -i, i))
     ops = [op for _, op in sorted(bullet_ops)]
     if len(entry_scores) > 1:
-        keep = max(entry_scores, key=lambda e: (e[0], e[1]))[2]
-        ops += [("entry", i) for _, _, i in sorted(entry_scores) if i != keep]
+        keep = {max(entry_scores, key=lambda e: (e[0], e[1]))[2], _most_recent_index(experience)}
+        ops += [("entry", i) for _, _, i in sorted(entry_scores) if i not in keep]
     return ops
+
+
+def _most_recent_index(experience: list[dict]) -> int:
+    """Índice del empleo más reciente: fin abierto > fecha de fin > fecha de inicio; empate o sin
+    fechas -> el que aparece antes (experience[0] es el más reciente por convención)."""
+    best_i, best_key = 0, None
+    for i, exp in enumerate(experience):
+        end = str(exp.get("end") or "").strip()
+        start_key = _date_key(exp.get("start"))
+        if start_key is None and not end:
+            continue  # sin fechas: no compite
+        end_key = (9999, 99) if (not end or _is_open_end(end)) else _date_key(end)
+        key = (end_key or (0, 0), start_key or (0, 0))
+        if best_key is None or key > best_key:
+            best_i, best_key = i, key
+    return best_i
 
 
 def apply_trim(profile: dict, ops: list[tuple]) -> dict:
@@ -443,6 +524,7 @@ def generate_deterministic_documents(
     cv_pages: int = 2,
     letter_pages: int = 1,
     offer_keywords: list[str] | None = None,
+    lang: str = "es",
 ) -> dict[str, Any]:
     """
     Genera y compila deterministamente el CV y la carta de presentación en PDF.
@@ -451,6 +533,9 @@ def generate_deterministic_documents(
     - cv_pages: máximo de páginas del CV; si se pasa, se recorta lo menos relevante para la oferta
       (solapamiento con `offer_keywords`) hasta que quepa. Si ni recortando todo cabe -> VerificationError.
     - letter_pages: páginas exactas de la carta (se comprueba si verify=True).
+    - lang: idioma de la plantilla para las fechas («Actualidad»/«Present»).
+    - El recorte es grueso (rejilla de 2**TRIM_BISECT_STEPS cortes): puede quitar algo más de lo
+      estrictamente necesario a cambio de compilar como mucho 2 + TRIM_BISECT_STEPS veces.
     - verify: exige email y teléfono literales en ambos PDFs, texto ATS legible y fechas ASCII.
 
     Retorna un diccionario con cv_tex, cv_pdf, cover_tex, cover_pdf y `verification`:
@@ -480,18 +565,24 @@ def generate_deterministic_documents(
     out.mkdir(parents=True, exist_ok=True)
     _ensure_cover_dependencies(out)
 
-    # 1. CV: compilar y, si no cabe, buscar (búsqueda binaria) el recorte mínimo que cabe
+    # 1. CV: compilar sin recortes; si no cabe, probar con todos los recortes (demuestra que cabe)
+    #    y bisecar con pasos gruesos (TRIM_BISECT_STEPS compilaciones como mucho). Cada intento se
+    #    guarda en memoria para restaurar el mejor sin recompilar: <= 2 + TRIM_BISECT_STEPS en total.
     keywords = [k for k in (offer_keywords or []) if k and str(k).strip()]
     ops = plan_trim_operations(profile_data, keywords)
     cv_tex_path = out / "cv.tex"
-    built: dict[str, Any] = {"k": None, "pdf": None, "pages": None}
+    cv_pdf_path = out / "cv.pdf"
+    attempts: dict[int, tuple[str, bytes, int]] = {}
 
     def build_cv(k: int) -> int:
-        source = render_cv_latex(apply_trim(profile_data, ops[:k]), track=track)
+        source = render_cv_latex(apply_trim(profile_data, ops[:k]), track=track, lang=lang)
         cv_tex_path.write_text(source, encoding="utf-8")
-        pdf = compile_latex(cv_tex_path, output_dir=out)
-        built.update(k=k, pdf=pdf, pages=_page_count(pdf))
-        return built["pages"]
+        # Una sola pasada: la segunda solo añade los marcadores (outline) de hyperref, que un CV
+        # no necesita (pdfpagemode=UseNone); texto, enlaces y maquetación salen idénticos.
+        pdf = compile_latex(cv_tex_path, output_dir=out, passes=1)
+        pages = _page_count(pdf)
+        attempts[k] = (source, pdf.read_bytes(), pages)
+        return pages
 
     first_pages = build_cv(0)
     best = 0
@@ -501,17 +592,20 @@ def generate_deterministic_documents(
                 f"El CV ocupa {first_pages} páginas y no cabe en {cv_pages} ni quitando todo lo "
                 "recortable; acorta el resumen, las competencias o la formación del perfil."
             )
-        lo, hi = 0, len(ops)  # lo no cabe, hi cabe
+        # Rejilla gruesa de cortes: 2**TRIM_BISECT_STEPS intervalos -> TRIM_BISECT_STEPS compilaciones
+        intervals = 2**TRIM_BISECT_STEPS
+        grid = sorted({round(len(ops) * n / intervals) for n in range(intervals + 1)})
+        lo, hi = 0, len(grid) - 1  # grid[lo] no cabe, grid[hi] cabe
         while hi - lo > 1:
             mid = (lo + hi) // 2
-            if build_cv(mid) <= cv_pages:
+            if build_cv(grid[mid]) <= cv_pages:
                 hi = mid
             else:
                 lo = mid
-        best = hi
-        if built["k"] != best:
-            build_cv(best)
-    cv_pdf_path = built["pdf"]
+        best = grid[hi]
+    source, pdf_bytes, best_pages = attempts[best]
+    cv_tex_path.write_text(source, encoding="utf-8")
+    cv_pdf_path.write_bytes(pdf_bytes)
 
     # 2. Carta
     cover_source = render_cover_letter_latex(
@@ -526,7 +620,7 @@ def generate_deterministic_documents(
     cover_pages = _page_count(cover_pdf_path)
 
     verification: dict[str, Any] = {
-        "pages": {"cv": built["pages"], "cover": cover_pages},
+        "pages": {"cv": best_pages, "cover": cover_pages},
         "trimmed": [_describe_op(profile_data, op) for op in ops[:best]],
         "present_keywords": [],
         "missing_keywords": [],

@@ -53,6 +53,15 @@ class TestEngineAvailable(unittest.TestCase):
         with patch("shutil.which", return_value=None), patch("os.access", return_value=False):
             self.assertIsNone(engine_available())
 
+    def test_pdflatex_alone_is_not_enough(self):
+        """Las plantillas usan fontspec: con solo pdflatex no hay motor válido."""
+        with patch(
+            "shutil.which", side_effect=lambda cmd: "/usr/bin/pdflatex" if cmd == "pdflatex" else None
+        ), patch("os.access", return_value=False):
+            self.assertIsNone(engine_available())
+            # Pedido explícitamente sigue disponible
+            self.assertEqual(engine_available("pdflatex"), "pdflatex")
+
     def test_returns_engine_name(self):
         with patch(
             "shutil.which", side_effect=lambda cmd: "/usr/bin/xelatex" if cmd == "xelatex" else None
@@ -79,6 +88,7 @@ class TestCompilePasses(unittest.TestCase):
                 return_value=(engine, Path(f"/usr/bin/{engine}")),
             ), patch("automation.latex_compiler.subprocess.run", side_effect=fake_run):
                 compile_latex(tex, passes=passes)
+            self.last_cmd = calls[-1]
             return len(calls)
 
     def test_xelatex_runs_two_passes_by_default(self):
@@ -86,6 +96,12 @@ class TestCompilePasses(unittest.TestCase):
 
     def test_tectonic_runs_once(self):
         self.assertEqual(self._run("tectonic", 2), 1)
+
+    def test_tectonic_single_pass_disables_reruns(self):
+        self._run("tectonic", 1)
+        self.assertIn("--reruns", self.last_cmd)
+        self._run("tectonic", 2)
+        self.assertNotIn("--reruns", self.last_cmd)
 
     def test_single_pass_requested(self):
         self.assertEqual(self._run("lualatex", 1), 1)

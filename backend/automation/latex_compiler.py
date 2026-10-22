@@ -2,7 +2,7 @@
 latex_compiler.py — Descubrimiento de compilador LaTeX y compilación de documentos.
 
 Portado / adaptado para Job Hunter Spain conforme a §5.11 del spec.
-Soporta Tectonic (por defecto, motor standalone) con fallback a xelatex, lualatex o pdflatex.
+Soporta Tectonic (por defecto, motor standalone) con fallback a xelatex o lualatex (pdflatex solo bajo petición).
 Permite sustitución de plantillas en $JH_HOME/templates/latex/.
 """
 
@@ -12,6 +12,10 @@ import subprocess
 from pathlib import Path
 
 from config import DEFAULT_LATEX_TEMPLATES_DIR, LATEX_TEMPLATES_OVERRIDE_DIR
+
+
+# Motores válidos para las plantillas (fontspec): pdflatex queda fuera salvo petición explícita.
+DEFAULT_ENGINES = ("tectonic", "xelatex", "lualatex")
 
 
 class LaTeXCompilationError(Exception):
@@ -27,13 +31,13 @@ def find_latex_compiler(preferred_engine: str | None = None) -> tuple[str, Path]
       1. tectonic (motor XeTeX standalone, descarga paquetes bajo demanda)
       2. xelatex (soporte nativo de fuentes del sistema y fontspec)
       3. lualatex
-      4. pdflatex
+    pdflatex solo se usa si se pide explícitamente: las plantillas necesitan fontspec (XeTeX/LuaTeX).
 
     Busca en PATH y en ubicaciones de usuario comunes (~/.cargo/bin, ~/.local/bin).
     Retorna una tupla (nombre_motor, ruta_al_binario).
     Lanza LaTeXCompilationError si no se encuentra ningún compilador utilizable.
     """
-    candidates = [preferred_engine] if preferred_engine else ["tectonic", "xelatex", "lualatex", "pdflatex"]
+    candidates = [preferred_engine] if preferred_engine else list(DEFAULT_ENGINES)
     extra_dirs = [
         Path.home() / ".cargo" / "bin",
         Path.home() / ".local" / "bin",
@@ -62,7 +66,8 @@ def find_latex_compiler(preferred_engine: str | None = None) -> tuple[str, Path]
 
 
 def engine_available(preferred_engine: str | None = None) -> str | None:
-    """Devuelve el nombre del motor LaTeX disponible (tectonic, xelatex...) o None si no hay ninguno."""
+    """Devuelve el motor LaTeX disponible capaz de compilar las plantillas (tectonic, xelatex o
+    lualatex; pdflatex no sirve porque las plantillas usan fontspec) o None si no hay ninguno."""
     try:
         engine_name, _ = find_latex_compiler(preferred_engine=preferred_engine)
     except LaTeXCompilationError:
@@ -111,7 +116,8 @@ def compile_latex(
     - timeout: Límite de tiempo en segundos por pasada (por defecto 120s para permitir descarga de paquetes).
     - passes: Número de pasadas para motores clásicos (xelatex/lualatex/pdflatex), que necesitan una
       segunda pasada para resolver referencias y número de páginas. Tectonic repite las pasadas que
-      necesita por sí mismo, así que con él siempre se ejecuta una sola vez.
+      necesita por sí mismo, así que con él siempre se ejecuta una sola vez; con passes=1 se le
+      pide que no repita (--reruns 0).
 
     Retorna la ruta (Path) al archivo .pdf generado.
     Lanza LaTeXCompilationError en caso de fallo de compilación o si el PDF no se genera.
@@ -129,12 +135,10 @@ def compile_latex(
     cwd = src.parent
 
     if engine_name == "tectonic":
-        cmd = [
-            str(compiler_bin),
-            "-o",
-            str(out_dir),
-            str(src),
-        ]
+        cmd = [str(compiler_bin), "-o", str(out_dir)]
+        if passes <= 1:
+            cmd += ["--reruns", "0"]  # una sola pasada: sin repetir por cambios en .aux/.out
+        cmd.append(str(src))
     elif engine_name in ("xelatex", "lualatex", "pdflatex"):
         cmd = [
             str(compiler_bin),

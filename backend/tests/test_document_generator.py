@@ -31,7 +31,12 @@ from automation.document_generator import (  # noqa: E402
     render_cv_latex,
 )
 from automation.latex_compiler import engine_available  # noqa: E402
-from automation.verify_pdf import VerificationError, extract_text_layer, verify_pdf  # noqa: E402
+from automation.verify_pdf import (  # noqa: E402
+    VerificationError,
+    extract_text_layer,
+    find_non_ascii_date_ranges,
+    verify_pdf,
+)
 
 requires_engine = pytest.mark.skipif(engine_available() is None, reason="no hay motor LaTeX instalado")
 requires_poppler = pytest.mark.skipif(shutil.which("pdftotext") is None, reason="Poppler no instalado")
@@ -66,7 +71,7 @@ def _sample_profile() -> dict:
 
 
 def _long_profile() -> dict:
-    """Perfil sintético larguísimo: 12 empleos x 6 viñetas, ocupa bastante más de 2 páginas."""
+    """Perfil sintético largo: 6 empleos x 6 viñetas, ocupa más de 2 páginas."""
     profile = _sample_profile()
     topics = ["Python", "Kubernetes", "SQL", "Excel", "Spark", "Airflow"]
     profile["experience"] = [
@@ -81,7 +86,7 @@ def _long_profile() -> dict:
                 for j, topic in enumerate(topics)
             ],
         }
-        for i in range(12)
+        for i in range(6)
     ]
     return profile
 
@@ -130,10 +135,29 @@ class TestLatexEscape(unittest.TestCase):
         self.assertEqual(latex_escape(""), "")
 
     def test_format_date_range_ascii(self):
-        self.assertEqual(format_date_range("2020", "2024"), "2020-2024")
-        self.assertEqual(format_date_range("2023", None), "2023-Present")
+        self.assertEqual(format_date_range("2020", "2024"), "2020 - 2024")
+        self.assertEqual(format_date_range("2023-01", "2024-03"), "01/2023 - 03/2024")
+        self.assertEqual(format_date_range("2023-1-15", "03/2024"), "01/2023 - 03/2024")
         self.assertEqual(format_date_range("2022", "2022"), "2022")
         self.assertEqual(format_date_range(None, None), "")
+
+    def test_open_end_follows_template_language(self):
+        self.assertEqual(format_date_range("2023-01", None), "01/2023 - Actualidad")  # es por defecto
+        self.assertEqual(format_date_range("2023-01", "Present"), "01/2023 - Actualidad")
+        self.assertEqual(format_date_range("2023-01", "", lang="en"), "01/2023 - Present")
+        self.assertEqual(format_date_range("2023-01", "actualidad", lang="en"), "01/2023 - Present")
+
+    def test_date_ranges_are_ascii(self):
+        for rng in (format_date_range("2023-01", None), format_date_range("2019-05", "2021-12", lang="en")):
+            self.assertTrue(rng.isascii(), rng)
+            self.assertEqual(find_non_ascii_date_ranges(rng), [])
+
+    def test_strips_control_and_bidi_characters(self):
+        self.assertEqual(latex_escape("a\x00b\x07c\u202ed\ufeffe\x7f\u2028f"), "abcdef")
+        self.assertEqual(latex_escape("con\ttab"), "con\ttab")  # el tabulador se conserva
+
+    def test_collapses_newlines(self):
+        self.assertEqual(latex_escape("línea uno\n\n  línea dos\r\n tres"), "línea uno línea dos tres")
 
 
 class TestContextAndHonesty(unittest.TestCase):
@@ -184,7 +208,7 @@ class TestContextAndHonesty(unittest.TestCase):
         self.assertEqual(len(ctx["competencies"]), 2)
         self.assertEqual(ctx["competencies"][0][0], "Programming Languages")
         self.assertEqual(ctx["competencies"][0][1], "Python, Rust")
-        self.assertEqual(ctx["experience"][0]["date_range"], "2021-2024")
+        self.assertEqual(ctx["experience"][0]["date_range"], "2021 - 2024")
         self.assertEqual(ctx["languages_line"], "Español (Nativo), Inglés (C1)")
 
     def test_render_cv_latex_contains_required_sections(self):
@@ -220,6 +244,55 @@ class TestCoverLetterTemplate(unittest.TestCase):
         months = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
                   "septiembre", "octubre", "noviembre", "diciembre"]
         self.assertTrue(any(f" de {m} de " in ctx["current_date"] for m in months), ctx["current_date"])
+
+
+class TestCoverLetterPlaceholders(unittest.TestCase):
+    def test_user_text_with_braces_is_literal(self):
+        profile = _sample_profile()
+        profile["cover_letter_intro"] = "Hola {x} en {company_name} como {role_title} {company_name.__class__}"
+        profile["cover_letter_stack"] = "Stack {0} {}"
+        profile["cover_letter_closing"] = "Gracias, {company_name}."
+        ctx = prepare_cover_letter_context(profile, company_name="Acme", role_title="Dev")
+        self.assertEqual(ctx["opening_paragraph"], "Hola {x} en Acme como Dev {company_name.__class__}")
+        self.assertEqual(ctx["body_paragraph"], "Stack {0} {}")
+        self.assertEqual(ctx["closing_paragraph"], "Gracias, Acme.")
+        self.assertNotIn("class 'str'", ctx["opening_paragraph"])
+
+
+class TestTrimKeepsRecentAndRelevant(unittest.TestCase):
+    def test_most_recent_and_most_relevant_are_never_dropped(self):
+        profile = _sample_profile()
+        profile["experience"] = [
+            {"company": "Reciente", "role": "Camarero", "start": "2024", "end": "", "bullets": ["Servir mesas"]},
+            {"company": "Relevante", "role": "Data Engineer", "start": "2020", "end": "2023", "bullets": ["Python y Spark"]},
+            {"company": "Vieja", "role": "Becario", "start": "2018", "end": "2019", "bullets": ["Fotocopias"]},
+        ]
+        ops = plan_trim_operations(profile, ["Python", "Spark"])
+        self.assertEqual([op for op in ops if op[0] == "entry"], [("entry", 2)])
+        trimmed = apply_trim(profile, ops)
+        self.assertEqual([e["company"] for e in trimmed["experience"]], ["Reciente", "Relevante"])
+
+    def test_latest_by_date_even_if_not_first(self):
+        profile = _sample_profile()
+        profile["experience"] = [
+            {"company": "A", "role": "Dev", "start": "2015-01", "end": "2017-06", "bullets": ["Python"]},
+            {"company": "B", "role": "Dev", "start": "2018-01", "end": "2019-01", "bullets": ["Java"]},
+            {"company": "C", "role": "Dev", "start": "2021-03", "end": "Present", "bullets": ["Go"]},
+        ]
+        entry_ops = [op for op in plan_trim_operations(profile, ["Python"]) if op[0] == "entry"]
+        self.assertNotIn(("entry", 2), entry_ops)  # C: la más reciente (fin abierto)
+        self.assertNotIn(("entry", 0), entry_ops)  # A: la más relevante
+        self.assertEqual(entry_ops, [("entry", 1)])
+
+    def test_without_dates_first_entry_is_most_recent(self):
+        profile = _sample_profile()
+        profile["experience"] = [
+            {"company": "A", "role": "x", "bullets": ["nada"]},
+            {"company": "B", "role": "y", "bullets": ["Python"]},
+            {"company": "C", "role": "z", "bullets": ["nada"]},
+        ]
+        entry_ops = [op for op in plan_trim_operations(profile, ["Python"]) if op[0] == "entry"]
+        self.assertEqual(entry_ops, [("entry", 2)])
 
 
 class TestTrimPlan(unittest.TestCase):
@@ -292,23 +365,33 @@ class TestGenerationContract(unittest.TestCase):
             self.assertEqual(docs["cv_pdf"].parent, (Path(tmpdir) / "applications" / "_preview").resolve())
             self.assertFalse(str(docs["cv_pdf"]).startswith(str(REPO_ROOT / "data")))
 
-    def test_trimming_stops_at_smallest_cut_that_fits(self):
-        profile = _long_profile()
-        total_bullets = sum(len(e["bullets"]) for e in profile["experience"])
+    def test_trimming_fits_with_few_compiles(self):
+        profile = _long_profile()  # 36 viñetas + idiomas = 37 \\item {
+        compiled = []
+
+        def counting_compile(tex_path, output_dir=None, **kwargs):
+            compiled.append(Path(tex_path).stem)
+            return self._fake_compile(tex_path, output_dir=output_dir)
 
         def fake_pages(pdf):
-            # Simula 1 página por cada 25 viñetas
+            # Simula 1 página por cada 12 «\\item {» (viñetas + línea de idiomas)
             text = Path(pdf).with_suffix(".tex").read_text(encoding="utf-8")
-            return -(-text.count("\\item {") // 25) if "cv" in Path(pdf).stem else 1
+            return -(-text.count("\\item {") // 12) if Path(pdf).stem == "cv" else 1
 
         with tempfile.TemporaryDirectory() as tmpdir, patch(
-            "automation.document_generator.compile_latex", side_effect=self._fake_compile
+            "automation.document_generator.compile_latex", side_effect=counting_compile
         ), patch("automation.document_generator._page_count", side_effect=fake_pages):
             docs = generate_deterministic_documents(profile_data=profile, output_dir=tmpdir, verify=False)
             items = docs["cv_tex"].read_text(encoding="utf-8").count("\\item {")
-        self.assertEqual(items, 50)  # 49 viñetas + la línea de idiomas: lo máximo que cabe en 2 páginas
+            pdf_matches_tex = docs["cv_pdf"].read_bytes() == b"%PDF-fake"
+        self.assertLessEqual(compiled.count("cv"), 5)
+        self.assertEqual(compiled.count("cover"), 1)
+        self.assertLessEqual(items, 24)  # cabe en 2 páginas
+        self.assertGreaterEqual(items, 24 - 6)  # recorte grueso, pero sin pasarse mucho
         self.assertEqual(docs["verification"]["pages"]["cv"], 2)
-        self.assertEqual(len(docs["verification"]["trimmed"]), total_bullets - 49)
+        self.assertTrue(pdf_matches_tex)
+        # El .tex que queda es el del mejor intento (no el último compilado)
+        self.assertEqual(-(-items // 12), 2)
 
     def test_untrimmable_cv_raises(self):
         with tempfile.TemporaryDirectory() as tmpdir, patch(
@@ -337,7 +420,11 @@ class TestDocumentGenerationIntegration(unittest.TestCase):
             self.assertIn("Ñandú & Cía", " ".join(cover_text.split()))
 
     def test_long_profile_trimmed_to_two_pages(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
+        import automation.document_generator as dg
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            dg, "compile_latex", wraps=dg.compile_latex
+        ) as spy:
             docs = generate_deterministic_documents(
                 profile_data=_long_profile(),
                 company_name="Acme",
@@ -346,6 +433,7 @@ class TestDocumentGenerationIntegration(unittest.TestCase):
                 offer_keywords=["Python", "Spark"],
             )
             _, pages, _ = extract_text_layer(docs["cv_pdf"])
+            self.assertLessEqual(spy.call_count, 6)  # <= 5 del CV + 1 de la carta
             self.assertLessEqual(pages, 2)
             self.assertEqual(docs["verification"]["pages"]["cv"], pages)
             self.assertTrue(docs["verification"]["trimmed"])
