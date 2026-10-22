@@ -86,8 +86,8 @@ Tauri 2 (desktop/src-tauri, Rust)
 
 **Interfaces:** `GET /api/ai/ollama` → `{installed: bool, running: bool, models: list[str], install_url: str}`. «Instalado» = binario en el `PATH` o en las rutas habituales; «en marcha» = `GET <base_url>/api/tags` responde (por defecto `http://localhost:11434`, mismo `base_url` que ya valida el backend). Nunca lanza: red caída → `running: false`.
 
-- [ ] Tests con HTTP y `shutil.which` simulados; `test_api_contract.py` sigue en verde (los tipos TS reflejan el modelo Pydantic).
-- [ ] Commit `feat(desktop): detectar Ollama y ofrecer instalarlo`.
+- [x] Tests con HTTP y `shutil.which` simulados; `test_api_contract.py` sigue en verde (los tipos TS reflejan el modelo Pydantic).
+- [x] Commit `feat(desktop): detectar Ollama y ofrecer instalarlo`.
 
 ### Tarea 5: Frontend estático con la API en tiempo de ejecución
 

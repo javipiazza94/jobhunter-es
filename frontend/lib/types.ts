@@ -280,6 +280,14 @@ export interface CheckResult {
   message: string;
 }
 
+/** GET /api/ai/ollama */
+export interface OllamaStatus {
+  installed: boolean;
+  running: boolean;
+  models: string[];
+  install_url: string;
+}
+
 /** POST /api/applications/{id}/interview-pack */
 export interface InterviewPack {
   path: string;

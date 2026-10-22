@@ -32,6 +32,7 @@ import config
 import profile_store
 import secrets_store
 import setup_builder
+from ollama_status import OllamaStatus, ollama_status
 
 from config import (
     ALLOWED_HOSTS, API_CLIENT_HEADER, API_CLIENT_VALUE, API_PORT, CORS_ORIGINS, DB_PATH, INBOX_DIR, INBOX_POLL_SECONDS,
@@ -987,6 +988,13 @@ def _ai_settings_out() -> dict:
         "has_key": {provider: src is not None for provider, src in sources.items()},
         "key_source": sources,
     }
+
+
+@app.get("/api/ai/ollama", response_model=OllamaStatus)
+def get_ollama_status():
+    """¿Está Ollama instalado y en marcha? Usa la URL guardada en `ai:` (nunca una que llegue en la petición)."""
+    settings = get_config().ai
+    return ollama_status(settings.base_url if settings.provider == "ollama" else None)
 
 
 @app.get("/api/settings/ai", response_model=AISettingsOut)

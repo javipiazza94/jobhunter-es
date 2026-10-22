@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import schemas  # noqa: E402
 import setup_builder  # noqa: E402
 from automation import application_documents, offer_evaluation, profile_proposal, templates_registry  # noqa: E402
+import ollama_status  # noqa: E402
 from search_config import AISettings  # noqa: E402
 
 FRONTEND_LIB = Path(__file__).parent.parent.parent / "frontend" / "lib"
@@ -47,6 +48,7 @@ PAIRS = {
     "EmailSettingsView": schemas.EmailSettingsOut,
     "EmailSettingsUpdate": schemas.EmailSettingsIn,
     "CheckResult": schemas.CheckOut,
+    "OllamaStatus": ollama_status.OllamaStatus,
     "InterviewPack": schemas.InterviewPackOut,
     "SourceSetting": schemas.SourceSettingOut,
     "SourcesUpdate": schemas.SourcesIn,
