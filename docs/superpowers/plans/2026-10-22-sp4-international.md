@@ -76,7 +76,7 @@
 
 **Files:** `backend/scraper/sources/linkedin.py` (requires_ack + exact warning text es/en naming that it breaks LinkedIn's terms), `indeed.py` (off without `SCRAPERAPI_KEY` via keychain/env — add `scraperapi_key` to `secrets_store` names), `setup_builder`/settings API enforce ack from spec; delete `backend/scraper/ey_careers.py` or turn it into a `company_direct` example in `examples/` (ruling: delete — dead code with hard-coded locations; document how to add a careers page via company_direct); rename SAP-specific names in `company_direct.py` to generic (`_is_relevant_offer`, keywords from config); `generic` step reads isolated tracks and its sources from the registry; seeds documented as generic Spain list (`seeds/README.md`). Tests.
 
-- [ ] Commit `feat(sources): aceptación explícita, clave de ScraperAPI en el llavero y fuentes generalizadas`.
+- [x] Commit `feat(sources): aceptación explícita, clave de ScraperAPI en el llavero y fuentes generalizadas`.
 
 ### Task 6: Language detection, language_gate/posting_guard coverage
 

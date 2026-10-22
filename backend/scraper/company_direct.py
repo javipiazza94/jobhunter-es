@@ -1,6 +1,6 @@
 """
-scraper/company_direct.py — Scrapes career pages of known SAP consulting firms.
-For each company in `sources.company_direct.companies` (jobhunter.yaml): extracts SAP job links + emails/forms.
+scraper/company_direct.py — Scrapes career pages of configured companies.
+For each company in `sources.company_direct.companies` (jobhunter.yaml): extracts job links matching keywords + emails/forms.
 """
 import logging
 from bs4 import BeautifulSoup
@@ -16,9 +16,13 @@ logger = logging.getLogger(__name__)
 _JOB_URL_HINTS = ["/job", "/oferta", "/empleo", "/vacante", "/position", "/career", "/oportunidad"]
 
 
-def _is_sap_offer(title: str, description: str) -> bool:
+def _is_relevant_offer(title: str, description: str, keywords: list[str] | None = None) -> bool:
     combined = (title + " " + description).lower()
-    return any(kw.lower() in combined for kw in source_settings("company_direct").get("keywords", []))
+    kws = keywords if keywords is not None else source_settings("company_direct").get("keywords", [])
+    return any(kw.lower() in combined for kw in kws)
+
+
+_is_sap_offer = _is_relevant_offer  # alias de compatibilidad con versiones anteriores
 
 
 def _parse_job_links(html: str, base_url: str) -> list[dict]:
@@ -42,7 +46,7 @@ class CompanyDirectScraper(BaseScraper):
     def __init__(self):
         super().__init__(delay_min=3.0, delay_max=8.0)
 
-    async def scrape_company(self, company: dict) -> list[dict]:
+    async def scrape_company(self, company: dict, keywords: list[str] | None = None) -> list[dict]:
         offers = []
         async with self as scraper:
             page = await scraper.new_page()
@@ -51,7 +55,7 @@ class CompanyDirectScraper(BaseScraper):
                 return offers
             html = await page.content()
             for link in _parse_job_links(html, company["careers_url"]):
-                if _is_sap_offer(link["title"], ""):
+                if _is_relevant_offer(link["title"], "", keywords=keywords):
                     offers.append({
                         "title": link["title"],
                         "url": link["url"],
@@ -67,7 +71,7 @@ class CompanyDirectScraper(BaseScraper):
         return offers
 
 
-async def run_company_direct(dry_run: bool = False) -> tuple[int, int]:
+async def run_company_direct(dry_run: bool = False, keywords: list[str] | None = None) -> tuple[int, int]:
     total_offers = 0
     total_contacts = 0
     conn = get_conn()
@@ -83,7 +87,7 @@ async def run_company_direct(dry_run: bool = False) -> tuple[int, int]:
                 "source": "company_direct",
             })
 
-            offers = await scraper.scrape_company(company)
+            offers = await scraper.scrape_company(company, keywords=keywords)
             if not dry_run:
                 for offer in offers:
                     sc = score_offer(offer)
@@ -94,7 +98,7 @@ async def run_company_direct(dry_run: bool = False) -> tuple[int, int]:
                         "relevance_score": sc,
                     })
             total_offers += len(offers)
-            logger.info("  %s: %d SAP offers", company["name"], len(offers))
+            logger.info("  %s: %d matching offers", company["name"], len(offers))
 
             if not dry_run:
                 contacts = await extractor.extract_for_company(

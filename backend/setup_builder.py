@@ -96,13 +96,16 @@ def load_markets() -> dict[str, list[dict]]:
 
 
 def source_catalog() -> dict[str, dict]:
-    """Fuentes conocidas por el asistente (id → ficha): las del registro que se sugieren en algún mercado; una
-    fuente es `requires_ack` si lo es en algún mercado."""
+    """Fuentes conocidas por el asistente (id → ficha): las del registro que se sugieren en algún mercado;
+    obtiene `requires_ack` directamente de la ficha de la fuente en el registro."""
     catalog: dict[str, dict] = {}
+    reg = source_registry.registry()
     for sources in load_markets().values():
         for s in sources:
-            entry = catalog.setdefault(s["id"], dict(s))
-            entry["requires_ack"] = bool(entry.get("requires_ack")) or bool(s.get("requires_ack"))
+            if s["id"] not in catalog:
+                spec = reg.get(s["id"])
+                req_ack = spec.requires_ack if spec else bool(s.get("requires_ack"))
+                catalog[s["id"]] = {**s, "requires_ack": req_ack}
     return catalog
 
 

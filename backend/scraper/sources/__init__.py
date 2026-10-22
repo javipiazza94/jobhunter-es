@@ -87,6 +87,7 @@ class SourceSpec:
     persists_itself: bool = False
     order: int = 1000
     market_labels: dict[str, dict[str, str]] = field(default_factory=dict)
+    ack_warning: dict[str, str] = field(default_factory=dict)
 
     def start_url_for(self, settings: dict | None = None) -> str | None:
         """URL de inicio para comprobación de robots, parametrizable según `settings`."""
@@ -101,6 +102,10 @@ class SourceSpec:
         """Etiqueta en `lang` (cae a es) y, si se indica, la propia del mercado."""
         labels = self.market_labels.get(market, self.label) if market else self.label
         return labels.get(lang) or labels.get("es") or self.id
+
+    def warning_for(self, lang: str = "es") -> str:
+        """Aviso legal en `lang` (cae a es si falta)."""
+        return self.ack_warning.get(lang) or self.ack_warning.get("es") or ""
 
 
 def validate(spec: SourceSpec) -> None:
@@ -122,6 +127,8 @@ def validate(spec: SourceSpec) -> None:
         raise ValueError(f"fuente {spec.id}: falta la atribución (al menos el nombre)")
     if spec.requires_ack and spec.default_on:
         raise ValueError(f"fuente {spec.id}: una fuente con aviso no puede ir marcada por defecto")
+    if spec.requires_ack and not spec.ack_warning.get("es"):
+        raise ValueError(f"fuente {spec.id}: requires_ack=True pero falta ack_warning en español")
     if not callable(spec.run):
         raise ValueError(f"fuente {spec.id}: run no es invocable")
 
@@ -186,6 +193,7 @@ def market_catalog(lang: str = "es") -> dict[str, list[dict]]:
                 "id": s.id,
                 "label": s.label_for(lang, market),
                 "requires_ack": s.requires_ack,
+                "ack_warning": s.warning_for(lang),
                 "default_on": s.default_on,
                 "attribution": {"name": s.attribution.name, "url": s.attribution.url,
                                 "required": s.attribution.required},

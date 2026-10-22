@@ -56,10 +56,12 @@ def test_cada_ficha_es_valida(spec):
 def test_flags_de_las_fuentes_existentes():
     reg = sources.registry()
     assert {s.id for s in reg.values() if s.requires_ack} == {"infojobs", "linkedin"}
+    assert "Condiciones de uso" in reg["linkedin"].warning_for("es")
+    assert "User Agreement" in reg["linkedin"].warning_for("en")
     assert [s.id for s in sources.track_pipeline()] == [
         "tecnoempleo", "infojobs", "computrabajo", "company_direct", "linkedin"]
     assert {"tecnoempleo", "infojobs", "manfred", "linkedin", "indeed"} <= set(sources.standalone_ids())
-    assert reg["indeed"].requires_secret == "SCRAPERAPI_KEY"
+    assert reg["indeed"].requires_secret == "scraperapi_key"
     assert reg["company_direct"].track_always and reg["company_direct"].persists_itself
     assert reg["company_direct"].markets == ()
 

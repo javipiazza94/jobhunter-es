@@ -17,6 +17,10 @@ SPEC = SourceSpec(
     label={"es": "LinkedIn", "en": "LinkedIn"},
     markets=("latam", "remote", "global"),
     requires_ack=True,
+    ack_warning={
+        "es": "Usar esta fuente incumple las Condiciones de uso de LinkedIn (automatización y scraping).",
+        "en": "Using this source violates LinkedIn's User Agreement (automation and scraping).",
+    },
     kind="playwright",
     start_url="https://www.linkedin.com/jobs/search",
     attribution=Attribution(name="LinkedIn", url="https://www.linkedin.com/jobs"),

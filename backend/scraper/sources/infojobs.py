@@ -18,6 +18,10 @@ SPEC = SourceSpec(
     label={"es": "InfoJobs", "en": "InfoJobs"},
     markets=("spain",),
     requires_ack=True,
+    ack_warning={
+        "es": "El scraping automatizado puede incumplir las condiciones de uso de InfoJobs.",
+        "en": "Automated scraping may violate InfoJobs' Terms of Service.",
+    },
     kind="playwright",
     start_url=f"{_BASE}/jobsearch/search-results/list.xhtml",
     attribution=Attribution(name="InfoJobs", url=_BASE),
