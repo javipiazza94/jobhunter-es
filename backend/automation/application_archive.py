@@ -5,21 +5,83 @@ Conforme a §5.11 del spec:
 - El CV, la carta, la oferta limpia y el pack de entrevista se guardan en JH_HOME/applications/<id>/.
 - Es lo que ha leído el entrevistador; /interview y el seguimiento lo usan.
 - Los adjuntos del email salen de ahí.
+
+El archivo se escribe de forma atómica: todo se prepara en `<id>.tmp/` y se cambia por la carpeta
+anterior con `os.replace`, así un email nunca adjunta un PDF a medio escribir y un fallo deja intacto
+el archivo previo. El pack de entrevista (`interview.md`) sobrevive a cada nueva preparación.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import threading
 from datetime import datetime
 from pathlib import Path
 
-from config import APPLICATIONS_DIR
+import config
+
+# Carpeta raíz del archivo. None = la de la configuración activa (config.APPLICATIONS_DIR, dentro de
+# JH_HOME); los tests pueden fijarla.
+APPLICATIONS_DIR: Path | None = None
+
+INTERVIEW_FILE = "interview.md"
+# Ficheros que se regeneran en cada preparación; el resto (pack de entrevista) se conserva.
+GENERATED_FILES = ("cv.pdf", "cover.pdf", "cv.tex", "cover.tex", "job_posting.md", "metadata.json")
+
+_locks: dict[str, threading.Lock] = {}
+_locks_guard = threading.Lock()
+
+
+def _root() -> Path:
+    return Path(APPLICATIONS_DIR) if APPLICATIONS_DIR is not None else Path(config.APPLICATIONS_DIR)
+
+
+def application_lock(application_id: str | int) -> threading.Lock:
+    """Cerrojo por candidatura: serializa preparación y pack de entrevista dentro del proceso."""
+    key = str(application_id)
+    with _locks_guard:
+        return _locks.setdefault(key, threading.Lock())
 
 
 def get_application_dir(application_id: str | int) -> Path:
-    """Devuelve la ruta al directorio de archivo de una candidatura."""
-    return APPLICATIONS_DIR / str(application_id)
+    """Devuelve la ruta al directorio de archivo de una candidatura.
+
+    Lanza ValueError si el id no es un nombre de carpeta simple (evita salir de JH_HOME/applications)."""
+    name = str(application_id)
+    if not name or name in (".", "..") or "/" in name or "\\" in name or "\x00" in name or name.startswith("."):
+        raise ValueError(f"Id de candidatura no válido: {name!r}")
+    return _root() / name
+
+
+def _swap_in(staging: Path, app_dir: Path) -> None:
+    """Sustituye `app_dir` por `staging` con renombrados atómicos (mismo sistema de ficheros)."""
+    if not app_dir.exists():
+        os.replace(staging, app_dir)
+        return
+    old = app_dir.with_name(f"{app_dir.name}.old")
+    if old.exists():
+        shutil.rmtree(old)
+    os.replace(app_dir, old)
+    try:
+        os.replace(staging, app_dir)
+    except OSError:
+        os.replace(old, app_dir)  # deja el archivo anterior tal cual
+        raise
+    shutil.rmtree(old, ignore_errors=True)
+
+
+def _posting_markdown(job_posting: str | dict) -> str:
+    if not isinstance(job_posting, dict):
+        return str(job_posting)
+    content = f"# {job_posting.get('title', 'Oferta')}\n\n"
+    content += f"**Empresa:** {job_posting.get('company', '')}\n\n"
+    content += f"**Ubicación:** {job_posting.get('location', '')}\n\n"
+    content += f"**URL:** {job_posting.get('url', '')}\n\n"
+    content += "## Descripción\n\n"
+    content += job_posting.get("description", "") or job_posting.get("content", "")
+    return content
 
 
 def archive_application(
@@ -40,49 +102,60 @@ def archive_application(
       - job_posting.md (la oferta limpia)
       - metadata.json (metadatos de la candidatura y ficheros archivados)
 
+    Todo se escribe primero en `<id>.tmp/` y luego sustituye a la carpeta anterior de una vez; los
+    ficheros que no se regeneran (el pack de entrevista) pasan a la carpeta nueva.
     Retorna la ruta al directorio de la candidatura.
     """
     app_dir = get_application_dir(application_id)
-    app_dir.mkdir(parents=True, exist_ok=True)
+    app_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = app_dir.with_name(f"{app_dir.name}.tmp")
 
-    files_recorded: dict[str, str] = {}
+    with application_lock(application_id):
+        if staging.exists():
+            shutil.rmtree(staging)
+        staging.mkdir()
+        try:
+            files_recorded: dict[str, str] = {}
 
-    def _copy_doc(source: Path | str | None, dest_name: str) -> None:
-        if source:
-            src = Path(source).resolve()
-            if src.is_file():
-                dst = app_dir / dest_name
-                shutil.copy2(src, dst)
-                files_recorded[dest_name] = str(dst)
+            def _copy_doc(source: Path | str | None, dest_name: str) -> None:
+                if source:
+                    src = Path(source).resolve()
+                    if src.is_file():
+                        shutil.copy2(src, staging / dest_name)
+                        files_recorded[dest_name] = str(app_dir / dest_name)
 
-    _copy_doc(cv_pdf, "cv.pdf")
-    _copy_doc(cover_pdf, "cover.pdf")
-    _copy_doc(cv_tex, "cv.tex")
-    _copy_doc(cover_tex, "cover.tex")
+            _copy_doc(cv_pdf, "cv.pdf")
+            _copy_doc(cover_pdf, "cover.pdf")
+            _copy_doc(cv_tex, "cv.tex")
+            _copy_doc(cover_tex, "cover.tex")
 
-    # Guardar oferta de trabajo limpia
-    if job_posting:
-        posting_path = app_dir / "job_posting.md"
-        if isinstance(job_posting, dict):
-            content = f"# {job_posting.get('title', 'Oferta')}\n\n"
-            content += f"**Empresa:** {job_posting.get('company', '')}\n\n"
-            content += f"**Ubicación:** {job_posting.get('location', '')}\n\n"
-            content += f"**URL:** {job_posting.get('url', '')}\n\n"
-            content += "## Descripción\n\n"
-            content += job_posting.get("description", "") or job_posting.get("content", "")
-            posting_path.write_text(content, encoding="utf-8")
-        else:
-            posting_path.write_text(str(job_posting), encoding="utf-8")
-        files_recorded["job_posting.md"] = str(posting_path)
+            if job_posting:
+                (staging / "job_posting.md").write_text(_posting_markdown(job_posting), encoding="utf-8")
+                files_recorded["job_posting.md"] = str(app_dir / "job_posting.md")
 
-    # Metadatos del archivo
-    meta = dict(metadata or {})
-    meta["application_id"] = str(application_id)
-    meta["archived_at"] = datetime.now().isoformat()
-    meta["files"] = files_recorded
+            # Conservar lo que no se regenera (pack de entrevista y similares)
+            previous_meta: dict = {}
+            if app_dir.is_dir():
+                for old_file in app_dir.iterdir():
+                    if old_file.is_file() and old_file.name not in GENERATED_FILES:
+                        shutil.copy2(old_file, staging / old_file.name)
+                try:
+                    previous_meta = json.loads((app_dir / "metadata.json").read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    previous_meta = {}
 
-    meta_path = app_dir / "metadata.json"
-    meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+            meta = dict(metadata or {})
+            if isinstance(previous_meta, dict) and "interview_preps" in previous_meta:
+                meta.setdefault("interview_preps", previous_meta["interview_preps"])
+            meta["application_id"] = str(application_id)
+            meta["archived_at"] = datetime.now().isoformat()
+            meta["files"] = files_recorded
+            (staging / "metadata.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+
+            _swap_in(staging, app_dir)
+        except BaseException:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise
 
     return app_dir
 
@@ -113,24 +186,28 @@ def save_interview_prep(
 ) -> Path:
     """
     Guarda el pack de preparación de entrevista en el archivo de la candidatura.
-    Nombre: interview_prep_<stage>.md (ej: interview_prep_initial.md o interview_prep_technical.md).
+
+    Siempre en `interview.md` (un único pack por candidatura, el mismo que genera
+    ai_writing.generate_interview_pack); la fase (`stage`) queda anotada en metadata.json.
+    La escritura es atómica (tmp + os.replace).
     """
     app_dir = get_application_dir(application_id)
-    app_dir.mkdir(parents=True, exist_ok=True)
+    with application_lock(application_id):
+        app_dir.mkdir(parents=True, exist_ok=True)
+        file_path = app_dir / INTERVIEW_FILE
+        tmp = app_dir / f".{INTERVIEW_FILE}.tmp"
+        tmp.write_text(content, encoding="utf-8")
+        os.replace(tmp, file_path)
 
-    file_name = f"interview_prep_{stage}.md" if stage else "interview_prep.md"
-    file_path = app_dir / file_name
-    file_path.write_text(content, encoding="utf-8")
-
-    # Actualizar metadata.json si existe
-    meta_path = app_dir / "metadata.json"
-    if meta_path.is_file():
-        try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            meta.setdefault("interview_preps", {})[stage] = str(file_path)
-            meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
-        except Exception:
-            pass
+        # Actualizar metadata.json si existe
+        meta_path = app_dir / "metadata.json"
+        if meta_path.is_file():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                meta.setdefault("interview_preps", {})[stage or "initial"] = str(file_path)
+                meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+            except (OSError, ValueError, AttributeError):
+                pass  # los metadatos son informativos: el pack ya está guardado
 
     return file_path
 

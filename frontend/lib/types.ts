@@ -279,6 +279,28 @@ export interface InterviewPack {
   markdown: string;
 }
 
+/** POST /api/applications/{id}/prepare: cuerpo opcional (use_ai ausente = IA si hay proveedor). */
+export interface PrepareRequest {
+  use_ai?: boolean | null;
+}
+
+/** POST /api/applications/{id}/prepare: CV y carta en PDF archivados en JH_HOME/applications/<id>/. */
+export interface PreparedDocs {
+  application_id: string;
+  cv_pdf: string;
+  cover_pdf: string;
+  source: "ai" | "deterministic";
+  verification: Record<string, unknown>;
+  warnings: string[];
+}
+
+/** GET /api/applications/{id}/documents: un documento descargable del archivo de la candidatura. */
+export interface DocumentFile {
+  name: "cv.pdf" | "cover.pdf" | "job_posting.md" | "interview.md";
+  size: number;
+  modified_at: string;
+}
+
 /** GET/PUT /api/settings/sources: una fuente de ofertas y su estado en jobhunter.yaml. */
 export interface SourceSetting {
   id: string;

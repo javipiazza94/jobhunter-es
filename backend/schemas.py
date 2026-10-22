@@ -360,6 +360,18 @@ class CheckOut(_Out):
     message: str
 
 
+class PrepareIn(BaseModel):
+    """POST /api/applications/{id}/prepare: `use_ai` None = IA si hay proveedor configurado."""
+    use_ai: bool | None = None
+
+
+class DocumentFileOut(_Out):
+    """Documento archivado de una candidatura (JH_HOME/applications/<id>/)."""
+    name: str
+    size: int
+    modified_at: str
+
+
 class InterviewPackOut(_Out):
     """Pack de entrevista generado: ruta del archivo y su contenido Markdown."""
     path: str

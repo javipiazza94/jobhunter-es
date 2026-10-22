@@ -15,7 +15,6 @@ import time
 import unicodedata
 from pathlib import Path
 
-import config
 from ai import AIError, AIUnavailable, Provider, get_provider
 from database import get_conn
 
@@ -222,8 +221,8 @@ def generate_interview_pack(application_id: str) -> Path:
             markdown += f"\n\n## {section}\n\n_(sin contenido generado: completar a mano)_"
     markdown += "\n"
 
-    out_dir = config.APPLICATIONS_DIR / str(application["id"])
-    out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / "interview.md"
-    path.write_text(markdown, encoding="utf-8")
-    return path
+    # Mismo fichero que application_archive.save_interview_prep: un único interview.md por candidatura,
+    # que sobrevive a cada nueva preparación de CV y carta.
+    from automation.application_archive import save_interview_prep
+
+    return save_interview_prep(application["id"], markdown)

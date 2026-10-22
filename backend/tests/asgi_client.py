@@ -17,8 +17,15 @@ def call(method, path, headers=(), host="localhost:8020", query="", body=b""):
         "headers": [(b"host", host.encode())] + [(k.encode(), v.encode()) for k, v in headers],
     }
     sent = []
+    delivered = False
 
     async def receive():
+        # Como un servidor real: el cuerpo una vez; después espera (las respuestas de fichero o en
+        # streaming escuchan una desconexión que aquí nunca llega y se cancela al terminar).
+        nonlocal delivered
+        if delivered:
+            await asyncio.Event().wait()
+        delivered = True
         return {"type": "http.request", "body": body, "more_body": False}
 
     async def send(message):

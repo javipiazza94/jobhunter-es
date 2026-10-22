@@ -299,10 +299,11 @@ def _send_approved(conn, application_id: str) -> bool:
 
     # Si existen documentos archivados en JH_HOME/applications/<id>/, se usan preferentemente
     archived_cv, archived_cover = get_application_attachments(application_id)
+    # (Path, no str: email_sender lee .exists()/.name de cada adjunto)
     if archived_cv and archived_cv.is_file():
-        cv = str(archived_cv)
+        cv = archived_cv
     if archived_cover and archived_cover.is_file():
-        cover_letter_docx = str(archived_cover)
+        cover_letter_docx = archived_cover
 
     body = app.get("cover_letter_edited") or app.get("cover_letter_used") or ""
     subject = (

@@ -104,7 +104,7 @@ class TestApplicationArchive(unittest.TestCase):
 
             prep_path = save_interview_prep("50", "# Prep inicial", stage="technical")
             self.assertTrue(prep_path.is_file())
-            self.assertEqual(prep_path.name, "interview_prep_technical.md")
+            self.assertEqual(prep_path.name, "interview.md")
 
             # Verifica actualización de metadata
             meta = json.loads((app_dir / "metadata.json").read_text(encoding="utf-8"))
@@ -142,8 +142,8 @@ class TestApplicationArchive(unittest.TestCase):
 
                 # Verificar que los adjuntos pasados a send_email corresponden a los del archivo
                 call_kwargs = mock_send.call_args[1]
-                self.assertEqual(call_kwargs["cv_path"], str(archived_cv))
-                self.assertEqual(call_kwargs["cover_letter_path"], str(archived_cover))
+                self.assertEqual(call_kwargs["cv_path"], archived_cv)
+                self.assertEqual(call_kwargs["cover_letter_path"], archived_cover)
 
 
 if __name__ == "__main__":

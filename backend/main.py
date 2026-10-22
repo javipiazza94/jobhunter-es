@@ -17,7 +17,7 @@ from fastapi import Body, FastAPI, HTTPException, BackgroundTasks, Depends, Requ
 # pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
 # pyrefly: ignore [missing-import]
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 # pyrefly: ignore [missing-import]
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 # pyrefly: ignore [missing-import]
@@ -47,11 +47,11 @@ from schemas import (
     InboxReportOut, InboxStatusOut, JobOut, JobStartedOut, OfferOut, OutcomeIn, PendingApplicationOut,
     QuietApplicationOut, ResolveStaleIn, StatsOut, TrackOut,
     AISettingsIn, AISettingsOut, CheckOut, EmailSettingsIn, EmailSettingsOut, MarketSourceOut, SetupApplyOut,
-    InterviewPackOut, ProfileIn, SetupProposalOut, SetupStatusOut, SetupTextIn,
+    DocumentFileOut, InterviewPackOut, PrepareIn, ProfileIn, SetupProposalOut, SetupStatusOut, SetupTextIn,
     AIKeyIn, AIKeyOut, SourceSettingOut, SourcesIn,
 )
 from scraper.jobs import SOURCES as SCRAPER_SOURCES, TRACK_JOB_PREFIX, TRACK_PIPELINE_SOURCES
-from automation import cv_reader, email_sender, followup, profile_proposal
+from automation import application_documents, cv_reader, email_sender, followup, profile_proposal
 from automation.filter_engine import classify_track
 from automation.location import parse_modality
 from automation.experience_classifier import classify_experience, classify_contract
@@ -381,6 +381,50 @@ def interview_pack(app_id: str):
         raise HTTPException(500, "No se pudo guardar el pack de entrevista en disco; revisa permisos y espacio libre") from None
     except ai.AIError as exc:
         raise HTTPException(502, f"La IA no pudo generar el pack ({type(exc).__name__})") from None
+
+
+# ── Preparar candidatura: CV y carta en PDF archivados (automation/application_documents.py) ──
+
+_DOCUMENT_MEDIA_TYPES = {".pdf": "application/pdf", ".md": "text/markdown; charset=utf-8"}
+
+
+def _require_application(conn: sqlite3.Connection, app_id: str) -> None:
+    if conn.execute("SELECT 1 FROM applications WHERE id = ?", (app_id,)).fetchone() is None:
+        raise HTTPException(404, "Candidatura no encontrada")
+
+
+@app.post("/api/applications/{app_id}/prepare", response_model=application_documents.PreparedDocs)
+def prepare_application_endpoint(app_id: str, body: PrepareIn | None = None):
+    """Genera y archiva el CV y la carta en PDF de la candidatura (puede tardar: compila LaTeX)."""
+    use_ai = body.use_ai if body else None
+    try:
+        return application_documents.prepare_application(app_id, use_ai=use_ai)
+    except application_documents.ApplicationNotFound:
+        raise HTTPException(404, "Candidatura no encontrada") from None
+    except application_documents.NoTexEngine as exc:
+        raise HTTPException(409, str(exc)) from None
+    except application_documents.VerificationFailed as exc:
+        raise HTTPException(422, {"message": "Los PDFs no superan la verificación", "reasons": exc.reasons}) from None
+    except OSError:
+        raise HTTPException(500, "No se pudieron guardar los documentos en disco; revisa permisos y espacio libre") from None
+
+
+@app.get("/api/applications/{app_id}/documents", response_model=list[DocumentFileOut])
+def list_application_documents(app_id: str, conn: sqlite3.Connection = Depends(get_db)):
+    _require_application(conn, app_id)
+    return application_documents.list_documents(app_id)
+
+
+@app.get("/api/applications/{app_id}/documents/{name}")
+def get_application_document(app_id: str, name: str, conn: sqlite3.Connection = Depends(get_db)):
+    """Descarga un documento archivado; solo los de la lista blanca (cv.pdf, cover.pdf, job_posting.md, interview.md)."""
+    _require_application(conn, app_id)
+    try:
+        path = application_documents.document_path(app_id, name)
+    except (FileNotFoundError, ValueError):
+        raise HTTPException(404, "Documento no encontrado") from None
+    return FileResponse(path, media_type=_DOCUMENT_MEDIA_TYPES.get(path.suffix, "application/octet-stream"),
+                        filename=path.name)
 
 
 @app.post("/api/applications/{app_id}/approve")
