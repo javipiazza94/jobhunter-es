@@ -101,13 +101,13 @@ Tauri 2 (desktop/src-tauri, Rust)
 
 ### Tarea 6: Congelado del backend con PyInstaller
 
-**Ficheros:** crear `backend/desktop_freeze.spec`, `desktop/scripts/freeze_backend.py`, `desktop/scripts/smoke_backend.py`, `desktop/scripts/test_smoke_backend.py`.
+**Ficheros:** crear `backend/desktop_freeze.spec`, `desktop/scripts/freeze_backend.py`, `desktop/scripts/smoke_backend.py`.
 
-- [ ] `.spec` en modo carpeta: `collect_submodules` de `scraper`, `automation`, `ai`, módulos de uvicorn, plantillas de correo (`backend/templates`), plantillas LaTeX (`templates/latex`), semillas, `profile.example.json`, `defaults/`, y el driver de Playwright.
-- [ ] `freeze_backend.py`: ejecuta PyInstaller y deja `desktop/src-tauri/resources/jobhunter-api/`.
-- [ ] `smoke_backend.py`: lanza el ejecutable congelado con un `JH_HOME` temporal, lee `JH_READY`, comprueba `/api/stats`, `Host` ajeno, `Origin` ajeno, POST sin cabecera y preflight desde `tauri://localhost`, cierra stdin y comprueba que el proceso termina solo.
-- [ ] Ejecutar el congelado real en Linux y pegar el resultado en el registro.
-- [ ] Commit `feat(desktop): backend congelado con PyInstaller y prueba de humo`.
+- [x] `.spec` en modo carpeta: `collect_submodules` de `scraper`, `automation`, `ai`, módulos de uvicorn, plantillas de correo (`backend/templates`), plantillas LaTeX (`templates/latex`), semillas, `profile.example.json`, `defaults/`, y el driver de Playwright.
+- [x] `freeze_backend.py`: ejecuta PyInstaller y deja `desktop/src-tauri/resources/jobhunter-api/`.
+- [x] `smoke_backend.py`: lanza el ejecutable congelado con un `JH_HOME` temporal, lee `JH_READY`, comprueba `/api/stats`, `Host` ajeno, `Origin` ajeno, POST sin cabecera y preflight desde `tauri://localhost`, cierra stdin y comprueba que el proceso termina solo.
+- [x] Ejecutar el congelado real en Linux y pegar el resultado en el registro.
+- [x] Commit `feat(desktop): backend congelado con PyInstaller y prueba de humo`.
 
 ### Tarea 7: Proyecto Tauri 2
 

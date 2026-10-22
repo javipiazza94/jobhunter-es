@@ -86,3 +86,13 @@ def ensure_chromium() -> None:
 async def ensure_chromium_async() -> None:
     """Igual que `ensure_chromium()` sin bloquear el bucle de eventos (la descarga puede tardar minutos)."""
     await asyncio.to_thread(ensure_chromium)
+
+
+if __name__ == "__main__":
+    # `python -m automation.browser_install [--install]`: diagnóstico (y descarga) a mano; la prueba de humo
+    # de la app de escritorio lo usa para comprobar que el driver de Playwright viaja en el paquete.
+    import sys
+
+    if "--install" in sys.argv[1:]:
+        ensure_chromium()
+    print("chromium instalado" if chromium_installed() else "chromium no instalado")
