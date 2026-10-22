@@ -83,6 +83,7 @@ class SourceSpec:
     requires_secret: str | None = None
     standalone: bool = True
     track_always: bool = False
+    company_query: bool = False
     persists_itself: bool = False
     order: int = 1000
     market_labels: dict[str, dict[str, str]] = field(default_factory=dict)

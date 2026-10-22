@@ -11,6 +11,8 @@ import {
   saveEmailSettings,
   patchProfile,
   saveSourceSettings,
+  fetchFollowedCompaniesSettings,
+  saveFollowedCompaniesSettings,
   testAI,
   testEmail,
 } from "@/lib/api";
@@ -36,7 +38,7 @@ import {
   type AIForm,
   type EmailForm,
 } from "@/lib/settings";
-import type { AIProviderId, AISettingsView, CheckResult, EmailSettingsView, SourceSetting } from "@/lib/types";
+import type { AIProviderId, AISettingsView, CheckResult, EmailSettingsView, FollowedCompanySetting, SourceSetting } from "@/lib/types";
 
 // Textos de la interfaz en un solo sitio (la traducción llega en SP4).
 export const T = {
@@ -510,6 +512,7 @@ function SourcesSection({ initial, onRerunWizard }: { initial: SourceSetting[]; 
           );
         })}
       </ul>
+      <FollowedCompaniesBlock />
       <button className={primaryBtn} disabled={busy} onClick={save}>
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {T.save}
       </button>
@@ -520,6 +523,109 @@ function SourcesSection({ initial, onRerunWizard }: { initial: SourceSetting[]; 
         <Wand2 className="w-4 h-4" /> {T.rerun}
       </button>
     </section>
+  );
+}
+
+function FollowedCompaniesBlock() {
+  const [companies, setCompanies] = useState<FollowedCompanySetting[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { busy, feedback, run } = useAction();
+
+  useEffect(() => {
+    fetchFollowedCompaniesSettings()
+      .then(setCompanies)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const addCompany = () => {
+    setCompanies(prev => [...prev, { name: "", tier: 1, aliases: [] }]);
+  };
+
+  const removeCompany = (idx: number) => {
+    setCompanies(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateCompany = (idx: number, patch: Partial<FollowedCompanySetting>) => {
+    setCompanies(prev => prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)));
+  };
+
+  const save = () =>
+    run(async () => {
+      const valid = companies.filter(c => c.name.trim());
+      const saved = await saveFollowedCompaniesSettings(valid);
+      setCompanies(saved);
+      return { ok: true, message: "Empresas seguidas guardadas" };
+    });
+
+  if (loading) return null;
+
+  return (
+    <div className="pt-4 border-t border-white/5 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h4 className="text-sm font-semibold text-white">Empresas seguidas</h4>
+          <p className="text-xs text-gray-500">Se consultan en los agregadores (InfoJobs, Tecnoempleo...) y priorizan sus ofertas.</p>
+        </div>
+        <button
+          type="button"
+          onClick={addCompany}
+          className="text-xs text-indigo-400 hover:text-indigo-300 font-medium px-2 py-1 rounded bg-indigo-500/10 border border-indigo-500/20"
+        >
+          + Añadir empresa
+        </button>
+      </div>
+
+      {companies.length > 0 && (
+        <div className="space-y-2">
+          {companies.map((c, idx) => (
+            <div key={idx} className="flex flex-wrap items-center gap-2 p-2 rounded-lg bg-black/20 border border-white/5">
+              <input
+                type="text"
+                placeholder="Nombre de la empresa"
+                value={c.name}
+                onChange={e => updateCompany(idx, { name: e.target.value })}
+                className="bg-[#16161f] border border-white/10 text-gray-300 text-xs rounded px-2.5 py-1.5 focus:ring-1 focus:ring-indigo-500 outline-none flex-1 min-w-[140px]"
+              />
+              <select
+                value={c.tier}
+                onChange={e => updateCompany(idx, { tier: Number(e.target.value) })}
+                className="bg-[#16161f] border border-white/10 text-gray-300 text-xs rounded px-2 py-1.5 focus:ring-1 focus:ring-indigo-500 outline-none"
+              >
+                <option value={1}>Tier 1</option>
+                <option value={2}>Tier 2</option>
+                <option value={3}>Tier 3</option>
+              </select>
+              <input
+                type="text"
+                placeholder="Alias (separados por coma)"
+                value={c.aliases?.join(", ") || ""}
+                onChange={e => updateCompany(idx, { aliases: e.target.value.split(",").map(a => a.trim()).filter(Boolean) })}
+                className="bg-[#16161f] border border-white/10 text-gray-300 text-xs rounded px-2.5 py-1.5 focus:ring-1 focus:ring-indigo-500 outline-none flex-1 min-w-[140px]"
+              />
+              <button
+                type="button"
+                onClick={() => removeCompany(idx)}
+                className="text-xs text-red-400 hover:text-red-300 px-2 py-1"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              className="text-xs text-white bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg flex items-center gap-1.5 disabled:opacity-50"
+              disabled={busy}
+              onClick={save}
+            >
+              {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Guardar empresas
+            </button>
+            <FeedbackLine feedback={feedback} />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

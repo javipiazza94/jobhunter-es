@@ -23,6 +23,7 @@ SPEC = SourceSpec(
         "locations": ParamSpec("list[str]", [], "Ubicaciones"),
     },
     requires_secret="SCRAPERAPI_KEY",
+    company_query=True,
     order=60,
     run=run,
 )

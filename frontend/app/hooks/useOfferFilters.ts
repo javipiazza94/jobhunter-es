@@ -11,6 +11,7 @@ export function useOfferFilters() {
   const [textSearch, setTextSearch] = useState("");
   const [minScore, setMinScore] = useState(0);
   const [includeApplied, setIncludeApplied] = useState(false);
+  const [onlyFollowed, setOnlyFollowed] = useState(false);
   const [offersPage, setOffersPage] = useState(0);
   const [offerSortKey, setOfferSortKey] = useState<OfferSortKey>("score");
   const [offerSortDir, setOfferSortDir] = useState<SortDirection>("desc");
@@ -23,13 +24,15 @@ export function useOfferFilters() {
     setSourceFilter("all");
     setExperienceFilter("all");
     setLocationSearch("");
+    setOnlyFollowed(false);
     setOffersPage(0);
   };
 
   return {
     profileFilter, setProfileFilter, modalityFilter, setModalityFilter, sourceFilter, setSourceFilter,
     experienceFilter, setExperienceFilter, locationSearch, setLocationSearch, textSearch, setTextSearch,
-    minScore, setMinScore, includeApplied, setIncludeApplied, offersPage, setOffersPage, resetOfferFilters,
+    minScore, setMinScore, includeApplied, setIncludeApplied, onlyFollowed, setOnlyFollowed,
+    offersPage, setOffersPage, resetOfferFilters,
     offerSortKey, setOfferSortKey, offerSortDir, setOfferSortDir,
   };
 }

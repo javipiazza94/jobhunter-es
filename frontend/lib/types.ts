@@ -514,3 +514,9 @@ export interface ExpandAcceptResult {
   added: string[];
   skipped: string[];
 }
+
+export interface FollowedCompanySetting {
+  name: string;
+  tier: number;
+  aliases: string[];
+}

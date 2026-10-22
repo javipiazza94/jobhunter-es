@@ -40,6 +40,14 @@ scoring:
   negative_keywords: [cobol, mainframe, "+10 años", "10 years"]
   negative_title_keywords: [director, cto, ceo]
 
+followed_companies:
+  - name: Randstad
+    tier: 1
+    aliases: [Randstad Technologies, Randstad España]
+  - name: Manpower
+    tier: 1
+    aliases: [ManpowerGroup, Manpower España]
+
 tracks:
   - id: sap
     label: {es: SAP, en: SAP}

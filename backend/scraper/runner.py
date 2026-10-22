@@ -57,7 +57,13 @@ async def run_source(source_id: str, dry_run: bool, max_pages: int) -> None:
         except robots_gate.RobotsRefused as exc:
             logger.warning("%s: omitida porque %s", spec.label_for("es"), exc)
             return
-    ctx = source_registry.RunContext(settings=settings, keywords=list(settings.get("keywords", [])),
+    kws = list(settings.get("keywords", []))
+    if spec.company_query:
+        from search_config import followed_company_queries
+        for q in followed_company_queries():
+            if q not in kws:
+                kws.append(q)
+    ctx = source_registry.RunContext(settings=settings, keywords=kws,
                                      max_pages=max_pages, dry_run=dry_run)
     try:
         offers = await source_registry.execute(spec, ctx)
@@ -148,7 +154,13 @@ async def run_track_source(track_id: str, dry_run: bool, max_pages: int, only_so
                 except robots_gate.RobotsRefused as exc:
                     logger.warning("%s: omitida porque %s", label, exc)
                     return
-            ctx = source_registry.RunContext(settings=settings, keywords=list(keywords),
+            track_kws = list(keywords)
+            if spec.company_query:
+                from search_config import followed_company_queries
+                for q in followed_company_queries():
+                    if q not in track_kws:
+                        track_kws.append(q)
+            ctx = source_registry.RunContext(settings=settings, keywords=track_kws,
                                              track_id=track_id, max_pages=max_pages, dry_run=dry_run)
             offers = await source_registry.execute(spec, ctx)
             if not spec.persists_itself:

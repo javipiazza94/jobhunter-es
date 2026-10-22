@@ -69,8 +69,8 @@
 
 **Interfaces:** for each enabled source with `company_query`, the runner adds one query per followed company (name or alias) limited to `max_company_queries` (default 10); offers whose normalized company matches a followed company/alias get `followed_tier` (existing mechanism) even when found via keyword queries; API `GET /api/offers?followed=1`. No scraping of the companies' own sites.
 
-- [ ] Tests: alias matching (e.g. "Adecco Group", "The Adecco Group España" ↔ "Adecco"), query cap, filter endpoint, existing per-track followed companies unchanged.
-- [ ] Commit `feat(sources): empresas a seguir sobre los agregadores`.
+- [x] Tests: alias matching (e.g. "Adecco Group", "The Adecco Group España" ↔ "Adecco"), query cap, filter endpoint, existing per-track followed companies unchanged.
+- [x] Commit `feat(sources): empresas a seguir sobre los agregadores`.
 
 ### Task 5: Ack, secrets and clean-ups
 

@@ -30,6 +30,7 @@ SPEC = SourceSpec(
         "country": ParamSpec("str", "es", "País (es, mx, co, ar, pe, cl...)"),
     },
     track_pipeline=True,
+    company_query=True,
     standalone=False,
     order=40,
     run=run,

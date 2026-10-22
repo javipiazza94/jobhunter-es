@@ -37,6 +37,7 @@ SPEC = SourceSpec(
         "province_ids": ParamSpec("dict[str,str]", {}, "Ubicación → id de provincia de Tecnoempleo"),
     },
     track_pipeline=True,
+    company_query=True,
     order=10,
     run=run,
 )

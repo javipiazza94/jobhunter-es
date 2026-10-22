@@ -27,6 +27,7 @@ SPEC = SourceSpec(
         "normalized_location": ParamSpec("str", None, "Ubicación normalizada (si no hay province_id)"),
     },
     track_pipeline=True,
+    company_query=True,
     order=20,
     run=run,
 )

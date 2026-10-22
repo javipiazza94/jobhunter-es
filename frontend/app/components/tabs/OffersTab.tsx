@@ -22,12 +22,14 @@ export function OffersTab({ offers, tracks, filters, selectedIds, onToggleSelect
   const {
     profileFilter, setProfileFilter, modalityFilter, setModalityFilter, sourceFilter, setSourceFilter,
     experienceFilter, setExperienceFilter, locationSearch, setLocationSearch, textSearch, setTextSearch,
-    minScore, setMinScore, includeApplied, setIncludeApplied, offersPage, setOffersPage,
+    minScore, setMinScore, includeApplied, setIncludeApplied, onlyFollowed, setOnlyFollowed,
+    offersPage, setOffersPage,
     offerSortKey, setOfferSortKey, offerSortDir, setOfferSortDir,
   } = filters;
 
   const filteredOffers = sortOffers(offers, offerSortKey, offerSortDir).filter(o => {
     if (!includeApplied && o.is_applied) return false;
+    if (onlyFollowed && (o.followed_tier === null || o.followed_tier === undefined)) return false;
     if (textSearch) {
       const q = textSearch.toLowerCase();
       const searchable = `${o.title} ${o.company_name ?? ""} ${o.description ?? ""}`.toLowerCase();
@@ -140,6 +142,16 @@ export function OffersTab({ offers, tracks, filters, selectedIds, onToggleSelect
             className="accent-indigo-500"
           />
           Incluir enviadas
+        </label>
+
+        <label className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-gray-500 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={onlyFollowed}
+            onChange={e => { setOnlyFollowed(e.target.checked); setOffersPage(0); }}
+            className="accent-indigo-500"
+          />
+          Solo empresas seguidas
         </label>
 
         <div className="flex items-center gap-2">

@@ -19,6 +19,7 @@ def list_offers(
     conn: sqlite3.Connection,
     *,
     relevant_only: bool = False,
+    followed_only: bool = False,
     source: str | None = None,
     salary_min: int | None = None,
     salary_max: int | None = None,
@@ -51,6 +52,8 @@ def list_offers(
         conditions.append("jo.discard_status IS NULL")
     if relevant_only:
         conditions.append("jo.is_relevant = 1")
+    if followed_only:
+        conditions.append("jo.followed_tier IS NOT NULL")
     if source:
         conditions.append("jo.source = ?")
         params.append(source)

@@ -41,14 +41,14 @@ from inbox_watcher import InboxWatcher
 from job_manager import JobManager
 from rate_gate import GateRejected, RunGate
 from pydantic import ValidationError
-from search_config import AISettings, ConfigError, EmailSettings, get_config, save_config, user_config_path
+from search_config import AISettings, ConfigError, EmailSettings, get_config, save_config, set_config, user_config_path
 from schemas import (
     ApplicationOut, CompanyOut, ContactOut, CoverLetterIn, DashboardStatsOut, HistoryEntryOut, JobDetailOut,
     InboxReportOut, InboxStatusOut, JobOut, JobStartedOut, OfferOut, OutcomeIn, PendingApplicationOut,
     QuietApplicationOut, ResolveStaleIn, StatsOut, TrackOut,
     AISettingsIn, AISettingsOut, CheckOut, EmailSettingsIn, EmailSettingsOut, MarketSourceOut, SetupApplyOut,
     DocumentFileOut, InterviewPackOut, PrepareIn, ProfileIn, ScreeningRequestIn, ScreeningResultOut, SetupProposalOut, SetupStatusOut, SetupTextIn,
-    AIKeyIn, AIKeyOut, SourceSettingOut, SourcesIn, EvaluateBatchIn, CompanyResearchOut,
+    AIKeyIn, AIKeyOut, SourceSettingOut, SourcesIn, FollowedCompanyIn, FollowedCompanyOut, EvaluateBatchIn, CompanyResearchOut,
     ExpandAcceptIn, ExpandAcceptOut, ExpandIn, ExpandOut, UpskillIn, UpskillOut,
 )
 from scraper.jobs import SOURCES as SCRAPER_SOURCES, TRACK_JOB_PREFIX, TRACK_PIPELINE_SOURCES
@@ -141,6 +141,7 @@ def get_tracks():
 @app.get("/api/offers", response_model=list[OfferOut])
 def get_offers(
     relevant_only: bool = False,
+    followed: bool = False,
     source: str | None = None,
     salary_min: int | None = None,
     salary_max: int | None = None,
@@ -175,7 +176,7 @@ def get_offers(
     )
     rows = repository.list_offers(
         conn,
-        relevant_only=relevant_only, source=source, salary_min=salary_min, salary_max=salary_max,
+        relevant_only=relevant_only, followed_only=followed, source=source, salary_min=salary_min, salary_max=salary_max,
         posted_after=posted_after, min_score=min_score, experience_level=experience_level,
         contract_type=contract_type, stack=stack,
         job_kind=cfg_track.id if isolated else None, tier_first=standard_id is not None,
@@ -1084,6 +1085,36 @@ def put_sources_settings(body: SourcesIn):
     except ConfigError as exc:
         raise HTTPException(422, str(exc)) from None
     return setup_builder.sources_view()
+
+
+@app.get("/api/settings/followed-companies", response_model=list[FollowedCompanyOut])
+def get_followed_companies_settings():
+    return [
+        {"name": fc.name, "tier": fc.tier, "aliases": list(fc.aliases)}
+        for fc in get_config().followed_companies
+    ]
+
+
+@app.put("/api/settings/followed-companies", response_model=list[FollowedCompanyOut])
+def put_followed_companies_settings(body: list[FollowedCompanyIn]):
+    _require_user_config()
+    from search_config import FollowedCompany
+    cfg = get_config()
+    updated_companies = [
+        FollowedCompany(name=fc.name.strip(), tier=fc.tier, aliases=[a.strip() for a in fc.aliases if a.strip()])
+        for fc in body
+        if fc.name.strip()
+    ]
+    new_cfg = cfg.model_copy(update={"followed_companies": updated_companies})
+    try:
+        save_config(new_cfg, user_config_path())
+        set_config(new_cfg)
+    except ConfigError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return [
+        {"name": fc.name, "tier": fc.tier, "aliases": list(fc.aliases)}
+        for fc in new_cfg.followed_companies
+    ]
 
 
 if __name__ == "__main__":

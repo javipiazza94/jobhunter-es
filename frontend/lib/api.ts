@@ -12,6 +12,7 @@ import type {
   ExpandAcceptResult,
   ExpandProposal,
   ExpandResult,
+  FollowedCompanySetting,
   InboxReport,
   InboxStatus,
   InterviewPack,
@@ -121,6 +122,14 @@ export async function fetchSourceSettings(): Promise<SourceSetting[]> {
 
 export async function saveSourceSettings(update: SourcesUpdate): Promise<SourceSetting[]> {
   return checked(await sendJson(`${BASE}/api/settings/sources`, "PUT", update));
+}
+
+export async function fetchFollowedCompaniesSettings(): Promise<FollowedCompanySetting[]> {
+  return checked(await request(`${BASE}/api/settings/followed-companies`));
+}
+
+export async function saveFollowedCompaniesSettings(companies: FollowedCompanySetting[]): Promise<FollowedCompanySetting[]> {
+  return checked(await sendJson(`${BASE}/api/settings/followed-companies`, "PUT", companies));
 }
 
 /** Guarda la clave de API en el llavero (vale antes de completar el asistente); nunca se devuelve. */

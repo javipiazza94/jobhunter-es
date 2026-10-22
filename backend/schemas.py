@@ -289,6 +289,19 @@ class SourcesIn(BaseModel):
     acknowledged: list[str] = Field(default_factory=list, max_length=50)
 
 
+class FollowedCompanyIn(BaseModel):
+    """Una empresa seguida con su tier y alias opcionales."""
+    name: str = Field(..., min_length=1, max_length=100)
+    tier: int = Field(1, ge=1, le=5)
+    aliases: list[str] = Field(default_factory=list)
+
+
+class FollowedCompanyOut(_Out):
+    name: str
+    tier: int = 1
+    aliases: list[str] = []
+
+
 class AIKeyIn(BaseModel):
     """POST /api/settings/ai/key: guarda la clave en el llavero (vale antes de completar el asistente)."""
     provider: Literal["anthropic", "openai"]
