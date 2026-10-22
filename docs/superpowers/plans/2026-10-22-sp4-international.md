@@ -41,9 +41,9 @@
 - Runner/jobs dispatch use the registry for source steps; non-source steps (`seed`, `contacts`, `generic`, `resolve-websites`, `linkedin-login`, inbox) stay as they are.
 - Offers produced by a source carry `source` = the value saved today for that source (keep a `db_source_name` per spec for legacy names like "InfoJobs", "Tecnoempleo-<track>").
 
-- [ ] Characterisation tests FIRST: for each existing source, record the scraper function called and its arguments for a Javi-like config (fixture `tests/fixtures/config_legacy_like.yaml`, invented values) before refactoring; same assertions must pass after.
-- [ ] Registry tests: discovery, unique ids, every spec has label es/en, markets valid, attribution present; adding a dummy module in a temp package path is discovered.
-- [ ] Commit `refactor(scrapers): registro de fuentes autodescubiertas sin cambiar el comportamiento`.
+- [x] Characterisation tests FIRST: for each existing source, record the scraper function called and its arguments for a Javi-like config (fixture `tests/fixtures/config_legacy_like.yaml`, invented values) before refactoring; same assertions must pass after.
+- [x] Registry tests: discovery, unique ids, every spec has label es/en, markets valid, attribution present; adding a dummy module in a temp package path is discovered.
+- [x] Commit `refactor(scrapers): registro de fuentes autodescubiertas sin cambiar el comportamiento`.
 
 ### Task 2: Remote JSON sources (Remotive, RemoteOK, Arbeitnow, freehire)
 
@@ -51,8 +51,8 @@
 
 **Interfaces:** each `run(ctx)` → normalized offers `{title, company_name, location, url, posted_at, description, tech_stack, salary_text, source}`; keyword filter (the APIs' own search param when available, else client-side match on title/tags); markets `("remote",)` (+ `global` where sensible); `attribution.required=True` for remotive and remoteok; HTTP: `requests.get(url, params, timeout=20, headers={"User-Agent": "jobhunter-es (+https://github.com/javipiazza94/jobhunter-es)"})`; non-200/invalid JSON → `SourceError` caught by runner (logged, other sources continue). Endpoints: verify each API's current public documentation before coding (Remotive `https://remotive.com/api/remote-jobs?search=`, RemoteOK `https://remoteok.com/api` (first element is legal notice), Arbeitnow `https://www.arbeitnow.com/api/job-board-api`); for freehire verify a public JSON API exists — if none is documented, implement it as a disabled spec with a clear `unavailable_reason` and say so in the report (do not scrape HTML in its place).
 
-- [ ] Tests from fixtures: parsing, keyword filtering, attribution fields, error shapes (429, HTML body, missing keys) → SourceError; persistence of one parsed offer through the normal save path keeps `source` and URL.
-- [ ] Commit `feat(sources): Remotive, RemoteOK, Arbeitnow y freehire por API`.
+- [x] Tests from fixtures: parsing, keyword filtering, attribution fields, error shapes (429, HTML body, missing keys) → SourceError; persistence of one parsed offer through the normal save path keeps `source` and URL.
+- [x] Commit `feat(sources): Remotive, RemoteOK, Arbeitnow y freehire por API`.
 
 ### Task 3: Computrabajo per country + robots for HTML sources
 
@@ -102,7 +102,7 @@
 
 **Interfaces:** locale persisted in `localStorage` (`jh.locale`) and in profile `preferences.ui_language` (PATCH); initial = profile value → localStorage → `navigator.language` → es. Adding a language = add `<lang>.json` + register in `SUPPORTED` list derived from files via a generated index (no component code). Error codes: map `code` → `errors.<code>` key.
 
-- [ ] Commit `feat(i18n): infraestructura de idiomas y selector en la interfaz`.
+- [x] Commit `feat(i18n): infraestructura de idiomas y selector en la interfaz`.
 
 ### Task 9: Migrate all UI strings
 

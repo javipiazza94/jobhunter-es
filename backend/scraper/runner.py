@@ -51,7 +51,12 @@ async def run_source(source_id: str, dry_run: bool, max_pages: int) -> None:
     settings = source_settings(source_id)
     ctx = source_registry.RunContext(settings=settings, keywords=list(settings.get("keywords", [])),
                                      max_pages=max_pages, dry_run=dry_run)
-    _save_source(spec.label_for("es"), await source_registry.execute(spec, ctx), spec.id, dry_run)
+    try:
+        offers = await source_registry.execute(spec, ctx)
+    except source_registry.SourceError as err:
+        logger.error("%s failed: %s", spec.label_for("es"), err)
+        return
+    _save_source(spec.label_for("es"), offers, spec.id, dry_run)
 
 
 # Nombres históricos del CLI (y de sus tests): delegan en el registro.

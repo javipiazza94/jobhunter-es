@@ -36,7 +36,7 @@ def _dummy(source_id: str) -> str:
 
 def test_descubre_las_fuentes_existentes():
     reg = sources.registry()
-    assert set(reg) == EXISTING
+    assert EXISTING <= set(reg)
     assert list(reg)[:3] == ["tecnoempleo", "infojobs", "manfred"]
     assert sources.get("manfred").kind == "json"
     with pytest.raises(KeyError):
@@ -58,7 +58,7 @@ def test_flags_de_las_fuentes_existentes():
     assert {s.id for s in reg.values() if s.requires_ack} == {"infojobs", "linkedin"}
     assert [s.id for s in sources.track_pipeline()] == [
         "tecnoempleo", "infojobs", "computrabajo", "company_direct", "linkedin"]
-    assert set(sources.standalone_ids()) == {"tecnoempleo", "infojobs", "manfred", "linkedin", "indeed"}
+    assert {"tecnoempleo", "infojobs", "manfred", "linkedin", "indeed"} <= set(sources.standalone_ids())
     assert reg["indeed"].requires_secret == "SCRAPERAPI_KEY"
     assert reg["company_direct"].track_always and reg["company_direct"].persists_itself
     assert reg["company_direct"].markets == ()

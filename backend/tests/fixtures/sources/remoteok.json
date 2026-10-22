@@ -1,0 +1,31 @@
+[
+  {
+    "legal": "Remote OK API Legal Notice: Please link to remoteok.com"
+  },
+  {
+    "id": "2001",
+    "epoch": 1729500000,
+    "date": "2026-10-21T08:00:00+00:00",
+    "company": "DataCraft Studio",
+    "position": "Data Engineer",
+    "tags": ["python", "spark", "sql"],
+    "description": "Build high-throughput data processing pipelines using Spark and Python.",
+    "location": "Worldwide",
+    "url": "https://remoteok.com/remote-jobs/2001",
+    "salary_min": 85000,
+    "salary_max": 110000
+  },
+  {
+    "id": "2002",
+    "epoch": 1729510000,
+    "date": "2026-10-21T11:00:00+00:00",
+    "company": "Frontier UX",
+    "position": "Senior Frontend Developer",
+    "tags": ["react", "typescript", "tailwind"],
+    "description": "Design and build modern web applications using React and TypeScript.",
+    "location": "Worldwide",
+    "url": "https://remoteok.com/remote-jobs/2002",
+    "salary_min": 75000,
+    "salary_max": 95000
+  }
+]

@@ -24,6 +24,10 @@ LANGS: tuple[str, ...] = ("es", "en")
 _ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
+class SourceError(Exception):
+    """Fallo al consultar una fuente (HTTP no 200, JSON inválido o estructura inesperada)."""
+
+
 @dataclass(frozen=True)
 class Attribution:
     """Cómo citar el origen de una oferta: nombre del portal, su web (vacía si cada oferta es de una web distinta,
