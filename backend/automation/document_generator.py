@@ -533,14 +533,13 @@ def _compile_source(src: Path, out: Path, passes: int, kind: str) -> Path:
 
 
 def _ensure_cover_dependencies(out: Path) -> None:
-    """Copia cover.cls y enlaza OpenFonts junto a cover.tex (la clase usa rutas relativas).
-    Con plantilla de carta propia activa se copian sus ficheros de apoyo en su lugar."""
-    if templates_registry.copy_assets("letter", out):
-        return
+    """Copia cover.cls y enlaza OpenFonts junto a cover.tex (la clase usa rutas relativas) para la carta
+    integrada. cover.cls se vuelve a copiar siempre (nunca a través de un enlace simbólico)."""
     cover_cls_src = resolve_template_path("cover_letters/cover.cls")
     cover_cls_dst = out / "cover.cls"
-    if not cover_cls_dst.exists():
-        shutil.copy2(cover_cls_src, cover_cls_dst)
+    if cover_cls_dst.is_symlink():
+        cover_cls_dst.unlink()
+    shutil.copyfile(cover_cls_src, cover_cls_dst)
 
     openfonts_src = resolve_template_path("cover_letters/OpenFonts")
     openfonts_dst = out / "OpenFonts"
@@ -686,15 +685,20 @@ def _build_documents(
 
     out = Path(output_dir).resolve() if output_dir else (config.APPLICATIONS_DIR / "_preview").resolve()
     out.mkdir(parents=True, exist_ok=True)
-    _ensure_cover_dependencies(out)
-    templates_registry.copy_assets("cv", out)
+    # Las plantillas propias trabajan en su propia subcarpeta (out/custom_cv/, out/custom_letter/): sus ficheros
+    # no pueden pisar los de las integradas (cover.cls, OpenFonts) ni los PDFs finales de `out`.
+    cv_work = templates_registry.copy_assets("cv", out) or out
+    letter_work = templates_registry.copy_assets("letter", out)
+    if letter_work is None:
+        _ensure_cover_dependencies(out)
+        letter_work = out
 
     # 1. CV: compilar sin recortes; si no cabe, probar con todos los recortes (demuestra que cabe)
     #    y bisecar con pasos gruesos (TRIM_BISECT_STEPS compilaciones como mucho). Cada intento se
     #    guarda en memoria para restaurar el mejor sin recompilar: <= 2 + TRIM_BISECT_STEPS en total.
     keywords = [k for k in (offer_keywords or []) if k and str(k).strip()]
     ops = plan_trim_operations(trim_base, keywords)
-    cv_tex_path = out / f"cv{templates_registry.active_suffix('cv')}"
+    cv_tex_path = cv_work / f"cv{templates_registry.active_suffix('cv')}"
     cv_pdf_path = out / "cv.pdf"
     attempts: dict[int, tuple[str, bytes, int]] = {}
 
@@ -703,7 +707,7 @@ def _build_documents(
         cv_tex_path.write_text(source, encoding="utf-8")
         # Una sola pasada: la segunda solo añade los marcadores (outline) de hyperref, que un CV
         # no necesita (pdfpagemode=UseNone); texto, enlaces y maquetación salen idénticos.
-        pdf = _compile_source(cv_tex_path, out, 1, "cv")
+        pdf = _compile_source(cv_tex_path, cv_work, 1, "cv")
         pages = _page_count(pdf)
         attempts[k] = (source, pdf.read_bytes(), pages)
         return pages
@@ -735,9 +739,11 @@ def _build_documents(
     cv_pdf_path.write_bytes(pdf_bytes)
 
     # 2. Carta
-    cover_tex_path = out / f"cover{templates_registry.active_suffix('letter')}"
+    cover_tex_path = letter_work / f"cover{templates_registry.active_suffix('letter')}"
     cover_tex_path.write_text(cover_source, encoding="utf-8")
-    cover_pdf_path = _compile_source(cover_tex_path, out, 2, "letter")
+    cover_pdf_path = _compile_source(cover_tex_path, letter_work, 2, "letter")
+    if cover_pdf_path.parent != out:
+        cover_pdf_path = Path(shutil.copyfile(cover_pdf_path, out / "cover.pdf"))
     cover_pages = _page_count(cover_pdf_path)
     if cover_pages > letter_pages and not trim:
         overflows.append(("cover", cover_pages, letter_pages))

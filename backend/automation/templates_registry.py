@@ -17,10 +17,13 @@ latex|typst, compilador de una lista cerrada, límite de páginas y reglas de es
   · Toda salida `((( x )))` se escapa por defecto (`latex_escape` o `typst_escape` según el motor);
     `|safe_raw` la deja tal cual a propósito.
   · No hay comando de compilación libre: el compilador sale de una lista cerrada (tectonic, xelatex,
-    lualatex, typst) y la línea de órdenes se construye en el código con opciones seguras (sin
+    typst) y la línea de órdenes se construye en el código con opciones seguras (sin
     shell-escape; Typst con `--root` en la carpeta de trabajo). Nunca se ejecuta latexmk.
-  · LaTeX propio: se prefieren xelatex/lualatex con kpathsea paranoico (openin_any=p/openout_any=p);
-    Tectonic no confina las lecturas y solo se usa si no hay ninguno (preparar lo avisa).
+  · LaTeX propio: xelatex con kpathsea paranoico (openin_any=p/openout_any=p); lualatex no (su \\directlua
+    lee ficheros sin pasar por kpathsea). Tectonic no confina las lecturas y solo se usa si no hay xelatex
+    (preparar lo avisa). Los ficheros de la plantilla van a su propia subcarpeta (`custom_<tipo>/`), se
+    escriben sin seguir enlaces simbólicos y no pueden usar nombres reservados (cover.cls, OpenFonts/...).
+  · Render con tope de tamaño (2 MB) y de tiempo (mejor esfuerzo).
   · Registrar exige `trusted=True`: una plantilla puede leer ficheros del equipo y meterlos en el PDF.
   · Se rechaza al registrar cualquier `\\input`, `\\include`, `\\openin`... con ruta absoluta o con `..`.
 """
@@ -58,28 +61,35 @@ logger = logging.getLogger(__name__)
 
 Kind = Literal["cv", "letter"]
 Engine = Literal["latex", "typst"]
-Compiler = Literal["tectonic", "xelatex", "lualatex", "typst"]
+Compiler = Literal["tectonic", "xelatex", "typst"]
 
 BUILTIN_TEMPLATES: dict[str, str] = {"cv": "moderncv-banking", "letter": "cover-cls"}
 KINDS = tuple(BUILTIN_TEMPLATES)
 META_FILE = "template.json"
 TEMPLATE_SUFFIXES = {"latex": ".tex.j2", "typst": ".typ.j2"}
-COMPILERS: tuple[str, ...] = ("tectonic", "xelatex", "lualatex", "typst")
+# lualatex queda fuera: \directlua da acceso a io.open de Lua, que no pasa por kpathsea (openin_any=p).
+COMPILERS: tuple[str, ...] = ("tectonic", "xelatex", "typst")
 LATEX_COMPILERS = DEFAULT_ENGINES  # tectonic, xelatex, lualatex
 # Motores que kpathsea confina con openin_any=p/openout_any=p (sin rutas absolutas ni '..'). Tectonic no
 # usa kpathsea: un \input{/ruta/absoluta} se lee aunque vaya con --untrusted, así que para plantillas propias
-# solo se usa si no hay xelatex ni lualatex (y entonces se avisa).
-CONFINED_LATEX = ("xelatex", "lualatex")
+# solo se usa si no hay xelatex (y entonces se avisa).
+CONFINED_LATEX = ("xelatex",)
 TRUST_WARNING = (
     "Una plantilla puede leer ficheros de tu equipo y meterlos en el PDF que envías. "
     "Instala solo plantillas de fuentes de confianza."
 )
 UNCONFINED_WARNING = (
     "La plantilla propia se compiló con Tectonic, que no impide leer ficheros fuera de su carpeta: "
-    "instala xelatex o lualatex (TeX Live) para aislarla. " + TRUST_WARNING
+    "instala xelatex (TeX Live) para aislarla. " + TRUST_WARNING
 )
 # Ficheros de configuración que un compilador o latexmk leerían de la carpeta de trabajo: se descartan.
 IGNORED_MEMBERS = {"latexmkrc", ".latexmkrc", "texmf.cnf"}
+# Nombres que usan las plantillas integradas o el generador en la carpeta de salida: una plantilla propia no
+# puede traerlos (además, sus ficheros van siempre a su propia subcarpeta `custom_<tipo>/`).
+RESERVED_FILES = {"cover.cls", "cv.tex", "cover.tex", "cv.typ", "cover.typ", "cv.pdf", "cover.pdf"}
+RESERVED_DIRS = {"openfonts"}
+MAX_RENDER_CHARS = 2 * 1024 * 1024  # salida máxima de una plantilla propia renderizada
+RENDER_TIMEOUT = 10.0  # segundos (comprobado entre trozos de salida: mejor esfuerzo)
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
 MAX_ZIP_BYTES = 5 * 1024 * 1024
 MAX_ZIP_FILES = 200
@@ -168,6 +178,8 @@ def _legacy_compiler(cmd: Any) -> tuple[str | None, str | None]:
     name = first[0] if first else ""
     if name in COMPILERS:
         return name, None
+    if name == "lualatex":  # ya no se admite: se usa el compilador automático (xelatex o Tectonic)
+        return None, None
     return None, (
         f"Su comando de compilación ({name or 'vacío'}) ya no se admite: vuelve a registrarla eligiendo "
         f"compilador ({', '.join(COMPILERS)})"
@@ -177,6 +189,8 @@ def _legacy_compiler(cmd: Any) -> tuple[str | None, str | None]:
 def _read_meta(path: Path) -> TemplateMeta | None:
     try:
         data = json.loads((path / META_FILE).read_text(encoding="utf-8"))
+        if isinstance(data, dict) and data.get("compiler") == "lualatex":
+            data["compiler"] = None  # ya no se admite: compilador automático (xelatex o Tectonic)
         if isinstance(data, dict) and "compile_cmd" in data:
             legacy = data.pop("compile_cmd")
             if legacy and not data.get("compiler"):
@@ -272,6 +286,25 @@ class _Escaped(str):
     """Texto ya escapado (o crudo a propósito con `safe_raw`): `finalize` no lo vuelve a escapar."""
 
 
+class _LimitedSandbox(jinja2.sandbox.ImmutableSandboxedEnvironment):
+    """Sandbox que además limita el tamaño de las cadenas/listas que crean `*` y `+` (mejor esfuerzo contra
+    `'a' * 10**9`). `range` ya viene limitado por el sandbox de Jinja (MAX_RANGE)."""
+
+    intercepted_binops = frozenset({"*", "+", "**"})
+
+    def call_binop(self, context, operator, left, right):  # noqa: ANN001 — firma de Jinja
+        if operator == "**" and isinstance(right, int) and abs(right) > 64:
+            raise TemplateRenderError("La plantilla supera el límite de cálculo (potencia demasiado grande)")
+        if operator == "*":
+            seq, times = (left, right) if isinstance(right, int) else (right, left)
+            if isinstance(seq, (str, list, tuple)) and isinstance(times, int) and len(seq) * times > MAX_RENDER_CHARS:
+                raise TemplateRenderError("La plantilla supera el límite de tamaño (2 MB)")
+        if operator == "+" and isinstance(left, (str, list, tuple)) and isinstance(right, (str, list, tuple)):
+            if len(left) + len(right) > MAX_RENDER_CHARS:
+                raise TemplateRenderError("La plantilla supera el límite de tamaño (2 MB)")
+        return super().call_binop(context, operator, left, right)
+
+
 def _custom_jinja_env(directory: Path, engine: str) -> jinja2.sandbox.ImmutableSandboxedEnvironment:
     """Entorno de las plantillas PROPIAS: aislado (sin acceso a atributos internos de Python ni a métodos
     que muten datos), mismos delimitadores que las integradas y escape por defecto de toda salida según el
@@ -287,7 +320,7 @@ def _custom_jinja_env(directory: Path, engine: str) -> jinja2.sandbox.ImmutableS
             return ""
         return escape(value)
 
-    env = jinja2.sandbox.ImmutableSandboxedEnvironment(
+    env = _LimitedSandbox(
         block_start_string="((*",
         block_end_string="*))",
         variable_start_string="(((",
@@ -310,9 +343,27 @@ def _custom_jinja_env(directory: Path, engine: str) -> jinja2.sandbox.ImmutableS
 def _render(directory: Path, engine: str, main_file: str, context: dict) -> str:
     """Renderiza una plantilla propia en el entorno aislado. Cualquier fallo (sintaxis, variable que no
     existe, acceso bloqueado → SecurityError) se convierte en TemplateRenderError con el motivo."""
+    import time
+
     try:
-        source = _custom_jinja_env(directory, engine).get_template(main_file).render(**context)
+        template = _custom_jinja_env(directory, engine).get_template(main_file)
+        deadline = time.monotonic() + RENDER_TIMEOUT
+        parts: list[str] = []
+        size = 0
+        # Render por trozos con tope de tamaño y de tiempo (mejor esfuerzo: entre trozo y trozo)
+        for chunk in template.generate(**context):
+            size += len(chunk)
+            if size > MAX_RENDER_CHARS:
+                raise TemplateRenderError("La plantilla supera el límite de tamaño (2 MB)")
+            if time.monotonic() > deadline:
+                raise TemplateRenderError(f"La plantilla supera el límite de tiempo ({RENDER_TIMEOUT:g} s)")
+            parts.append(chunk)
+        source = "".join(parts)
+    except TemplateRenderError:
+        raise
     except Exception as exc:  # noqa: BLE001 — jinja2.TemplateError, SecurityError, TypeError de la plantilla...
+        if isinstance(exc, OverflowError) and "range" in str(exc).lower():
+            raise TemplateRenderError(f"La plantilla supera el límite de cálculo ({exc})") from None
         raise TemplateRenderError(f"La plantilla no se puede renderizar: {type(exc).__name__}: {exc}") from None
     if engine == "latex":
         lint_latex(source, main_file)
@@ -330,25 +381,61 @@ def render_active(kind: str, context: dict) -> str | None:
     return None if info is None else _render_file(info, context)
 
 
-def copy_assets(kind: str, out_dir: Path) -> bool:
-    """Copia los ficheros de apoyo de la plantilla propia activa (clases, fuentes, imágenes) junto al
-    fuente, sobrescribiendo los de una preparación anterior. Devuelve False si manda la integrada."""
+def custom_workdir(kind: str, out_dir: Path) -> Path:
+    """Carpeta de trabajo propia de la plantilla de `kind` dentro de `out_dir` (`custom_cv/`, `custom_letter/`),
+    recreada vacía: sus ficheros nunca se mezclan con los de las integradas (cover.cls, OpenFonts...)."""
+    work = Path(out_dir) / f"custom_{_check_kind(kind)}"
+    if work.is_symlink() or work.is_file():
+        work.unlink()
+    elif work.exists():
+        shutil.rmtree(work)  # rmtree no sigue enlaces simbólicos de dentro
+    work.mkdir(parents=True)
+    return work
+
+
+def copy_assets(kind: str, out_dir: Path) -> Path | None:
+    """Copia los ficheros de apoyo de la plantilla propia activa (clases, fuentes, imágenes) en su carpeta de
+    trabajo `out_dir/custom_<kind>/` (recreada en cada preparación) y la devuelve; None si manda la integrada."""
     info = active_template(kind)
     if info is None:
-        return False
-    _copy_support_files(template_dir(kind, info.name), Path(out_dir))
-    return True
+        return None
+    work = custom_workdir(kind, out_dir)
+    _copy_support_files(template_dir(kind, info.name), work)
+    return work
+
+
+def _safe_write(root: Path, rel: PurePosixPath, data: bytes) -> Path:
+    """Escribe `root/rel` sin seguir nunca enlaces simbólicos (ni en las carpetas intermedias ni en el
+    fichero final: O_NOFOLLOW) y sin salir de `root`. Lanza TemplateError si algo no cuadra."""
+    root = Path(root).resolve()
+    if rel.is_absolute() or ".." in rel.parts or not rel.parts:
+        raise TemplateError(f"Ruta no permitida en la plantilla: {rel}")
+    current = root
+    for part in rel.parts[:-1]:
+        current = current / part
+        if current.is_symlink():
+            raise TemplateError(f"Ruta no permitida (enlace simbólico) en la plantilla: {rel}")
+        if not current.exists():
+            current.mkdir()
+        elif not current.is_dir():
+            raise TemplateError(f"Ruta no permitida en la plantilla: {rel}")
+    dest = current / rel.name
+    if dest.is_symlink() or not dest.resolve().is_relative_to(root):
+        raise TemplateError(f"Ruta no permitida (fuera de la carpeta de trabajo) en la plantilla: {rel}")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(dest, flags, 0o644)
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(data)
+    return dest
 
 
 def _copy_support_files(src: Path, dest_root: Path) -> None:
-    for path in src.rglob("*"):
+    for path in sorted(src.rglob("*")):
         rel = path.relative_to(src)
         if (not path.is_file() or path.is_symlink() or rel.name == META_FILE or path.name.endswith(".j2")
                 or path.name.lower() in IGNORED_MEMBERS):
             continue
-        dest = dest_root / rel
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, dest)
+        _safe_write(dest_root, PurePosixPath(rel.as_posix()), path.read_bytes())
 
 
 def _check_compiler(compiler: Any) -> str:
@@ -360,7 +447,7 @@ def _check_compiler(compiler: Any) -> str:
 def compile_argv(compiler: str, source: Path, out_dir: Path, passes: int = 1) -> list[str]:
     """Línea de órdenes fija y segura de cada compilador (sin shell ni opciones de la plantilla):
     - tectonic: `--untrusted` (desactiva shell-escape y demás funciones inseguras).
-    - xelatex / lualatex: `-no-shell-escape -interaction=nonstopmode -halt-on-error -output-directory=<out>`.
+    - xelatex: `-no-shell-escape -interaction=nonstopmode -halt-on-error -output-directory=<out>`.
     - typst: `compile --root <carpeta del fuente>` (no puede leer fuera de la carpeta de trabajo).
     Nunca latexmk (ejecutaría el Perl de un latexmkrc)."""
     compiler = _check_compiler(compiler)
@@ -393,8 +480,8 @@ def is_unconfined(compiler: str) -> bool:
 def resolve_compiler(engine: str, compiler: str | None) -> str:
     """Compilador que se usará para una plantilla PROPIA:
     - Typst: typst (confinado con --root).
-    - LaTeX: xelatex o lualatex si hay alguno (kpathsea en modo paranoico); el elegido entre ellos si está.
-      Tectonic, aunque se haya elegido, solo si no hay ninguno de los dos (no confina las lecturas).
+    - LaTeX: xelatex si está (kpathsea en modo paranoico). Tectonic, aunque se haya elegido, solo si no hay
+      xelatex (no confina las lecturas). lualatex no se usa: \\directlua lee ficheros fuera de kpathsea.
     Lanza EngineMissing si no está instalado."""
     if compiler:
         _check_compiler(compiler)
@@ -407,7 +494,7 @@ def resolve_compiler(engine: str, compiler: str | None) -> str:
         if not chosen:
             chosen = "tectonic" if _resolve_binary("tectonic") is not None else ""
         if not chosen:
-            raise EngineMissing("Instala TeX Live (xelatex o lualatex) o Tectonic para usar plantillas LaTeX")
+            raise EngineMissing("Instala TeX Live (xelatex) o Tectonic para usar plantillas LaTeX")
     if (engine == "typst") != (chosen == "typst"):
         raise TemplateError(f"El compilador {chosen} no sirve para plantillas {engine}")
     if _resolve_binary(chosen) is None:
@@ -469,16 +556,27 @@ _FILE_COMMANDS = (
 _FILE_ARG = re.compile(
     r"\\(" + "|".join(_FILE_COMMANDS) + r")(?![A-Za-z@])\d*\s*(?:=\s*)?(?:\[[^\]]*\]\s*)*(?:\{([^}]*)\}|([^\s{}\\%]+))"
 )
-_TEXT_SUFFIXES = (".j2", ".tex", ".sty", ".cls", ".def", ".cfg", ".clo", ".ltx", ".bib", ".typ")
-
-
 def _bad_path(path: str) -> bool:
-    p = path.strip().replace("\\", "/")
+    p = re.sub(r"\s+", "", path).strip("\"'").replace("\\", "/")
     return bool(p) and (p.startswith(("/", "~")) or re.match(r"^[A-Za-z]:", p) is not None
                         or ".." in PurePosixPath(p).parts or "../" in p)
 
 
 _CATCODE = re.compile(r"\\catcode(?![A-Za-z@])")
+_COMMENT = re.compile(r"(?<!\\)%[^\n]*\n?")  # en TeX, % se come el resto de la línea y el salto
+_READ_CS = r"(?:input|include|openin|read|@@input|InputIfFileExists|IfFileExists|lstinputlisting|verbatiminput)"
+_FORBIDDEN = [
+    (re.compile(r"\\@@input(?![A-Za-z])"), "\\@@input"),
+    (re.compile(r"\\(?:directlua|luaexec|luadirect|latelua|luacode|luacodestar)(?![A-Za-z])|\{luacode\*?\}"),
+     "código Lua (\\directlua, luacode...)"),
+    (re.compile(r"\\write\s*18(?![0-9])|\\ShellEscape(?![A-Za-z])"), "shell-escape (\\write18)"),
+    (re.compile(r"\\(?:let|futurelet)\s*\\[A-Za-z@]+\s*=?\s*\\" + _READ_CS + r"(?![A-Za-z@])"),
+     "un alias (\\let) de una orden de lectura"),
+    (re.compile(r"\\(?:input|include|@@input)\s*\\"), "\\input seguido de una macro (ruta oculta)"),
+    (re.compile(r"\\(?:input|include|InputIfFileExists|IfFileExists|lstinputlisting|verbatiminput)\s*(?:\[[^\]]*\]\s*)*\{[^}]*\\"),
+     "una ruta construida con macros"),
+]
+_OPENIN_CS = re.compile(r"\\openin\s*(?:\d+|\\[A-Za-z@]+)\s*=?\s*(\S+)")
 _CSNAME_FILE = re.compile(
     r"\\csname\s*@*(?:input|include|openin|read|InputIfFileExists|IfFileExists|includegraphics|"
     r"lstinputlisting|verbatiminput|import|subimport|subfile)\b"
@@ -490,6 +588,14 @@ def lint_latex(text: str, filename: str) -> None:
     \\catcode, órdenes de lectura construidas con \\csname y lecturas fuera de la carpeta:
     `\\input{/…}`, `\\include{../…}`, `\\openin5=/…` y similares: una plantilla solo puede leer
     ficheros de su propia carpeta (y paquetes de la distribución TeX por nombre)."""
+    text = _COMMENT.sub("", text)
+    for regex, what in _FORBIDDEN:
+        if regex.search(text):
+            raise TemplateError(f"La plantilla usa {what} ({filename}): no se permite")
+    m = _OPENIN_CS.search(text)
+    if m and _bad_path(m.group(1)):
+        raise TemplateError(f"La plantilla lee un fichero fuera de su carpeta (\\openin {m.group(1)} en {filename}): "
+                            "no se permiten rutas absolutas, con ~ ni con '..'")
     if _CATCODE.search(text):
         raise TemplateError(f"La plantilla cambia \\catcode ({filename}): no se permite (podría ocultar lecturas de ficheros)")
     m = _CSNAME_FILE.search(text)
@@ -504,10 +610,31 @@ def lint_latex(text: str, filename: str) -> None:
                 )
 
 
+def _is_binary(data: bytes) -> bool:
+    if b"\x00" in data[:8192]:
+        return True
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        return True
+    return False
+
+
 def _lint_files(files: dict[str, bytes]) -> None:
+    """Lint de TODOS los ficheros de texto de la plantilla (TeX puede leer cualquiera con \\input), no solo
+    de los .tex/.j2; los binarios (fuentes, imágenes) se saltan."""
     for name, data in files.items():
-        if name.lower().endswith(_TEXT_SUFFIXES):
-            lint_latex(data.decode("utf-8", errors="replace"), name)
+        if not _is_binary(data):
+            lint_latex(data.decode("utf-8"), name)
+
+
+def _check_reserved(names: list[str]) -> None:
+    for name in names:
+        parts = PurePosixPath(name).parts
+        if (parts and parts[0].lower() in RESERVED_DIRS) or (len(parts) == 1 and parts[0].lower() in RESERVED_FILES):
+            raise TemplateError(
+                f"'{name}' es un nombre reservado de las plantillas integradas o del generador: renómbralo"
+            )
 
 
 # ── Registro ───────────────────────────────────────────────────────────────────
@@ -625,6 +752,7 @@ def register_template(
     compiler = (compiler or "").strip() or None
     if compiler is not None:
         _check_compiler(compiler)
+    _check_reserved(list(clean))
     if engine == "latex":
         _lint_files(clean)
     if trusted is not True:

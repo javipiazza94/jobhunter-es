@@ -4,7 +4,7 @@ import json
 import shutil
 import sys
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -198,9 +198,11 @@ class TestRegistration:
         templates_registry.activate_template("letter", "conclase")
         out = tmp_path / "out"
         out.mkdir()
-        assert templates_registry.copy_assets("letter", out) is True
-        assert (out / "mi.cls").read_bytes() == b"cls" and (out / "fuentes" / "f.ttf").is_file()
-        assert not (out / "c.tex.j2").exists() and not (out / "template.json").exists()
+        work = templates_registry.copy_assets("letter", out)
+        assert work == out / "custom_letter"  # carpeta propia, nunca junto a los ficheros integrados
+        assert (work / "mi.cls").read_bytes() == b"cls" and (work / "fuentes" / "f.ttf").is_file()
+        assert not (work / "c.tex.j2").exists() and not (work / "template.json").exists()
+        assert not (out / "mi.cls").exists()
 
 
 def _cv_ctx() -> dict:
@@ -337,11 +339,10 @@ class TestSandbox:
 class TestCompilerArgv:
     def test_fixed_argv_per_compiler(self, tmp_path):
         src, out = tmp_path / "cv.tex", tmp_path / "out"
-        for engine in ("xelatex", "lualatex"):
-            assert templates_registry.compile_argv(engine, src, out) == [
-                engine, "-no-shell-escape", "-interaction=nonstopmode", "-halt-on-error",
-                f"-output-directory={out}", str(src),
-            ]
+        assert templates_registry.compile_argv("xelatex", src, out) == [
+            "xelatex", "-no-shell-escape", "-interaction=nonstopmode", "-halt-on-error",
+            f"-output-directory={out}", str(src),
+        ]
         assert templates_registry.compile_argv("tectonic", src, out, passes=1) == [
             "tectonic", "--untrusted", "-o", str(out), "--reruns", "0", str(src),
         ]
@@ -353,7 +354,7 @@ class TestCompilerArgv:
             "typst", "compile", "--root", str(tmp_path), str(typ), str(out / "cv.pdf"),
         ]
 
-    @pytest.mark.parametrize("compiler", ["latexmk", "pdflatex", "sh", "xelatex -shell-escape"])
+    @pytest.mark.parametrize("compiler", ["latexmk", "pdflatex", "lualatex", "sh", "xelatex -shell-escape"])
     def test_unknown_compiler_rejected(self, tmp_path, compiler):
         with pytest.raises(templates_registry.TemplateError, match="compilador"):
             templates_registry.compile_argv(compiler, tmp_path / "a.tex", tmp_path)
@@ -473,9 +474,9 @@ def test_assets_are_refreshed_when_the_template_changes(home, monkeypatch, tmp_p
     out.mkdir()
     templates_registry.copy_assets("letter", out)
     _register("conclase", "letter", {"c.tex.j2": b"x", "mi.cls": b"v2"})
-    templates_registry.copy_assets("letter", out)
-    assert (out / "mi.cls").read_bytes() == b"v2"
-    assert not (out / "latexmkrc").exists()
+    work = templates_registry.copy_assets("letter", out)
+    assert (work / "mi.cls").read_bytes() == b"v2"
+    assert not (work / "latexmkrc").exists()
 
 
 # ── Confirmación de confianza, compilador confinado y lint reforzado (revisión SP3, 2.ª ronda) ──
@@ -503,9 +504,8 @@ class TestTrustAndConfinement:
 
     @pytest.mark.parametrize("available,chosen,expected", [
         ({"tectonic", "xelatex", "lualatex"}, None, "xelatex"),
-        ({"tectonic", "lualatex"}, None, "lualatex"),
+        ({"tectonic", "lualatex"}, None, "tectonic"),       # lualatex no se usa (\directlua escapa de kpathsea)
         ({"tectonic", "xelatex"}, "tectonic", "xelatex"),   # Tectonic no confina: se prefiere xelatex
-        ({"tectonic", "xelatex", "lualatex"}, "lualatex", "lualatex"),
         ({"tectonic"}, None, "tectonic"),
         ({"tectonic"}, "xelatex", None),                     # el elegido no está: EngineMissing
     ])
@@ -518,7 +518,7 @@ class TestTrustAndConfinement:
             assert templates_registry.resolve_compiler("latex", chosen) == expected
         assert templates_registry.is_unconfined(expected or "xelatex") == (expected == "tectonic")
 
-    @pytest.mark.parametrize("engine", ["xelatex", "lualatex"])
+    @pytest.mark.parametrize("engine", ["xelatex"])
     def test_classic_engine_gets_paranoid_kpathsea_env(self, tmp_path, monkeypatch, engine):
         seen = []
 
@@ -564,3 +564,130 @@ class TestTrustAndConfinement:
         monkeypatch.setattr(templates_registry, "_resolve_binary", lambda name: f"/usr/bin/{name}")
         with pytest.raises(templates_registry.TemplateError, match="fuera de su carpeta|catcode|csname"):
             _register("lint", "cv", {"c.tex.j2": src.encode()})
+
+
+# ── 3.ª ronda: carpeta propia para los ficheros de la plantilla, lint ampliado y límites de render ──
+
+class TestIsolatedAssets:
+    @pytest.mark.parametrize("member", ["cover.cls", "OpenFonts/fonts/lato.ttf", "cv.tex", "cover.tex", "COVER.CLS"])
+    def test_reserved_names_rejected_at_registration(self, home, monkeypatch, member):
+        monkeypatch.setattr(templates_registry, "_test_compile", lambda *a, **k: None)
+        with pytest.raises(templates_registry.TemplateError, match="reservado"):
+            _register("res", "cv", {"c.tex.j2": b"x", member: b"y"})
+
+    def test_symlinked_openfonts_and_cover_cls_cannot_be_overwritten(self, home, tmp_path):
+        """Una plantilla instalada antes (sin la comprobación de nombres) con OpenFonts/<fuente> y cover.cls no
+        pisa nada fuera de su carpeta: ni la fuente del enlace simbólico OpenFonts ni el cover.cls integrado."""
+        repo_fonts = tmp_path / "repo_fonts"
+        (repo_fonts / "fonts").mkdir(parents=True)
+        (repo_fonts / "fonts" / "lato.ttf").write_bytes(b"FUENTE-ORIGINAL")
+        out = tmp_path / "out"
+        out.mkdir()
+        (out / "OpenFonts").symlink_to(repo_fonts, target_is_directory=True)
+        (out / "cover.cls").write_bytes(b"CLASE-INTEGRADA")
+        _install_raw(home, "letter", "mala", {"c.tex.j2": "x", "cover.cls": "MALA", "OpenFonts/fonts/lato.ttf": "MALA"})
+        work = templates_registry.copy_assets("letter", out)
+        assert (repo_fonts / "fonts" / "lato.ttf").read_bytes() == b"FUENTE-ORIGINAL"
+        assert (out / "cover.cls").read_bytes() == b"CLASE-INTEGRADA"
+        assert (work / "cover.cls").read_text() == "MALA" and work.resolve().parent == out.resolve()
+
+    def test_symlink_inside_work_dir_is_never_followed(self, home, tmp_path):
+        target = tmp_path / "fuera"
+        target.mkdir()
+        out = tmp_path / "out"
+        (out / "custom_letter").mkdir(parents=True)
+        (out / "custom_letter" / "sub").symlink_to(target, target_is_directory=True)
+        _install_raw(home, "letter", "mala", {"c.tex.j2": "x", "sub/x.sty": "MALA"})
+        work = templates_registry.copy_assets("letter", out)  # la carpeta se recrea: el enlace desaparece
+        assert not any(target.iterdir())
+        assert (work / "sub" / "x.sty").read_text() == "MALA" and not (work / "sub").is_symlink()
+
+    def test_safe_write_refuses_symlinked_component_and_escapes(self, tmp_path):
+        root = tmp_path / "root"
+        root.mkdir()
+        (root / "link").symlink_to(tmp_path, target_is_directory=True)
+        with pytest.raises(templates_registry.TemplateError):
+            templates_registry._safe_write(root, PurePosixPath("link/x.sty"), b"y")
+        with pytest.raises(templates_registry.TemplateError):
+            templates_registry._safe_write(root, PurePosixPath("../x.sty"), b"y")
+        (root / "f.sty").symlink_to(tmp_path / "victima.sty")
+        with pytest.raises(templates_registry.TemplateError):
+            templates_registry._safe_write(root, PurePosixPath("f.sty"), b"y")
+        assert not (tmp_path / "victima.sty").exists() and not (tmp_path / "x.sty").exists()
+
+    @requires_engine
+    def test_custom_cv_with_cover_cls_leaves_builtin_letter_intact(self, home, tmp_path):
+        """CV propio que trae cover.cls y OpenFonts/: la carta integrada sigue compilando con su clase."""
+        tpl = "\\documentclass[a4paper]{article}\n\\begin{document}\nCV-PROPIO ((( personal.name )))\n\\end{document}\n"
+        _install_raw(home, "cv", "propia", {"c.tex.j2": tpl, "cover.cls": "\\ClassError{x}{roto}{}", "OpenFonts/a.ttf": "x"},
+                     trusted=True)
+        profile = json.loads((config.REPO_ROOT / "backend" / "profile.example.json").read_text(encoding="utf-8"))
+        out = document_generator.generate_deterministic_documents(profile_data=profile, output_dir=tmp_path / "o",
+                                                                  verify=False)
+        builtin_cls = (config.REPO_ROOT / "templates" / "latex" / "cover_letters" / "cover.cls").read_bytes()
+        assert (tmp_path / "o" / "cover.cls").read_bytes() == builtin_cls
+        assert out["cover_pdf"] == tmp_path / "o" / "cover.pdf" and out["cover_pdf"].is_file()
+        assert out["cv_pdf"] == tmp_path / "o" / "cv.pdf" and out["cv_pdf"].is_file()
+        assert out["cv_tex"].parent == tmp_path / "o" / "custom_cv"
+        assert "CV-PROPIO" in out["cv_tex"].read_text(encoding="utf-8")
+
+
+class TestLintBypasses:
+    @pytest.mark.parametrize("src", [
+        '\\input"/etc/passwd"',
+        "\\@@input /etc/passwd",
+        "\\def\\x{/etc/passwd}\\input\\x",
+        "\\input{\\x}",
+        "\\let\\foo\\input \\foo{/etc/passwd}",
+        "\\global\\let\\foo=\\openin",
+        "\\newread\\r \\openin\\r=/etc/passwd",
+        "\\openin\\r /etc/passwd",
+        "\\input{%\n/etc/passwd}",
+        "\\directlua{io.open('/etc/passwd')}",
+        "\\luaexec{x}",
+        "\\begin{luacode}x\\end{luacode}",
+        "\\IfFileExists{/etc/passwd}{}{}",
+        "\\InputIfFileExists{../x}{}{}",
+        "\\immediate\\write18{id}",
+    ])
+    def test_reviewer_bypasses_are_rejected(self, home, monkeypatch, src):
+        monkeypatch.setattr(templates_registry, "_resolve_binary", lambda name: f"/usr/bin/{name}")
+        with pytest.raises(templates_registry.TemplateError, match="no se permite|fuera de su carpeta"):
+            _register("lint", "cv", {"c.tex.j2": src.encode()})
+
+    @pytest.mark.parametrize("name", ["datos.txt", "macros.inc", "sin-extension", "estilo.code"])
+    def test_every_text_support_file_is_linted(self, home, monkeypatch, name):
+        monkeypatch.setattr(templates_registry, "_test_compile", lambda *a, **k: None)
+        with pytest.raises(templates_registry.TemplateError, match="fuera de su carpeta"):
+            _register("lint", "cv", {"c.tex.j2": b"x", name: b"\\input{/etc/passwd}"})
+
+    def test_binary_files_are_not_linted_and_relative_reads_pass(self, home, monkeypatch):
+        monkeypatch.setattr(templates_registry, "_test_compile", lambda *a, **k: None)
+        _register("ok", "cv", {"c.tex.j2": b"\\input{sec/a} % comentario \\input /x", "sec/a.tex": b"y",
+                               "foto.png": b"\x89PNG\x00\\input{/etc/passwd}"})
+
+
+class TestRenderLimits:
+    def test_huge_string_is_rejected_quickly(self, tmp_path):
+        import time
+
+        (tmp_path / "t.tex.j2").write_text("((( 'a' * 10**9 )))", encoding="utf-8")
+        start = time.monotonic()
+        with pytest.raises(templates_registry.TemplateRenderError, match="límite"):
+            templates_registry._render(tmp_path, "latex", "t.tex.j2", {})
+        assert time.monotonic() - start < 2
+
+    @pytest.mark.parametrize("body", [
+        "((* for i in range(10**6) *))((( 'x' * 100 )))((* endfor *))",
+        "((* for i in range(90000) *))((* for j in range(90000) *))x((* endfor *))((* endfor *))",
+        "((( ('ab' + 'c' * 1000000) * 3 )))",
+    ])
+    def test_output_and_time_are_capped(self, tmp_path, monkeypatch, body):
+        import time
+
+        monkeypatch.setattr(templates_registry, "RENDER_TIMEOUT", 1.0)
+        (tmp_path / "t.tex.j2").write_text(body, encoding="utf-8")
+        start = time.monotonic()
+        with pytest.raises(templates_registry.TemplateRenderError, match="límite"):
+            templates_registry._render(tmp_path, "latex", "t.tex.j2", {})
+        assert time.monotonic() - start < 5

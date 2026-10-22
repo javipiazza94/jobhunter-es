@@ -7,7 +7,7 @@ import type { TemplateCompiler, TemplateEngine, TemplateInfo, TemplateKind } fro
 
 /** Compiladores admitidos por motor (lista cerrada, igual que en el backend). */
 export const COMPILERS: Record<TemplateEngine, TemplateCompiler[]> = {
-  latex: ["tectonic", "xelatex", "lualatex"],
+  latex: ["tectonic", "xelatex"],
   typst: ["typst"],
 };
 

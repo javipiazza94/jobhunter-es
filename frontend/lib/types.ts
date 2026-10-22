@@ -322,7 +322,7 @@ export interface DocumentFile {
  *  `invalid_reason` != null: plantilla antigua con un comando de compilación que ya no se admite. */
 export type TemplateKind = "cv" | "letter";
 export type TemplateEngine = "latex" | "typst";
-export type TemplateCompiler = "tectonic" | "xelatex" | "lualatex" | "typst";
+export type TemplateCompiler = "tectonic" | "xelatex" | "typst";
 export interface TemplateInfo {
   name: string;
   kind: TemplateKind;
