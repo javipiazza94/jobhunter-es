@@ -8,7 +8,7 @@ framework_version: 1.0.2
 
 Cover letters use a custom LaTeX document class (`cover.cls`) with Lato/Raleway fonts.
 
-**Output file:** `cover_letters/cover_<company>_<role>.tex`
+> **In this repo** the letter is generated with the CV by `python -m automation.application_documents prepare <id>` (template `templates/latex/cover_letters/cover.tex.j2` or the active custom one) and archived as `JH_HOME/applications/<id>/cover.pdf`. The rules below are the style reference; example file names are illustrative.
 **Compile with:** XeLaTeX (cover.cls requires fontspec)
 **Font directory:** `cover_letters/OpenFonts/fonts/`
 

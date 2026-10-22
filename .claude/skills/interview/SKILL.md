@@ -32,7 +32,7 @@ EOF
 
 - Sin argumento: quita el filtro por nombre y lista las de `interview`/`offer`/`replied` para que el usuario elija.
 - **Ojo:** puede haber varias filas por empresa o intermediarios/subcontratas. Confirma por **puesto** antes de seguir.
-- Si no está en la BD: la candidatura se hizo fuera del sistema. Regístrala primero con `scripts/add_application.py`, o prepara igual con lo que pegue el usuario.
+- Si no está en la BD: la candidatura se hizo fuera del sistema. Regístrala primero con `backend/scripts/add_application.py`, o prepara igual con lo que pegue el usuario.
 
 ## Paso 1 — Cargar el contexto (una sola vez)
 
@@ -62,7 +62,7 @@ EOF
 
 Secciones, adaptadas a la fase:
 
-1. **Preguntas probables**, por prioridad: (1) lo que quedó abierto en fases anteriores; (2) los huecos entre la oferta y el perfil, la pregunta más probable, cada uno con **respuesta puente**: reconocer → experiencia cercana real → plan de aprendizaje (usa `known_gaps` si ya lo cubre); (3) los requisitos de la oferta uno a uno; (4) las típicas de la fase (RRHH: motivación, disponibilidad, pretensión salarial con `salary_expectation` y `automation/salary.py`; técnica: el stack de la oferta; final: valores, encaje y "¿alguna duda sobre ti?").
+1. **Preguntas probables**, por prioridad: (1) lo que quedó abierto en fases anteriores; (2) los huecos entre la oferta y el perfil, la pregunta más probable, cada uno con **respuesta puente**: reconocer → experiencia cercana real → plan de aprendizaje (usa `known_gaps` si ya lo cubre); (3) los requisitos de la oferta uno a uno; (4) las típicas de la fase (RRHH: motivación, disponibilidad, pretensión salarial con `salary_expectation` y `backend/automation/salary.py`; técnica: el stack de la oferta; final: valores, encaje y "¿alguna duda sobre ti?").
 2. **Respuestas STAR**: asigna `sap_case_studies` y logros de `experience` a las preguntas. Si una pregunta no la cubre ningún caso, redacta uno nuevo **solo con hechos del perfil**, sin adornos. Si falta un dato (cifra, alcance), pregúntalo en vez de inventarlo.
 3. **Coherencia**: lista corta de lo que afirman la carta y el CV enviados (logros, cifras, tecnologías destacadas) y que es más probable que pregunten. Regla: nada en la sala que no esté en el papel, y todo lo del papel defendible en profundidad.
 4. **Preguntas difíciles** personalizadas: "¿por qué esta empresa?" (con los ganchos verificados), "háblame de ti" (60-90 s, enfocado al puesto), cambio de trayectoria (DAM/Data Science → SAP), "¿por qué dejas…?", pretensión salarial.
