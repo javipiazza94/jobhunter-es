@@ -157,7 +157,9 @@ def test_sources_keywords_union_and_requires_ack_dropped_without_ack():
 
 
 def test_markets_only_list_existing_sources():
-    runnable = {"tecnoempleo", "infojobs", "manfred", "computrabajo", "indeed", "linkedin"}
+    from scraper import sources as sources_mod
+
+    runnable = set(sources_mod.registry())
     markets = load_markets()
     assert set(markets) == {"spain", "latam", "remote", "global"}
     for sources in markets.values():

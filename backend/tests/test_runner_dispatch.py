@@ -154,6 +154,7 @@ def _fake_track_sources(monkeypatch, seen, infojobs_falla=False):
     monkeypatch.setattr(scraper.computrabajo, "run_computrabajo", computrabajo)
     monkeypatch.setattr(scraper.company_direct, "run_company_direct", company_direct)
     monkeypatch.setattr(scraper.linkedin_jobs, "run_linkedin_jobs", linkedin)
+    monkeypatch.setattr("scraper.robots_gate.check_robots", lambda *a, **kw: True)
 
 
 def test_track_lanza_las_fuentes_con_las_keywords_del_track(monkeypatch):

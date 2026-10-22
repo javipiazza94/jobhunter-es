@@ -60,8 +60,8 @@
 
 **Interfaces:** `COUNTRY_DOMAINS = {"es": "https://www.computrabajo.es", "mx": "https://mx.computrabajo.com", "co": "https://co.computrabajo.com", "ar": "https://ar.computrabajo.com", "pe": "https://pe.computrabajo.com", "cl": "https://cl.computrabajo.com", …}` — verify the URL pattern and search path per country against the live site docs/robots before coding (do not guess: if a country uses a different search path, encode it per country); param `country` (default `es`), market `latam` for non-es and `spain` for es. Robots: before a Playwright/HTML source run, `robots_check.gate(start_url_for(settings))`; refused → source skipped with reason `robots.txt no permite …` recorded in the job log/result; LinkedIn exempt only when acknowledged (Task 5 wires ack); `--ignore-robots` NOT offered.
 
-- [ ] Tests: URL building per country with fixture HTML per country (at least es + mx + co), robots refusal skips (mock), Spain default unchanged (characterisation from Task 1).
-- [ ] Commit `feat(sources): Computrabajo por país y robots.txt en fuentes HTML`.
+- [x] Tests: URL building per country with fixture HTML per country (at least es + mx + co), robots refusal skips (mock), Spain default unchanged (characterisation from Task 1).
+- [x] Commit `feat(sources): Computrabajo por país y robots.txt en fuentes HTML`.
 
 ### Task 4: Followed companies over aggregators
 

@@ -78,7 +78,7 @@ def calls(monkeypatch):
         }))
         return offers("infojobs")
 
-    async def run_computrabajo(keywords, max_pages=3, location=None):
+    async def run_computrabajo(keywords, max_pages=3, location=None, country="es"):
         log.append(("computrabajo.run_computrabajo", {"keywords": list(keywords), "max_pages": max_pages,
                                                       "location": location}))
         return offers("computrabajo")
@@ -95,6 +95,7 @@ def calls(monkeypatch):
     monkeypatch.setattr(scraper.infojobs, "run_infojobs", run_infojobs)
     monkeypatch.setattr(scraper.computrabajo, "run_computrabajo", run_computrabajo)
     monkeypatch.setattr(scraper.company_direct, "run_company_direct", run_company_direct)
+    monkeypatch.setattr("scraper.robots_gate.check_robots", lambda *a, **kw: True)
     return log
 
 
@@ -208,7 +209,7 @@ def test_api_fuentes_aceptadas_y_reservas_de_track():
     from scraper import jobs
 
     assert set(jobs.SOURCES) == {"seed", "tecnoempleo", "contacts", "indeed", "manfred", "linkedin", "infojobs",
-                                 "inbox", "inbox-apply"}
+                                 "inbox", "inbox-apply", "remotive", "remoteok", "arbeitnow", "freehire"}
     assert tuple(jobs.TRACK_PIPELINE_SOURCES) == ("tecnoempleo", "infojobs", "computrabajo", "linkedin")
     for source in ("computrabajo", "company_direct", "generic"):
         with pytest.raises(SystemExit, match="Fuente desconocida"):
@@ -263,14 +264,25 @@ MARKETS = {
         {"id": "manfred", "label": "Manfred", "requires_ack": False, "default_on": True},
         {"id": "computrabajo", "label": "Computrabajo", "requires_ack": False, "default_on": True},
     ],
-    "latam": [{"id": "linkedin", "label": "LinkedIn", "requires_ack": True, "default_on": False}],
+    "latam": [
+        {"id": "computrabajo", "label": "Computrabajo", "requires_ack": False, "default_on": True},
+        {"id": "linkedin", "label": "LinkedIn", "requires_ack": True, "default_on": False},
+    ],
     "remote": [
         {"id": "tecnoempleo", "label": "Tecnoempleo (remoto)", "requires_ack": False, "default_on": True},
         {"id": "manfred", "label": "Manfred", "requires_ack": False, "default_on": True},
         {"id": "linkedin", "label": "LinkedIn", "requires_ack": True, "default_on": False},
+        {"id": "remotive", "label": "Remotive", "requires_ack": False, "default_on": False},
+        {"id": "remoteok", "label": "RemoteOK", "requires_ack": False, "default_on": False},
+        {"id": "arbeitnow", "label": "Arbeitnow", "requires_ack": False, "default_on": False},
+        {"id": "freehire", "label": "Freehire", "requires_ack": False, "default_on": False},
     ],
     "global": [
         {"id": "linkedin", "label": "LinkedIn", "requires_ack": True, "default_on": False},
+        {"id": "remotive", "label": "Remotive", "requires_ack": False, "default_on": False},
+        {"id": "remoteok", "label": "RemoteOK", "requires_ack": False, "default_on": False},
+        {"id": "arbeitnow", "label": "Arbeitnow", "requires_ack": False, "default_on": False},
+        {"id": "freehire", "label": "Freehire", "requires_ack": False, "default_on": False},
         {"id": "indeed", "label": "Indeed (requiere SCRAPERAPI_KEY)", "requires_ack": False, "default_on": False},
     ],
 }
@@ -288,10 +300,15 @@ def test_catalogo_y_vista_de_fuentes():
     import setup_builder
 
     catalog = setup_builder.source_catalog()
-    assert list(catalog) == ["tecnoempleo", "infojobs", "manfred", "computrabajo", "linkedin", "indeed"]
+    assert list(catalog) == [
+        "tecnoempleo", "infojobs", "manfred", "computrabajo", "linkedin",
+        "remotive", "remoteok", "arbeitnow", "freehire", "indeed",
+    ]
     assert {sid: (e["label"], e["requires_ack"]) for sid, e in catalog.items()} == {
         "tecnoempleo": ("Tecnoempleo", False), "infojobs": ("InfoJobs", True), "manfred": ("Manfred", False),
         "computrabajo": ("Computrabajo", False), "linkedin": ("LinkedIn", True),
+        "remotive": ("Remotive", False), "remoteok": ("RemoteOK", False),
+        "arbeitnow": ("Arbeitnow", False), "freehire": ("Freehire", False),
         "indeed": ("Indeed (requiere SCRAPERAPI_KEY)", False),
     }
     view = setup_builder.sources_view()
@@ -302,10 +319,18 @@ def test_catalogo_y_vista_de_fuentes():
          "acknowledged": True},
         {"id": "manfred", "label": "Manfred", "markets": ["spain", "remote"], "requires_ack": False,
          "enabled": True, "acknowledged": False},
-        {"id": "computrabajo", "label": "Computrabajo", "markets": ["spain"], "requires_ack": False,
+        {"id": "computrabajo", "label": "Computrabajo", "markets": ["spain", "latam"], "requires_ack": False,
          "enabled": True, "acknowledged": False},
         {"id": "linkedin", "label": "LinkedIn", "markets": ["latam", "remote", "global"], "requires_ack": True,
          "enabled": True, "acknowledged": True},
+        {"id": "remotive", "label": "Remotive", "markets": ["remote", "global"], "requires_ack": False,
+         "enabled": False, "acknowledged": False},
+        {"id": "remoteok", "label": "RemoteOK", "markets": ["remote", "global"], "requires_ack": False,
+         "enabled": False, "acknowledged": False},
+        {"id": "arbeitnow", "label": "Arbeitnow", "markets": ["remote", "global"], "requires_ack": False,
+         "enabled": False, "acknowledged": False},
+        {"id": "freehire", "label": "Freehire", "markets": ["remote", "global"], "requires_ack": False,
+         "enabled": False, "acknowledged": False},
         {"id": "indeed", "label": "Indeed (requiere SCRAPERAPI_KEY)", "markets": ["global"],
          "requires_ack": False, "enabled": True, "acknowledged": False},
         {"id": "company_direct", "label": "company_direct", "markets": [], "requires_ack": False,

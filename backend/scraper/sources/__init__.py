@@ -77,6 +77,7 @@ class SourceSpec:
     default_on: bool = False
     kind: Literal["json", "html", "playwright"] = "html"
     start_url: str | None = None
+    start_url_fn: Callable[[dict], str] | None = None
     params: dict[str, ParamSpec] = field(default_factory=dict)
     track_pipeline: bool = False
     requires_secret: str | None = None
@@ -85,6 +86,15 @@ class SourceSpec:
     persists_itself: bool = False
     order: int = 1000
     market_labels: dict[str, dict[str, str]] = field(default_factory=dict)
+
+    def start_url_for(self, settings: dict | None = None) -> str | None:
+        """URL de inicio para comprobación de robots, parametrizable según `settings`."""
+        if self.start_url_fn and settings:
+            try:
+                return self.start_url_fn(settings)
+            except Exception:
+                return self.start_url
+        return self.start_url
 
     def label_for(self, lang: str = "es", market: str | None = None) -> str:
         """Etiqueta en `lang` (cae a es) y, si se indica, la propia del mercado."""

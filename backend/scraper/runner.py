@@ -49,6 +49,14 @@ async def run_source(source_id: str, dry_run: bool, max_pages: int) -> None:
     """Una fuente suelta del registro (scraper/sources) con sus ajustes de jobhunter.yaml; guarda con su id."""
     spec = source_registry.get(source_id)
     settings = source_settings(source_id)
+    start_url = spec.start_url_for(settings)
+    if spec.kind in ("html", "playwright") and start_url:
+        from scraper import robots_gate
+        try:
+            robots_gate.check_robots(start_url, spec.id, is_acknowledged=bool(settings.get("acknowledged")))
+        except robots_gate.RobotsRefused as exc:
+            logger.warning("%s: omitida porque %s", spec.label_for("es"), exc)
+            return
     ctx = source_registry.RunContext(settings=settings, keywords=list(settings.get("keywords", [])),
                                      max_pages=max_pages, dry_run=dry_run)
     try:
@@ -131,7 +139,16 @@ async def run_track_source(track_id: str, dry_run: bool, max_pages: int, only_so
             continue
 
         async def step(spec=spec, label=label):
-            ctx = source_registry.RunContext(settings=source_settings(spec.id), keywords=list(keywords),
+            settings = source_settings(spec.id)
+            start_url = spec.start_url_for(settings)
+            if spec.kind in ("html", "playwright") and start_url:
+                from scraper import robots_gate
+                try:
+                    robots_gate.check_robots(start_url, spec.id, is_acknowledged=bool(settings.get("acknowledged")))
+                except robots_gate.RobotsRefused as exc:
+                    logger.warning("%s: omitida porque %s", label, exc)
+                    return
+            ctx = source_registry.RunContext(settings=settings, keywords=list(keywords),
                                              track_id=track_id, max_pages=max_pages, dry_run=dry_run)
             offers = await source_registry.execute(spec, ctx)
             if not spec.persists_itself:

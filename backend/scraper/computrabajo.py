@@ -16,6 +16,30 @@ logger = logging.getLogger(__name__)
 
 COMPUTRABAJO_BASE = "https://www.computrabajo.es"
 
+COUNTRY_DOMAINS: dict[str, str] = {
+    "es": "https://www.computrabajo.es",
+    "mx": "https://mx.computrabajo.com",
+    "co": "https://co.computrabajo.com",
+    "ar": "https://ar.computrabajo.com",
+    "pe": "https://pe.computrabajo.com",
+    "cl": "https://cl.computrabajo.com",
+    "uy": "https://uy.computrabajo.com",
+    "ve": "https://ve.computrabajo.com",
+    "ec": "https://ec.computrabajo.com",
+    "cr": "https://cr.computrabajo.com",
+    "pa": "https://pa.computrabajo.com",
+    "gt": "https://gt.computrabajo.com",
+    "sv": "https://sv.computrabajo.com",
+    "hn": "https://hn.computrabajo.com",
+    "ni": "https://ni.computrabajo.com",
+    "do": "https://do.computrabajo.com",
+}
+
+
+def country_base_url(country: str = "es") -> str:
+    c = (country or "es").strip().lower()
+    return COUNTRY_DOMAINS.get(c, f"https://{c}.computrabajo.com")
+
 
 def _slugify(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
@@ -62,8 +86,10 @@ def _location_param(location: str | None) -> str:
 
 
 class ComputrabajoScraper(BaseScraper):
-    def __init__(self):
+    def __init__(self, country: str = "es"):
         super().__init__(delay_min=3.0, delay_max=8.0)
+        self.country = (country or "es").strip().lower()
+        self.base_url = country_base_url(self.country)
 
     async def scrape_keyword(self, keyword: str, max_pages: int = 3, location: str | None = None) -> list[dict]:
         offers = []
@@ -73,11 +99,11 @@ class ComputrabajoScraper(BaseScraper):
             page = await scraper.new_page()
             for page_num in range(1, max_pages + 1):
                 page_suffix = f"-p{page_num}" if page_num > 1 else ""
-                url = f"{COMPUTRABAJO_BASE}/trabajo-de-{slug}{page_suffix}{loc_param}"
+                url = f"{self.base_url}/trabajo-de-{slug}{page_suffix}{loc_param}"
                 logger.info("Computrabajo page %d: %s", page_num, url)
                 ok = await scraper.fetch_with_retry(page, url)
                 if not ok and loc_param:
-                    url_national = f"{COMPUTRABAJO_BASE}/trabajo-de-{slug}{page_suffix}"
+                    url_national = f"{self.base_url}/trabajo-de-{slug}{page_suffix}"
                     if not await scraper.fetch_with_retry(page, url_national):
                         break
                 elif not ok:
@@ -90,7 +116,7 @@ class ComputrabajoScraper(BaseScraper):
                     break
 
                 for card in cards:
-                    offer = _parse_card_html(await card.inner_html())
+                    offer = _parse_card_html(await card.inner_html(), base_url=self.base_url)
                     if offer:
                         offers.append(offer)
 
@@ -103,8 +129,10 @@ class ComputrabajoScraper(BaseScraper):
         return offers
 
 
-async def run_computrabajo(keywords: list[str], max_pages: int = 3, location: str | None = None) -> list[dict]:
-    scraper = ComputrabajoScraper()
+async def run_computrabajo(
+    keywords: list[str], max_pages: int = 3, location: str | None = None, country: str = "es"
+) -> list[dict]:
+    scraper = ComputrabajoScraper(country=country)
     seen: set[str] = set()
     all_offers: list[dict] = []
     if not keywords:
