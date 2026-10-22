@@ -57,6 +57,17 @@ SOFTWARE.
 | `.claude/commands/` | `.claude/commands/` | Comandos `/apply`, `/rank`, `/expand`, `/add-template`, `/add-portal` |
 | `.claude/agents/` | `.claude/agents/` | Agentes `posting-fetcher`, `application-reviewer`, `posting-scorer` |
 | `.claude/skills/job-application-assistant/` | `.claude/skills/job-application-assistant/` | Guías de redacción, estilo, evaluación y research |
+| `backend/automation/document_generator.py` | `cv/` & `cover_letters/` | Generación determinista de CV y carta en LaTeX, escape riguroso, formateo de fechas y recorte a límite de páginas |
+| `backend/automation/latex_compiler.py` | `tools/` / pipeline LaTeX | Compilación de fuentes LaTeX con Tectonic y fallback a xelatex/lualatex |
+| `backend/automation/application_archive.py` | `.claude/commands/apply.md` | Archivo atómico de documentos generados por candidatura (`JH_HOME/applications/<id>/`) |
+| `backend/automation/eligibility_gate.py` | `.claude/skills/job-application-assistant/04-job-evaluation.md` | Filtro de elegibilidad (permiso de trabajo, visado, residencia) como requisito duro o aviso |
+| `templates/latex/cv/cv.tex.j2` | `cv/main_example.tex` | Plantilla Jinja2 de CV estilo moderncv banking |
+| `templates/latex/cover_letters/cover.tex.j2` | `cover_letters/cover_example.tex` | Plantilla Jinja2 de carta de presentación basada en `cover.cls` |
+| `backend/automation/application_documents.py` | `.claude/commands/apply.md` | Orquestación de documentos de candidatura con soporte determinista y flujo de IA |
+| `backend/automation/templates_registry.py` | `.claude/commands/add-template.md` | Registro, validación, compilación de prueba y activación de plantillas propias (LaTeX/Typst) |
+| `backend/automation/screening.py` | `.claude/skills/job-application-assistant/08-application-forms.md` | Respuestas de preguntas de cribado basadas en el perfil |
+| `backend/automation/upskill.py` | `.claude/skills/upskill/` | Mapa de huecos de habilidades y plan de estudio a partir de ofertas |
+| `backend/automation/expand_profile.py` | `.claude/commands/expand.md` | Ampliación de competencias del perfil a partir de fuentes públicas (GitHub, web) |
 | `backend/automation/ai_documents.py` | `.claude/commands/apply.md`, `.claude/agents/application-reviewer.md`, `.claude/skills/job-application-assistant/0[3-6]-*.md` | Prompts del redactor y del revisor (reglas de honestidad, recorte y cobertura de keywords) derivados del flujo `/apply` |
 
 ---

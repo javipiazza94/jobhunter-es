@@ -32,7 +32,7 @@ A role that fails this gate is not scored and not drafted. Everything below appl
 
 ## Language Gate — run before scoring
 
-This gate checks a posting's language requirements against what the candidate actually speaks. It is not one of the five Scoring Dimensions below - it runs before them, structured the same way as the Eligibility Gate above: read the posting, classify against profile data, and treat a hard mismatch as FAIL before scoring. Its verdict is tracked downstream: `/rank` records the result as `language_gate` (PASS/FAIL/FLAG) with a supporting `language_note`, persists both into `seen_jobs.json`, and treats a FAIL as a shortlist veto; `/scrape` surfaces the flag in its results table and carries a language-override rule for postings whose ad language differs from the role's working language. `/apply`'s language detection (Step 1, which extracts a posting's required language generically) feeds this same check.
+This gate checks a posting's language requirements against what the candidate actually speaks. It is not one of the five Scoring Dimensions below - it runs before them, structured the same way as the Eligibility Gate above: read the posting, classify against profile data, and treat a hard mismatch as FAIL before scoring. Its verdict is tracked downstream: `/rank` records the result as `language_gate` (PASS/FAIL/FLAG) with a supporting `language_note`, persists both into `JH_HOME/job_hunter.db` (table `offer_evaluations`), and treats a FAIL as a shortlist veto; `/scrape` surfaces the flag in its results table and carries a language-override rule for postings whose ad language differs from the role's working language. `/apply`'s language detection (Step 1, which extracts a posting's required language generically) feeds this same check.
 
 Read the posting's language requirements as stated for **the role itself** — not the language the ad happens to be written in. A posting written in a language you don't work in, for a role that only needs languages you do work in on the job, passes fine; only an explicit job-condition requirement ("fluent X required," "must communicate with the Y team in Z") triggers this check. For each language the posting requires as a job condition, compare it against your Languages table in CLAUDE.md / `01-candidate-profile.md`:
 
@@ -121,28 +121,9 @@ Does this role advance career goals and contain tasks that energize?
 - **Flexibility**: [YOUR_SCHEDULE_CONSTRAINTS]
 - **Professional development**: [YOUR_GROWTH_PRIORITIES]
 
-### 6. Salary Benchmark (Optional)
+### 6. Company Research (Optional)
 
-If the salary lookup tool is configured (`salary_data.json` exists), look up the company:
-
-> **Windows:** run these tools as `python`, not `python3`. A python.org install ships no `python3`, so that name reaches the Microsoft Store alias, which either exits 49 with no output (#669) or starts a separate Store Python without the packages `pip` installed (such as pypdf). `.claude/settings.json` allows both spellings.
-
-```
-python3 salary_lookup.py "<Company Name>" --json
-```
-
-If a city is known from the posting, add `--city "<City>"` to narrow results.
-
-Present findings as:
-```
-### Salary Benchmark
-| Metric | Value |
-|--------|-------|
-| [Category] index | XX.X (+/-X.X% vs baseline) |
-| Overall index | XX.X (+/-X.X% vs baseline) |
-```
-
-Interpret results relative to the baseline defined in the data file's metadata. For index-based data, higher typically means above-market compensation.
+Consult company data via `backend/automation/company_research.py` or the offer's company direct info to benchmark culture and salary signals.
 
 If the salary tool is not configured, skip this section.
 
@@ -176,7 +157,7 @@ Present the evaluation as:
 
 ### Company Research Checklist
 - [ ] Checked company website (mission, values, recent news)
-- [ ] Checked review sites (Glassdoor, Jobindex, etc.)
+- [ ] Checked review sites (Glassdoor, InfoJobs, etc.)
 - [ ] Checked LinkedIn for team size, recent hires, connections
 - [ ] Checked media for restructuring, growth, or workplace issues
 - [ ] Identified network contacts who may know the team/manager
