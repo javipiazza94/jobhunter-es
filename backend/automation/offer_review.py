@@ -11,6 +11,7 @@ import json
 
 from automation.eligibility_gate import eligibility_gate
 from automation.posting_guard import alarms, guard
+from search_config import get_config
 
 
 def review_offer(offer: dict) -> dict:
@@ -28,3 +29,23 @@ def review_offer(offer: dict) -> dict:
     flags += elig_reasons
     reviewed["review_flags"] = json.dumps(flags, ensure_ascii=False) if flags else None
     return reviewed
+
+
+def apply_hard_requirements(reviewed: dict, score: float) -> tuple[float, dict]:
+    """Único punto donde un requisito duro de elegibilidad deja la oferta a 0.
+
+    Se llama tras puntuar y antes de calcular `is_relevant`, desde el scraper (scraper/persist.py) y desde el
+    cargador del inbox. Con `scoring.eligibility_hard_reject` en False (por defecto) no toca nada. Con True y
+    veredicto `reject` devuelve puntuación 0 y asegura el aviso `elegibilidad: <motivo>` en `review_flags`;
+    un `flag` solo avisa (ya lo hace review_offer). Devuelve (puntuación, oferta con review_flags)."""
+    if not get_config().scoring.eligibility_hard_reject:
+        return score, reviewed
+    verdict, reasons = eligibility_gate(reviewed, extended=True)
+    if verdict != "reject":
+        return score, reviewed
+    flags = json.loads(reviewed.get("review_flags") or "[]")
+    for reason in reasons:
+        text = reason if reason.startswith("elegibilidad:") else f"elegibilidad: {reason}"
+        if text not in flags:
+            flags.append(text)
+    return 0.0, {**reviewed, "review_flags": json.dumps(flags, ensure_ascii=False)}

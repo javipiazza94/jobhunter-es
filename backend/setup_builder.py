@@ -394,6 +394,7 @@ def build_config(
         "keyword_groups": [KeywordGroup(id=gid, weight=w, keywords=kws) for (gid, kws), w in zip(groups, weights)],
     })
     scoring.location.city = answers.draft.city.strip() or None
+    scoring.eligibility_hard_reject = True  # el asistente activa los requisitos duros (instalaciones antiguas: no)
 
     union = _clean([kw for t in tracks for kw in t.search_keywords])
     catalog = source_catalog()

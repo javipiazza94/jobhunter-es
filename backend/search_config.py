@@ -121,6 +121,10 @@ class Scoring(_Model):
     salary: SalaryRule
     negative_keywords: list[str] = []
     negative_title_keywords: list[str] = []
+    # Opt-in: si es True, una oferta que incumple un requisito duro de elegibilidad (permiso de trabajo,
+    # patrocinio, residencia, titulación, carné) queda con puntuación 0. El asistente la activa; las
+    # instalaciones existentes la mantienen en False y sus puntuaciones no cambian.
+    eligibility_hard_reject: bool = False
 
     @model_validator(mode="after")
     def _weights_sum_to_one(self):

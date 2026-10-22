@@ -87,3 +87,19 @@ def test_saved_offer_keeps_its_real_source(tmp_path, monkeypatch):
     _run(tmp_path, monkeypatch, line, "--save")
     row = sqlite3.connect(tmp_path / "t.db").execute("SELECT source FROM job_offers").fetchall()
     assert row == [("linkedin",)]
+
+
+def test_inbox_loader_applies_hard_requirements_before_is_relevant(tmp_path, monkeypatch):
+    """El cargador pasa por apply_hard_requirements: si devuelve 0 se guarda relevance_score 0 e is_relevant 0."""
+    seen = []
+
+    def zero(reviewed, score):
+        seen.append(score)
+        return 0.0, {**reviewed, "review_flags": '["elegibilidad: prueba"]'}
+
+    monkeypatch.setattr(loader, "apply_hard_requirements", zero)
+    _run(tmp_path, monkeypatch, GOOD, "--save")
+    row = sqlite3.connect(tmp_path / "t.db").execute(
+        "SELECT relevance_score, is_relevant, review_flags FROM job_offers").fetchone()
+    assert seen and seen[0] > 0
+    assert row == (0.0, 0, '["elegibilidad: prueba"]')

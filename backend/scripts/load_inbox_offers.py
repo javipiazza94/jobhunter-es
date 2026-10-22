@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from automation.filter_engine import score_offer  # noqa: E402
 from automation.generic_filter import isolated_min_score, primary_isolated_track, score_isolated  # noqa: E402
-from automation.offer_review import review_offer  # noqa: E402
+from automation.offer_review import apply_hard_requirements, review_offer  # noqa: E402
 from search_config import Track, get_config  # noqa: E402
 from database import get_conn, init_db, upsert_company, upsert_generic_offer, upsert_job_offer  # noqa: E402
 from inbox_files import delete_loaded  # noqa: E402
@@ -146,8 +146,9 @@ def main() -> None:
             r = upsert_generic_offer(conn, {**base, "company_id": cid, "generic_score": o["score"]}, o["track_id"])
         else:
             base = review_offer(base)  # posting_guard + idiomas → review_flags
-            r = upsert_job_offer(conn, {**base, "company_id": cid, "relevance_score": o["score"],
-                                        "is_relevant": o["score"] >= get_config().scoring.min_relevance})
+            score, base = apply_hard_requirements(base, o["score"])  # 0 si incumple un requisito duro (opt-in)
+            r = upsert_job_offer(conn, {**base, "company_id": cid, "relevance_score": score,
+                                        "is_relevant": score >= get_config().scoring.min_relevance})
         saved, skipped = (saved + 1, skipped) if r else (saved, skipped + 1)
     conn.close()
     print(f"guardadas={saved} omitidas={skipped}")

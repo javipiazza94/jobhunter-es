@@ -58,6 +58,13 @@ _SPAIN_WORK_PERMIT_RX = re.compile(
     re.I,
 )
 
+# Sin patrocinio de visado (genérico, de cualquier país): solo importa si el candidato lo necesita
+_SPONSORSHIP_UNAVAILABLE_RX = re.compile(
+    r"\b(no (visa )?sponsorship|sponsorship (is )?(not|un)available|unable to (offer |provide )?(visa )?sponsor\w*|"
+    r"(do|does) not (offer|provide) (visa )?sponsorship|sin patrocinio de visado|no (ofrecemos|damos) patrocinio)\b",
+    re.I,
+)
+
 # 2. Residencia geográfica excluyente
 _NON_EU_RESIDENCE_RX = re.compile(
     r"\b(must be (based|located) in (the )?(us|usa|united states|uk|united kingdom|canada|australia|germany|france)|"
@@ -84,6 +91,30 @@ def _load_profile() -> dict:
         return json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
+
+
+_RESIDENCE_CODES = {
+    "us": "US", "usa": "US", "united states": "US", "eeuu": "US", "estados unidos": "US",
+    "uk": "GB", "united kingdom": "GB", "reino unido": "GB", "canada": "CA", "australia": "AU",
+    "germany": "DE", "alemania": "DE", "france": "FR", "francia": "FR",
+}
+_RESIDENCE_NAME_RX = re.compile(
+    r"(?:based|located) in (?:the )?(\w+(?: \w+)?)|residencia obligatoria en (\w+(?: \w+)?)", re.I)
+
+
+def _required_residence_code(line: str) -> str:
+    """Código de país de la residencia exigida en la línea ('' si no se reconoce)."""
+    m = _RESIDENCE_NAME_RX.search(line)
+    if not m:
+        return ""
+    name = (m.group(1) or m.group(2)).lower()
+    return _RESIDENCE_CODES.get(name) or _RESIDENCE_CODES.get(name.split()[0], "")
+
+
+def _needs_sponsorship(personal: dict, profile: dict) -> bool:
+    """True si el perfil declara que necesita patrocinio de visado (`personal` o bloque `eligibility`)."""
+    eligibility = profile.get("eligibility") if isinstance(profile.get("eligibility"), dict) else {}
+    return (personal.get("needs_sponsorship") or eligibility.get("needs_sponsorship")) is True
 
 
 def _has_spanish_work_authorization(personal: dict) -> bool:
@@ -114,9 +145,13 @@ def _has_university_degree(education: list[dict]) -> bool:
     return False
 
 
-def check_eligibility(offer: dict, profile_data: dict | None = None) -> tuple[str, list[str]]:
+def check_eligibility(offer: dict, profile_data: dict | None = None, extended: bool = False) -> tuple[str, list[str]]:
     """
     Evalúa la elegibilidad del candidato para una oferta concreta.
+
+    `extended` activa las reglas de requisitos duros añadidas después (patrocinio de visado necesario,
+    residencia exigida en otro país): solo las usa `offer_review.apply_hard_requirements` con
+    `scoring.eligibility_hard_reject`; `score_offer` no las pasa, así que sus puntuaciones no cambian.
 
     Retorna una tupla:
       (veredicto, motivos)
@@ -161,6 +196,9 @@ def check_eligibility(offer: dict, profile_data: dict | None = None) -> tuple[st
             if (personal.get("country_code") or "").upper() == "ES":
                 rejects.append("elegibilidad: requiere autorización de trabajo en EE.UU. sin patrocinio")
 
+        elif extended and _SPONSORSHIP_UNAVAILABLE_RX.search(line_clean) and _needs_sponsorship(personal, profile):
+            rejects.append("elegibilidad: la oferta no patrocina visado y lo necesitas")
+
         if _SPAIN_WORK_PERMIT_RX.search(line_clean) and bool(_REQUIRED.search(line_clean)):
             if personal.get("work_permit") is False:
                 rejects.append("elegibilidad: exige permiso de trabajo en España y no dispones de él")
@@ -170,8 +208,11 @@ def check_eligibility(offer: dict, profile_data: dict | None = None) -> tuple[st
         # ── 3. Residencia geográfica excluyente ───────────────────────────────
         if _NON_EU_RESIDENCE_RX.search(line_clean):
             country_code = (personal.get("country_code") or "").upper()
+            required = _required_residence_code(line_clean)
             if country_code == "ES":
                 rejects.append("elegibilidad: exige residencia fuera de España/UE")
+            elif extended and country_code and required and country_code != required:
+                rejects.append(f"elegibilidad: exige residir en {required} y resides en {country_code}")
 
         # ── 4. Título universitario obligatorio ──────────────────────────────
         if _DEGREE_TERMS_RX.search(line_clean) and bool(_REQUIRED.search(line_clean)):
@@ -201,6 +242,6 @@ def check_eligibility(offer: dict, profile_data: dict | None = None) -> tuple[st
     return "ok", []
 
 
-def eligibility_gate(offer: dict, profile_data: dict | None = None) -> tuple[str, list[str]]:
+def eligibility_gate(offer: dict, profile_data: dict | None = None, extended: bool = False) -> tuple[str, list[str]]:
     """Función de entrada principal para el filtro de elegibilidad."""
-    return check_eligibility(offer, profile_data=profile_data)
+    return check_eligibility(offer, profile_data=profile_data, extended=extended)

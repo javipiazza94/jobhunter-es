@@ -419,3 +419,10 @@ def test_normalize_profile_keeps_manual_code_when_country_blank():
 
     out = normalize_profile({"personal": {"country": "", "country_code": "FR"}})
     assert out["personal"]["country_code"] == "FR"
+
+
+def test_wizard_config_enables_eligibility_hard_reject(tmp_path):
+    cfg = build_config(_answers())
+    assert cfg.scoring.eligibility_hard_reject is True
+    path = search_config.save_config(cfg, tmp_path / "jobhunter.yaml")
+    assert load_config(path).scoring.eligibility_hard_reject is True
