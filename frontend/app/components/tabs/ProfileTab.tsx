@@ -15,6 +15,7 @@ import {
   testEmail,
 } from "@/lib/api";
 import { ExpandProfilePanel } from "@/app/components/ExpandProfilePanel";
+import { TemplatesPanel } from "@/app/components/TemplatesPanel";
 import { savedAnswers, withSavedAnswers } from "@/lib/screening";
 import type { ScreeningAnswerSaved } from "@/lib/types";
 import { formToProfile, profileToForm, secretStatus, type ProfileForm, type StoredProfile } from "@/lib/setup";
@@ -585,6 +586,7 @@ export function ProfileTab({ initial, onRerunWizard }: { initial?: Partial<Profi
       <SlotView slot={slots.profile} onRetry={() => retry("profile")}>{d => <ProfileSection initial={d} />}</SlotView>
       <SlotView slot={slots.profile} onRetry={() => retry("profile")}>{d => <ScreeningSection initial={d} />}</SlotView>
       <SlotView slot={slots.profile} onRetry={() => retry("profile")}>{() => <ExpandProfilePanel />}</SlotView>
+      <section className={`${card} lg:col-span-2`}><TemplatesPanel autoLoad={!initial} /></section>
       <SlotView slot={slots.ai} onRetry={() => retry("ai")}>{d => <AISection initial={d} />}</SlotView>
       <SlotView slot={slots.email} onRetry={() => retry("email")}>{d => <EmailSection initial={d} />}</SlotView>
       <SlotView slot={slots.sources} onRetry={() => retry("sources")}>

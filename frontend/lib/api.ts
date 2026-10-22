@@ -18,6 +18,8 @@ import type {
   JobStarted,
   MarketSource,
   OfferEvaluation,
+  DocumentFile,
+  PreparedDocs,
   QuietApplication,
   SetupAnswers,
   SetupApplyResult,
@@ -25,6 +27,8 @@ import type {
   SetupStatus,
   SourceSetting,
   SourcesUpdate,
+  TemplateInfo,
+  TemplateKind,
   Track,
   ScreeningQuestion,
   ScreeningResult,
@@ -167,6 +171,54 @@ export async function generateInterviewPack(applicationId: string): Promise<Inte
 
 export async function answerScreeningQuestions(applicationId: string, questions: ScreeningQuestion[]): Promise<ScreeningResult> {
   return checked(await sendJson(`${BASE}/api/applications/${encodeURIComponent(applicationId)}/answers`, "POST", { questions }));
+}
+
+// ── Candidatura: CV y carta en PDF archivados (JH_HOME/applications/<id>/) ──
+
+/** Genera CV y carta (puede tardar: compila LaTeX). `useAi` ausente = IA si hay proveedor configurado. */
+export async function prepareApplication(applicationId: string, useAi?: boolean): Promise<PreparedDocs> {
+  const body = useAi === undefined ? {} : { use_ai: useAi };
+  return checked(await sendJson(`${BASE}/api/applications/${encodeURIComponent(applicationId)}/prepare`, "POST", body));
+}
+
+export async function fetchApplicationDocuments(applicationId: string): Promise<DocumentFile[]> {
+  return checked(await request(`${BASE}/api/applications/${encodeURIComponent(applicationId)}/documents`));
+}
+
+/** URL para abrir un documento archivado (los PDF se muestran en el navegador con `inline`). */
+export function applicationDocumentUrl(applicationId: string, name: DocumentFile["name"], inline = true): string {
+  const base = `${BASE}/api/applications/${encodeURIComponent(applicationId)}/documents/${encodeURIComponent(name)}`;
+  return inline && name.endsWith(".pdf") ? `${base}?inline=1` : base;
+}
+
+// ── Plantillas propias de CV y carta ──
+
+export async function fetchTemplates(): Promise<TemplateInfo[]> {
+  return checked(await request(`${BASE}/api/templates`));
+}
+
+/** Registra una plantilla (zip o un único .tex.j2/.typ.j2); la API compila de prueba antes de aceptarla. */
+export async function uploadTemplate(
+  file: Blob,
+  filename: string,
+  meta: { name: string; kind: TemplateKind; engine?: "latex" | "typst"; page_limit?: number; style_rules?: string },
+): Promise<TemplateInfo> {
+  const form = new FormData();
+  form.append("name", meta.name);
+  form.append("kind", meta.kind);
+  if (meta.engine) form.append("engine", meta.engine);
+  if (meta.page_limit) form.append("page_limit", String(meta.page_limit));
+  if (meta.style_rules) form.append("style_rules", meta.style_rules);
+  form.append("file", file, filename);
+  return checked(await request(`${BASE}/api/templates`, { method: "POST", body: form }));
+}
+
+export async function activateTemplate(kind: TemplateKind, name: string): Promise<TemplateInfo> {
+  return checked(await sendJson(`${BASE}/api/templates/${encodeURIComponent(name)}/activate?kind=${kind}`, "POST"));
+}
+
+export async function deleteTemplate(kind: TemplateKind, name: string): Promise<{ deleted: string }> {
+  return checked(await request(`${BASE}/api/templates/${encodeURIComponent(name)}?kind=${kind}`, { method: "DELETE" }));
 }
 
 // ── Evaluación con IA de ofertas (/rank en la app): nunca cambia relevance_score ──

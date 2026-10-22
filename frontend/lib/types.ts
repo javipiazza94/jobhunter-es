@@ -308,6 +308,20 @@ export interface DocumentFile {
   modified_at: string;
 }
 
+/** GET /api/templates: plantilla de CV o carta (integrada o propia); `active` marca la que se usa. */
+export type TemplateKind = "cv" | "letter";
+export interface TemplateInfo {
+  name: string;
+  kind: TemplateKind;
+  engine: "latex" | "typst";
+  builtin: boolean;
+  active: boolean;
+  main_file: string;
+  compile_cmd: string | null;
+  page_limit: number | null;
+  style_rules: string;
+}
+
 /** GET/PUT /api/settings/sources: una fuente de ofertas y su estado en jobhunter.yaml. */
 export interface SourceSetting {
   id: string;

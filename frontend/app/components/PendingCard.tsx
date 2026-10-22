@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { Check, X, FileText, Mail, ExternalLink } from "lucide-react";
-import type { Track } from "@/lib/types";
+import type { DocumentFile, Track } from "@/lib/types";
+import { PrepareDocsPanel } from "@/app/components/PrepareDocsPanel";
 import { ScreeningPanel } from "@/app/components/ScreeningPanel";
+import { attachmentsLabel } from "@/lib/documents";
 import { trackBadge } from "@/lib/ui";
 import { approveApplication, rejectApplication, updateCoverLetter, markApplicationSentManual, type PendingApplication } from "@/lib/api";
 
@@ -21,6 +23,7 @@ export function PendingCard({ app, tracks, onAction }: PendingCardProps) {
   const [error, setError] = useState<string | null>(null);
   const [manualSendStarted, setManualSendStarted] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [files, setFiles] = useState<DocumentFile[]>([]);
 
   const handleSave = async () => {
     setBusy(true);
@@ -101,6 +104,7 @@ export function PendingCard({ app, tracks, onAction }: PendingCardProps) {
 
   const badge = trackBadge(app.cv_profile ?? "—", tracks);
   const cvFile = app.cv_file ?? "sin CV";
+  const attachments = attachmentsLabel(files, cvFile);
   const hasContact = !!app.contact_value;
   const isEmailContact = hasContact && app.contact_value!.includes("@");
 
@@ -159,13 +163,21 @@ export function PendingCard({ app, tracks, onAction }: PendingCardProps) {
         />
       </div>
 
+      <PrepareDocsPanel applicationId={app.id} onChange={setFiles} />
+
       <ScreeningPanel applicationId={app.id} />
+
+      {hasContact && !manualSendStarted && (
+        <p className="text-xs text-gray-500">
+          Al aprobar se adjuntará: <span className="font-mono text-gray-400">{attachments}</span>
+        </p>
+      )}
 
       {isEmailContact && !manualSendStarted && (
         <p className="text-xs text-gray-500">
           &quot;Enviar manualmente&quot; copia la carta al portapapeles y abre tu cliente de correo con el
           destinatario y asunto ya rellenos — pega la carta y adjunta{" "}
-          <span className="font-mono text-gray-400">{cvFile}</span> a mano antes de darle a enviar.
+          <span className="font-mono text-gray-400">{attachments}</span> a mano antes de darle a enviar.
         </p>
       )}
 
