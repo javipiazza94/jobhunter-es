@@ -19,6 +19,9 @@ latex|typst, compilador de una lista cerrada, límite de páginas y reglas de es
   · No hay comando de compilación libre: el compilador sale de una lista cerrada (tectonic, xelatex,
     lualatex, typst) y la línea de órdenes se construye en el código con opciones seguras (sin
     shell-escape; Typst con `--root` en la carpeta de trabajo). Nunca se ejecuta latexmk.
+  · LaTeX propio: se prefieren xelatex/lualatex con kpathsea paranoico (openin_any=p/openout_any=p);
+    Tectonic no confina las lecturas y solo se usa si no hay ninguno (preparar lo avisa).
+  · Registrar exige `trusted=True`: una plantilla puede leer ficheros del equipo y meterlos en el PDF.
   · Se rechaza al registrar cualquier `\\input`, `\\include`, `\\openin`... con ruta absoluta o con `..`.
 """
 
@@ -48,7 +51,6 @@ import config
 from automation.latex_compiler import (
     DEFAULT_ENGINES,
     LaTeXCompilationError,
-    engine_available,
     find_latex_compiler,
 )
 
@@ -64,6 +66,18 @@ META_FILE = "template.json"
 TEMPLATE_SUFFIXES = {"latex": ".tex.j2", "typst": ".typ.j2"}
 COMPILERS: tuple[str, ...] = ("tectonic", "xelatex", "lualatex", "typst")
 LATEX_COMPILERS = DEFAULT_ENGINES  # tectonic, xelatex, lualatex
+# Motores que kpathsea confina con openin_any=p/openout_any=p (sin rutas absolutas ni '..'). Tectonic no
+# usa kpathsea: un \input{/ruta/absoluta} se lee aunque vaya con --untrusted, así que para plantillas propias
+# solo se usa si no hay xelatex ni lualatex (y entonces se avisa).
+CONFINED_LATEX = ("xelatex", "lualatex")
+TRUST_WARNING = (
+    "Una plantilla puede leer ficheros de tu equipo y meterlos en el PDF que envías. "
+    "Instala solo plantillas de fuentes de confianza."
+)
+UNCONFINED_WARNING = (
+    "La plantilla propia se compiló con Tectonic, que no impide leer ficheros fuera de su carpeta: "
+    "instala xelatex o lualatex (TeX Live) para aislarla. " + TRUST_WARNING
+)
 # Ficheros de configuración que un compilador o latexmk leerían de la carpeta de trabajo: se descartan.
 IGNORED_MEMBERS = {"latexmkrc", ".latexmkrc", "texmf.cnf"}
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
@@ -101,6 +115,7 @@ class TemplateInfo(BaseModel):
     page_limit: int | None = None
     style_rules: str = ""
     invalid_reason: str | None = None
+    trusted: bool = False
 
 
 class TemplateMeta(BaseModel):
@@ -114,6 +129,7 @@ class TemplateMeta(BaseModel):
     page_limit: int | None = Field(None, ge=1, le=6)
     style_rules: str = Field("", max_length=2000)
     invalid_reason: str | None = None
+    trusted: bool = False  # la persona confirmó al registrarla que viene de una fuente de confianza
 
 
 # ── Rutas ──────────────────────────────────────────────────────────────────────
@@ -197,7 +213,7 @@ def list_templates() -> list[TemplateInfo]:
             found[kind].append(TemplateInfo(
                 name=meta.name, kind=kind, engine=meta.engine, main_file=meta.main_file,
                 compiler=meta.compiler, page_limit=meta.page_limit, style_rules=meta.style_rules,
-                invalid_reason=meta.invalid_reason,
+                invalid_reason=meta.invalid_reason, trusted=meta.trusted,
             ))
     out: list[TemplateInfo] = []
     for kind in KINDS:
@@ -369,17 +385,29 @@ def _missing_hint(compiler: str) -> str:
     return f"Esta plantilla necesita `{compiler}`: instálalo (o elige otro compilador) y vuelve a intentarlo"
 
 
+def is_unconfined(compiler: str) -> bool:
+    """True si el compilador no confina la lectura de ficheros a la carpeta de trabajo (Tectonic)."""
+    return compiler == "tectonic"
+
+
 def resolve_compiler(engine: str, compiler: str | None) -> str:
-    """Compilador que se usará: el elegido o, si no hay, typst (Typst) o el primer motor LaTeX disponible.
+    """Compilador que se usará para una plantilla PROPIA:
+    - Typst: typst (confinado con --root).
+    - LaTeX: xelatex o lualatex si hay alguno (kpathsea en modo paranoico); el elegido entre ellos si está.
+      Tectonic, aunque se haya elegido, solo si no hay ninguno de los dos (no confina las lecturas).
     Lanza EngineMissing si no está instalado."""
     if compiler:
-        chosen = _check_compiler(compiler)
-    elif engine == "typst":
-        chosen = "typst"
+        _check_compiler(compiler)
+    if engine == "typst" or compiler == "typst":
+        chosen = compiler or "typst"
+    elif compiler in CONFINED_LATEX:
+        chosen = compiler
     else:
-        chosen = engine_available() or ""
+        chosen = next((c for c in CONFINED_LATEX if _resolve_binary(c) is not None), "")
         if not chosen:
-            raise EngineMissing("Instala Tectonic o TeX Live (xelatex) para usar plantillas LaTeX")
+            chosen = "tectonic" if _resolve_binary("tectonic") is not None else ""
+        if not chosen:
+            raise EngineMissing("Instala TeX Live (xelatex o lualatex) o Tectonic para usar plantillas LaTeX")
     if (engine == "typst") != (chosen == "typst"):
         raise TemplateError(f"El compilador {chosen} no sirve para plantillas {engine}")
     if _resolve_binary(chosen) is None:
@@ -450,9 +478,23 @@ def _bad_path(path: str) -> bool:
                         or ".." in PurePosixPath(p).parts or "../" in p)
 
 
+_CATCODE = re.compile(r"\\catcode(?![A-Za-z@])")
+_CSNAME_FILE = re.compile(
+    r"\\csname\s*@*(?:input|include|openin|read|InputIfFileExists|IfFileExists|includegraphics|"
+    r"lstinputlisting|verbatiminput|import|subimport|subfile)\b"
+)
+
+
 def lint_latex(text: str, filename: str) -> None:
-    """Rechaza `\\input{/…}`, `\\include{../…}`, `\\openin5=/…` y similares: una plantilla solo puede leer
+    """Lint de mejor esfuerzo (no es una barrera completa: una plantilla es código). Rechaza cambios de
+    \\catcode, órdenes de lectura construidas con \\csname y lecturas fuera de la carpeta:
+    `\\input{/…}`, `\\include{../…}`, `\\openin5=/…` y similares: una plantilla solo puede leer
     ficheros de su propia carpeta (y paquetes de la distribución TeX por nombre)."""
+    if _CATCODE.search(text):
+        raise TemplateError(f"La plantilla cambia \\catcode ({filename}): no se permite (podría ocultar lecturas de ficheros)")
+    m = _CSNAME_FILE.search(text)
+    if m:
+        raise TemplateError(f"La plantilla construye una orden de lectura con \\csname ({m.group(0)} en {filename}): no se permite")
     for m in _FILE_ARG.finditer(text):
         for arg in (m.group(2) or m.group(3) or "").split(","):
             if _bad_path(arg):
@@ -560,6 +602,7 @@ def register_template(
     compiler: str | None = None,
     page_limit: int | None = None,
     style_rules: str = "",
+    trusted: bool = False,
 ) -> TemplateInfo:
     """Valida, compila de prueba y registra una plantilla. Si ya existía una propia con ese nombre
     se sustituye de una vez (`os.replace` de la carpeta). Lanza TemplateError / EngineMissing."""
@@ -584,10 +627,12 @@ def register_template(
         _check_compiler(compiler)
     if engine == "latex":
         _lint_files(clean)
+    if trusted is not True:
+        raise TemplateError(f"Confirma que la plantilla es de confianza (trusted): {TRUST_WARNING}")
     try:
         meta = TemplateMeta(
             name=name, kind=kind, engine=engine, main_file=_find_main(clean, engine, main_file),
-            compiler=compiler, page_limit=page_limit, style_rules=(style_rules or "").strip(),
+            compiler=compiler, page_limit=page_limit, style_rules=(style_rules or "").strip(), trusted=True,
         )
     except ValidationError as exc:
         raise TemplateError(f"Datos de la plantilla no válidos: {exc.errors()[0].get('msg', exc)}") from None
@@ -666,6 +711,8 @@ def _cli(argv: list[str] | None = None) -> int:
                      help="Compilador (por defecto: typst en Typst; en LaTeX el primero instalado)")
     add.add_argument("--page-limit", type=int, default=None)
     add.add_argument("--style-rules", default="")
+    add.add_argument("--trusted", action="store_true", required=True,
+                     help="Confirma que la plantilla viene de una fuente de confianza (puede leer ficheros de tu equipo)")
     act = sub.add_parser("activate")
     act.add_argument("kind", choices=KINDS)
     act.add_argument("name")
@@ -683,7 +730,7 @@ def _cli(argv: list[str] | None = None) -> int:
             engine = args.engine or ("typst" if path.name.endswith(".typ.j2") else "latex")
             files = files_from_zip(path.read_bytes()) if path.suffix == ".zip" else {path.name: path.read_bytes()}
             info = register_template(args.name, args.kind, files, engine=engine, compiler=args.compiler,
-                                     page_limit=args.page_limit, style_rules=args.style_rules)
+                                     page_limit=args.page_limit, style_rules=args.style_rules, trusted=args.trusted)
             print(f"Registrada {info.kind}/{info.name} ({info.engine}); actívala con: activate {info.kind} {info.name}")
         elif args.cmd == "activate":
             print(f"Activa: {activate_template(args.kind, args.name).name}")

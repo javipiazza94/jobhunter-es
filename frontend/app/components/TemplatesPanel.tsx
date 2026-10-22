@@ -15,7 +15,9 @@ export const COMPILERS: Record<TemplateEngine, TemplateCompiler[]> = {
 export const T = {
   title: "Plantillas de CV y carta",
   hint: "Las integradas siempre están. Una plantilla propia (LaTeX o Typst, .zip o un único .tex.j2/.typ.j2) se compila de prueba antes de aceptarla.",
-  trust: "Una plantilla es código: añade solo plantillas de fuentes de confianza.",
+  trust: "Una plantilla puede leer ficheros de tu equipo y meterlos en el PDF que envías. Instala solo plantillas de fuentes de confianza.",
+  trustCheck: "Confirmo que esta plantilla viene de una fuente de confianza",
+  noTrust: "Confirma que la plantilla es de una fuente de confianza.",
   kinds: { cv: "CV", letter: "Carta" } as Record<TemplateKind, string>,
   engines: { latex: "LaTeX", typst: "Typst" } as Record<TemplateEngine, string>,
   builtin: "integrada",
@@ -64,6 +66,7 @@ export function TemplatesPanel({ initial = [], initialError = "", autoLoad = tru
   const [pageLimit, setPageLimit] = useState("");
   const [styleRules, setStyleRules] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [trusted, setTrusted] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -112,14 +115,15 @@ export function TemplatesPanel({ initial = [], initialError = "", autoLoad = tru
   const submit = async () => {
     if (!name.trim()) { setError(T.noName); return; }
     if (!file) { setError(T.noFile); return; }
+    if (!trusted) { setError(T.noTrust); return; }
     await act(async () => {
       await uploadTemplate(file, file.name, {
-        name: name.trim(), kind, engine,
+        name: name.trim(), kind, engine, trusted,
         ...(compiler ? { compiler } : {}),
         ...(pageLimit ? { page_limit: Number(pageLimit) } : {}),
         ...(styleRules.trim() ? { style_rules: styleRules.trim() } : {}),
       });
-      setName(""); setFile(null); setPageLimit(""); setStyleRules(""); setCompiler("");
+      setName(""); setFile(null); setPageLimit(""); setStyleRules(""); setCompiler(""); setTrusted(false);
     });
   };
 
@@ -203,6 +207,10 @@ export function TemplatesPanel({ initial = [], initialError = "", autoLoad = tru
           onChange={e => setStyleRules(e.target.value)}
           className={`basis-full ${field}`}
         />
+        <label className="basis-full inline-flex items-center gap-2 text-xs text-amber-200">
+          <input type="checkbox" checked={trusted} onChange={e => setTrusted(e.target.checked)} />
+          {T.trustCheck}
+        </label>
         <button
           onClick={submit}
           disabled={busy}

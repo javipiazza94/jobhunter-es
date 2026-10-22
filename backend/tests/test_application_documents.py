@@ -526,3 +526,18 @@ def test_reglas_de_estilo_de_la_plantilla_llegan_a_la_ia(env, fake_generator, cu
     assert docs.source == "deterministic"
     assert "Resumen de una sola frase" in seen["style"] and "Tono formal, sin viñetas" in seen["style"]
     assert "CV 1, carta 1" in seen["style"]
+
+
+@pytest.mark.parametrize("available,warned", [({"tectonic"}, True), ({"tectonic", "xelatex"}, False)])
+def test_plantilla_propia_con_tectonic_avisa_de_que_no_esta_confinada(env, fake_generator, custom_tpl, monkeypatch,
+                                                                      available, warned):
+    from automation import templates_registry
+
+    custom_tpl("cv", "propia")
+    monkeypatch.setattr(templates_registry, "_resolve_binary", lambda n: f"/usr/bin/{n}" if n in available else None)
+    docs = application_documents.prepare_application(env["app_id"], use_ai=False)
+    assert (templates_registry.UNCONFINED_WARNING in docs.warnings) is warned
+    assert ("fuentes de confianza" in " ".join(docs.warnings)) is warned
+    # con las integradas (Tectonic) no hay aviso
+    docs = application_documents.prepare_application(env["app_id"], use_ai=False, builtin_templates=True)
+    assert templates_registry.UNCONFINED_WARNING not in docs.warnings

@@ -337,8 +337,10 @@ def prepare_application(application_id: str, use_ai: bool | None = None, builtin
     return _prepare(application_id, use_ai)
 
 
-def _check_engines() -> None:
-    """Motor de cada plantilla activa instalado: LaTeX para las integradas; el suyo para las propias."""
+def _check_engines() -> list[str]:
+    """Motor de cada plantilla activa instalado: LaTeX para las integradas; el suyo para las propias.
+    Devuelve avisos: si una plantilla propia LaTeX se compilará con Tectonic (no confina las lecturas)."""
+    warnings: list[str] = []
     for kind in ("cv", "letter"):
         info = templates_registry.active_template(kind)
         if info is None:
@@ -346,19 +348,22 @@ def _check_engines() -> None:
                 raise NoTexEngine()
             continue
         try:
-            templates_registry.resolve_compiler(info.engine, info.compiler)
+            chosen = templates_registry.resolve_compiler(info.engine, info.compiler)
         except templates_registry.EngineMissing as exc:
             raise NoTexEngine(f"{exc}. {TEMPLATE_FALLBACK_HINT}") from None
         except templates_registry.TemplateError as exc:
             raise VerificationFailed([f"Plantilla propia «{info.name}»: {exc}", TEMPLATE_FALLBACK_HINT],
                                      builtin_fallback=True) from None
+        if templates_registry.is_unconfined(chosen) and templates_registry.UNCONFINED_WARNING not in warnings:
+            warnings.append(templates_registry.UNCONFINED_WARNING)
+    return warnings
 
 
 def _prepare(application_id: str, use_ai: bool | None) -> PreparedDocs:
     from search_config import get_config
 
     app = load_application(application_id)
-    _check_engines()
+    engine_warnings = _check_engines()
 
     cfg = get_config()
     track_id, summary_key = _resolve_track(app, cfg)
@@ -379,6 +384,7 @@ def _prepare(application_id: str, use_ai: bool | None) -> PreparedDocs:
                     profile, app, summary_key, keywords, work_dir,
                     use_ai=_resolve_use_ai(use_ai), ai_requested=use_ai is True,
                 )
+                warnings = [*engine_warnings, *warnings]
             except VerificationError as exc:
                 raise VerificationFailed([str(exc)]) from exc
             except LaTeXCompilationError as exc:

@@ -28,6 +28,12 @@ LETTER_TEMPLATE = CV_TEMPLATE
 TYPST_TEMPLATE = "= ((( personal.name | typst_escape )))\n"
 
 
+def _register(*args, **kwargs):
+    """register_template con la confirmación de confianza (los tests de seguridad la quitan a propósito)."""
+    kwargs.setdefault("trusted", True)
+    return templates_registry.register_template(*args, **kwargs)
+
+
 @pytest.fixture
 def home(tmp_path, monkeypatch):
     """JH_HOME temporal con un jobhunter.yaml propio; restaura la config fijada por los tests."""
@@ -71,27 +77,27 @@ class TestValidation:
     @pytest.mark.parametrize("name", ["", "Mayus", "../x", "a b", "-x", "x" * 41, "moderncv-banking"])
     def test_bad_names(self, home, name):
         with pytest.raises(templates_registry.TemplateError):
-            templates_registry.register_template(name, "cv", {"a.tex.j2": b"x"})
+            _register(name, "cv", {"a.tex.j2": b"x"})
 
     def test_bad_kind_and_engine(self, home):
         with pytest.raises(templates_registry.TemplateError):
-            templates_registry.register_template("ok", "otro", {"a.tex.j2": b"x"})
+            _register("ok", "otro", {"a.tex.j2": b"x"})
         with pytest.raises(templates_registry.TemplateError):
-            templates_registry.register_template("ok", "cv", {"a.tex.j2": b"x"}, engine="word")
+            _register("ok", "cv", {"a.tex.j2": b"x"}, engine="word")
 
     def test_missing_main_file(self, home):
         with pytest.raises(templates_registry.TemplateError, match="principal"):
-            templates_registry.register_template("ok", "cv", {"notas.txt": b"x"})
+            _register("ok", "cv", {"notas.txt": b"x"})
 
     @pytest.mark.parametrize("compiler", ["latexmk", "pdflatex", "sh", "/usr/bin/xelatex", "xelatex -shell-escape"])
     def test_only_known_compilers(self, home, compiler):
         with pytest.raises(templates_registry.TemplateError, match="compilador"):
-            templates_registry.register_template("ok", "cv", {"a.tex.j2": b"x"}, compiler=compiler)
+            _register("ok", "cv", {"a.tex.j2": b"x"}, compiler=compiler)
 
     def test_member_paths_cannot_escape(self, home):
         for bad in ("../evil.tex.j2", "/abs/evil.tex.j2", "a/../../evil.tex.j2", "C:/evil.tex.j2"):
             with pytest.raises(templates_registry.TemplateError, match="Ruta no permitida"):
-                templates_registry.register_template("ok", "cv", {bad: b"x"})
+                _register("ok", "cv", {bad: b"x"})
         assert not (home / "templates" / "evil.tex.j2").exists()
 
     def test_zip_path_traversal_blocked(self, home):
@@ -125,7 +131,7 @@ class TestValidation:
 class TestRegistration:
     @requires_engine
     def test_valid_latex_template_registers_and_activation_changes_output(self, home):
-        info = templates_registry.register_template("mia", "cv", {"cv.tex.j2": CV_TEMPLATE.encode()}, page_limit=1)
+        info = _register("mia", "cv", {"cv.tex.j2": CV_TEMPLATE.encode()}, page_limit=1)
         assert info.name == "mia" and not info.builtin and not info.active and info.main_file == "cv.tex.j2"
         assert (home / "templates" / "cv" / "mia" / "template.json").is_file()
         # aún manda la integrada
@@ -145,7 +151,7 @@ class TestRegistration:
     def test_template_that_does_not_compile_is_rejected_and_leaves_nothing(self, home):
         broken = b"\\documentclass{article}\\begin{document}\\nonexistentmacro\\end{document}"
         with pytest.raises(templates_registry.TemplateError, match="compilación de prueba"):
-            templates_registry.register_template("rota", "cv", {"cv.tex.j2": broken})
+            _register("rota", "cv", {"cv.tex.j2": broken})
         assert not (home / "templates" / "cv" / "rota").exists()
         assert not (home / "templates" / "cv" / "rota.tmp").exists()
         assert all(t.name != "rota" for t in templates_registry.list_templates())
@@ -154,39 +160,39 @@ class TestRegistration:
     def test_template_over_page_limit_is_rejected(self, home):
         many = "\\documentclass{article}\\begin{document}" + "\\newpage x " * 3 + "\\end{document}"
         with pytest.raises(templates_registry.TemplateError, match="páginas"):
-            templates_registry.register_template("larga", "letter", {"c.tex.j2": many.encode()}, page_limit=1)
+            _register("larga", "letter", {"c.tex.j2": many.encode()}, page_limit=1)
 
     def test_jinja_error_is_a_clean_error(self, home, monkeypatch):
-        monkeypatch.setattr(templates_registry, "engine_available", lambda *a, **k: "tectonic")
+        monkeypatch.setattr(templates_registry, "_resolve_binary", lambda name: f"/usr/bin/{name}")
         with pytest.raises(templates_registry.TemplateError, match="renderizar"):
-            templates_registry.register_template("jinja", "cv", {"c.tex.j2": b"((* if *))"})
+            _register("jinja", "cv", {"c.tex.j2": b"((* if *))"})
         assert not (home / "templates" / "cv" / "jinja").exists()
 
     def test_no_engine_gives_clear_error(self, home, monkeypatch):
-        monkeypatch.setattr(templates_registry, "engine_available", lambda *a, **k: None)
+        monkeypatch.setattr(templates_registry, "_resolve_binary", lambda name: None)
         with pytest.raises(templates_registry.EngineMissing, match="Tectonic"):
-            templates_registry.register_template("sinmotor", "cv", {"c.tex.j2": CV_TEMPLATE.encode()})
+            _register("sinmotor", "cv", {"c.tex.j2": CV_TEMPLATE.encode()})
 
     def test_typst_without_binary_gives_409_style_error(self, home, monkeypatch):
         monkeypatch.setattr(templates_registry.shutil, "which", lambda *_: None)
         with pytest.raises(templates_registry.EngineMissing, match="typst"):
-            templates_registry.register_template("typ", "cv", {"c.typ.j2": TYPST_TEMPLATE.encode()}, engine="typst")
+            _register("typ", "cv", {"c.typ.j2": TYPST_TEMPLATE.encode()}, engine="typst")
 
     @requires_typst
     def test_typst_template_registers(self, home):
-        info = templates_registry.register_template("typ", "cv", {"c.typ.j2": TYPST_TEMPLATE.encode()}, engine="typst")
+        info = _register("typ", "cv", {"c.typ.j2": TYPST_TEMPLATE.encode()}, engine="typst")
         assert info.engine == "typst"
 
     def test_registration_replaces_atomically(self, home, monkeypatch):
         monkeypatch.setattr(templates_registry, "_test_compile", lambda *a, **k: None)
-        templates_registry.register_template("v", "cv", {"c.tex.j2": b"uno"})
-        templates_registry.register_template("v", "cv", {"c.tex.j2": b"dos"})
+        _register("v", "cv", {"c.tex.j2": b"uno"})
+        _register("v", "cv", {"c.tex.j2": b"dos"})
         assert (home / "templates" / "cv" / "v" / "c.tex.j2").read_bytes() == b"dos"
         assert not (home / "templates" / "cv" / "v.old").exists()
 
     def test_assets_are_copied_next_to_source(self, home, monkeypatch, tmp_path):
         monkeypatch.setattr(templates_registry, "_test_compile", lambda *a, **k: None)
-        templates_registry.register_template(
+        _register(
             "conclase", "letter", {"c.tex.j2": b"x", "mi.cls": b"cls", "fuentes/f.ttf": b"ttf"}
         )
         templates_registry.activate_template("letter", "conclase")
@@ -213,6 +219,7 @@ class TestAPI:
         return body, f"multipart/form-data; boundary={boundary}"
 
     def _post(self, fields, filename, data):
+        fields = {"trusted": "true", **fields}
         body, ctype = self._upload(fields, filename, data)
         status, _, text = call("POST", "/api/templates", headers=[CLIENT, ("content-type", ctype),
                                                                    ("content-length", str(len(body)))], body=body)
@@ -240,7 +247,7 @@ class TestAPI:
         assert status == 422 and "Ruta no permitida" in body
 
     def test_upload_no_engine_is_409(self, home, monkeypatch):
-        monkeypatch.setattr(templates_registry, "engine_available", lambda *a, **k: None)
+        monkeypatch.setattr(templates_registry, "_resolve_binary", lambda name: None)
         status, _ = self._post({"name": "mia", "kind": "cv"}, "c.tex.j2", CV_TEMPLATE.encode())
         assert status == 409
 
@@ -265,8 +272,8 @@ class TestPipeline:
     def test_generator_uses_active_custom_templates(self, home, tmp_path):
         tpl = ("\\documentclass[a4paper]{article}\n\\begin{document}\n%s ((( personal.name | latex_escape )))\n"
                "\\end{document}\n")
-        templates_registry.register_template("cvp", "cv", {"c.tex.j2": (tpl % "CV-PROPIO").encode()}, page_limit=1)
-        templates_registry.register_template("carp", "letter", {"c.tex.j2": (tpl % "CARTA-PROPIA").encode()}, page_limit=1)
+        _register("cvp", "cv", {"c.tex.j2": (tpl % "CV-PROPIO").encode()}, page_limit=1)
+        _register("carp", "letter", {"c.tex.j2": (tpl % "CARTA-PROPIA").encode()}, page_limit=1)
         templates_registry.activate_template("cv", "cvp")
         templates_registry.activate_template("letter", "carp")
         profile = json.loads((config.REPO_ROOT / "backend" / "profile.example.json").read_text(encoding="utf-8"))
@@ -303,10 +310,10 @@ def _install_raw(home: Path, kind: str, name: str, files: dict[str, str], **meta
 class TestSandbox:
     def test_ssti_payload_rejected_at_registration(self, home, monkeypatch, tmp_path):
         marker = tmp_path / "pwned"
-        monkeypatch.setattr(templates_registry, "engine_available", lambda *a, **k: "tectonic")
+        monkeypatch.setattr(templates_registry, "_resolve_binary", lambda name: f"/usr/bin/{name}")
         payload = SSTI.format(marker=marker).encode()
         with pytest.raises(templates_registry.TemplateError, match="SecurityError"):
-            templates_registry.register_template("ssti", "cv", {"c.tex.j2": payload})
+            _register("ssti", "cv", {"c.tex.j2": payload})
         assert not marker.exists()
         assert not (home / "templates" / "cv" / "ssti").exists()
 
@@ -373,7 +380,7 @@ class TestCompilerArgv:
 
     def test_latexmkrc_and_texmf_are_stripped(self, home, monkeypatch):
         monkeypatch.setattr(templates_registry, "_test_compile", lambda *a, **k: None)
-        templates_registry.register_template("rc", "cv", {
+        _register("rc", "cv", {
             "c.tex.j2": b"x", "latexmkrc": b"system('id')", "sub/.latexmkrc": b"y", "texmf.cnf": b"z",
             "LATEXMKRC": b"w",
         })
@@ -446,26 +453,114 @@ class TestEscapingAndLint:
         "\\InputIfFileExists{~/x}{}{}", "\\includegraphics[width=1cm]{C:/x.png}", "\\input{a/../../b}",
     ])
     def test_lint_rejects_absolute_or_parent_paths(self, home, monkeypatch, src):
-        monkeypatch.setattr(templates_registry, "engine_available", lambda *a, **k: "tectonic")
+        monkeypatch.setattr(templates_registry, "_resolve_binary", lambda name: f"/usr/bin/{name}")
         with pytest.raises(templates_registry.TemplateError, match="fuera de su carpeta"):
-            templates_registry.register_template("lint", "cv", {"c.tex.j2": src.encode()})
+            _register("lint", "cv", {"c.tex.j2": src.encode()})
 
     def test_lint_checks_support_files_and_allows_relative(self, home, monkeypatch):
         monkeypatch.setattr(templates_registry, "_test_compile", lambda *a, **k: None)
         with pytest.raises(templates_registry.TemplateError, match="fuera de su carpeta"):
-            templates_registry.register_template("lint", "cv", {"c.tex.j2": b"x", "mi.sty": b"\\input{/etc/hostname}"})
-        templates_registry.register_template("ok", "cv", {"c.tex.j2": b"\\input{secciones/a}", "secciones/a.tex": b"y"})
+            _register("lint", "cv", {"c.tex.j2": b"x", "mi.sty": b"\\input{/etc/hostname}"})
+        _register("ok", "cv", {"c.tex.j2": b"\\input{secciones/a}", "secciones/a.tex": b"y"})
 
 
 def test_assets_are_refreshed_when_the_template_changes(home, monkeypatch, tmp_path):
     """Revisión SP3 M7: volver a preparar tras actualizar la plantilla copia los ficheros de apoyo nuevos."""
     monkeypatch.setattr(templates_registry, "_test_compile", lambda *a, **k: None)
-    templates_registry.register_template("conclase", "letter", {"c.tex.j2": b"x", "mi.cls": b"v1", "latexmkrc": b"y"})
+    _register("conclase", "letter", {"c.tex.j2": b"x", "mi.cls": b"v1", "latexmkrc": b"y"})
     templates_registry.activate_template("letter", "conclase")
     out = tmp_path / "out"
     out.mkdir()
     templates_registry.copy_assets("letter", out)
-    templates_registry.register_template("conclase", "letter", {"c.tex.j2": b"x", "mi.cls": b"v2"})
+    _register("conclase", "letter", {"c.tex.j2": b"x", "mi.cls": b"v2"})
     templates_registry.copy_assets("letter", out)
     assert (out / "mi.cls").read_bytes() == b"v2"
     assert not (out / "latexmkrc").exists()
+
+
+# ── Confirmación de confianza, compilador confinado y lint reforzado (revisión SP3, 2.ª ronda) ──
+
+class TestTrustAndConfinement:
+    def test_registration_requires_trusted_ack(self, home, monkeypatch):
+        monkeypatch.setattr(templates_registry, "_test_compile", lambda *a, **k: None)
+        with pytest.raises(templates_registry.TemplateError, match="confianza"):
+            templates_registry.register_template("mia", "cv", {"c.tex.j2": b"x"})
+        assert not (home / "templates" / "cv" / "mia").exists()
+        _register("mia", "cv", {"c.tex.j2": b"x"})
+        stored = json.loads((home / "templates" / "cv" / "mia" / "template.json").read_text(encoding="utf-8"))
+        assert stored["trusted"] is True
+
+    def test_api_without_trusted_is_422(self, home, monkeypatch):
+        monkeypatch.setattr(templates_registry, "_test_compile", lambda *a, **k: None)
+        for value in (None, "false", ""):
+            fields = {"name": "mia", "kind": "cv"} if value is None else {"name": "mia", "kind": "cv", "trusted": value}
+            body, ctype = TestAPI()._upload(fields, "c.tex.j2", CV_TEMPLATE.encode())
+            status, _, text = call("POST", "/api/templates", headers=[CLIENT, ("content-type", ctype),
+                                                                       ("content-length", str(len(body)))], body=body)
+            assert status == 422 and "confianza" in text, value
+        status, text = TestAPI()._post({"name": "mia", "kind": "cv", "trusted": "true"}, "c.tex.j2", CV_TEMPLATE.encode())
+        assert status == 200, text
+
+    @pytest.mark.parametrize("available,chosen,expected", [
+        ({"tectonic", "xelatex", "lualatex"}, None, "xelatex"),
+        ({"tectonic", "lualatex"}, None, "lualatex"),
+        ({"tectonic", "xelatex"}, "tectonic", "xelatex"),   # Tectonic no confina: se prefiere xelatex
+        ({"tectonic", "xelatex", "lualatex"}, "lualatex", "lualatex"),
+        ({"tectonic"}, None, "tectonic"),
+        ({"tectonic"}, "xelatex", None),                     # el elegido no está: EngineMissing
+    ])
+    def test_custom_latex_prefers_confined_engines(self, monkeypatch, available, chosen, expected):
+        monkeypatch.setattr(templates_registry, "_resolve_binary", lambda n: f"/usr/bin/{n}" if n in available else None)
+        if expected is None:
+            with pytest.raises(templates_registry.EngineMissing):
+                templates_registry.resolve_compiler("latex", chosen)
+        else:
+            assert templates_registry.resolve_compiler("latex", chosen) == expected
+        assert templates_registry.is_unconfined(expected or "xelatex") == (expected == "tectonic")
+
+    @pytest.mark.parametrize("engine", ["xelatex", "lualatex"])
+    def test_classic_engine_gets_paranoid_kpathsea_env(self, tmp_path, monkeypatch, engine):
+        seen = []
+
+        def fake_run(cmd, cwd=None, env=None, **kwargs):
+            seen.append((cmd, env))
+            (tmp_path / "out" / "cv.pdf").write_bytes(b"%PDF")
+            return type("P", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        monkeypatch.setattr(templates_registry, "_resolve_binary", lambda n: f"/usr/bin/{n}" if n == engine else None)
+        monkeypatch.setattr(templates_registry.subprocess, "run", fake_run)
+        src = tmp_path / "cv.tex"
+        src.write_text("x", encoding="utf-8")
+        templates_registry._compile(src, tmp_path / "out", 1, "latex", None)
+        cmd, env = seen[0]
+        assert cmd[0] == f"/usr/bin/{engine}" and "-no-shell-escape" in cmd
+        assert env["openin_any"] == "p" and env["openout_any"] == "p"
+
+    def test_typst_runs_with_root_on_template_work_dir(self, tmp_path, monkeypatch):
+        seen = []
+
+        def fake_run(cmd, cwd=None, env=None, **kwargs):
+            seen.append((cmd, cwd))
+            (tmp_path / "work" / "cv.pdf").write_bytes(b"%PDF")
+            return type("P", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        monkeypatch.setattr(templates_registry, "_resolve_binary", lambda n: "/usr/bin/typst" if n == "typst" else None)
+        monkeypatch.setattr(templates_registry.subprocess, "run", fake_run)
+        work = tmp_path / "work"
+        work.mkdir()
+        src = work / "cv.typ"
+        src.write_text("= x", encoding="utf-8")
+        templates_registry._compile(src, work, 1, "typst", None)
+        cmd, cwd = seen[0]
+        assert cmd == ["/usr/bin/typst", "compile", "--root", str(work), str(src), str(work / "cv.pdf")]
+        assert cwd == str(work)
+
+    @pytest.mark.parametrize("src", [
+        "\\read16 to \\x \\read/etc/passwd", "\\lstinputlisting{/etc/passwd}", "\\verbatiminput{../../x}",
+        "\\catcode`\\|=0", "\\csname input\\endcsname{x}", "\\csname @@input\\endcsname x",
+        "\\expandafter\\csname include\\endcsname{a}", "\\openin3 /etc/shadow", "\\includegraphics{~/foto.png}",
+    ])
+    def test_lint_rejects_more_bypasses(self, home, monkeypatch, src):
+        monkeypatch.setattr(templates_registry, "_resolve_binary", lambda name: f"/usr/bin/{name}")
+        with pytest.raises(templates_registry.TemplateError, match="fuera de su carpeta|catcode|csname"):
+            _register("lint", "cv", {"c.tex.j2": src.encode()})

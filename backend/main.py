@@ -528,7 +528,8 @@ def list_document_templates():
 async def register_document_template(request: Request):
     """Registra una plantilla propia (multipart: `file` = .zip o un único .tex.j2/.typ.j2, y `name`, `kind`
     cv|letter, `engine` latex|typst, `compiler` tectonic|xelatex|lualatex|typst, `page_limit`, `style_rules`).
-    No hay comando de compilación libre (un `compile_cmd` se ignora). Compila de prueba antes de aceptarla: si
+    No hay comando de compilación libre (un `compile_cmd` se ignora). Exige `trusted=true`: una plantilla puede
+    leer ficheros del equipo y meterlos en el PDF (sin esa confirmación, 422). Compila de prueba antes de aceptarla: si
     no compila, no se registra (422); sin el motor necesario, 409."""
     length = request.headers.get("content-length")
     if length is None or not length.isdigit():
@@ -559,7 +560,7 @@ async def register_document_template(request: Request):
             return templates_registry.register_template(
                 text("name"), text("kind"), files, engine=engine, main_file=text("main_file") or None,
                 compiler=text("compiler") or None, page_limit=int(raw_limit) if raw_limit else None,
-                style_rules=text("style_rules"),
+                style_rules=text("style_rules"), trusted=text("trusted").strip().lower() in ("true", "1", "on", "yes"),
             )
 
         try:

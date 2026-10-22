@@ -7,7 +7,7 @@ const calls: Call[] = [];
 let lastForm: FormData | null = null;
 const tpl = (name: string, kind: string, builtin: boolean, active: boolean, invalid_reason: string | null = null) => ({
   name, kind, engine: "latex", builtin, active, main_file: "x", compiler: null, page_limit: null, style_rules: "",
-  invalid_reason,
+  invalid_reason, trusted: !builtin,
 });
 
 beforeAll(() => {
@@ -106,6 +106,14 @@ test("subir: envía motor, compilador, páginas y reglas en el multipart y ense�
     compiler.dispatchEvent(new Event("change", { bubbles: true }));
   });
   const submit = [...container.querySelectorAll("button")].find(b => b.textContent?.includes(T.upload))!;
+  // sin confirmar la confianza no se sube nada
+  expect(container.textContent).toContain(T.trust);
+  await act(async () => { submit.click(); });
+  expect(container.querySelector('[role="alert"]')!.textContent).toBe(T.noTrust);
+  expect(calls).toEqual([]);
+  const trust = [...container.querySelectorAll("label")].find(l => l.textContent?.includes(T.trustCheck))!
+    .querySelector("input") as HTMLInputElement;
+  await act(async () => { trust.click(); });
   await act(async () => { submit.click(); });
   await act(async () => { await new Promise(r => setTimeout(r, 10)); });
   expect(calls).toContainEqual({ method: "POST", url: "/api/templates" });
@@ -117,6 +125,7 @@ test("subir: envía motor, compilador, páginas y reglas en el multipart y ense�
   expect(form.get("page_limit")).toBe("1");
   expect(form.get("style_rules")).toBe("Resumen de una frase");
   expect((form.get("file") as File).name).toBe("cv.typ.j2");
+  expect(form.get("trusted")).toBe("true");
   expect(form.has("compile_cmd")).toBe(false);
   expect(container.querySelector('[role="alert"]')!.textContent).toBe("La compilación de prueba falló: macro desconocida");
   await act(async () => { root.unmount(); });

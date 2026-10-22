@@ -18,10 +18,11 @@ Registra tu propia plantilla de CV o de carta (LaTeX o Typst) para que **Prepara
 2. Registrar (hace una **compilación de prueba obligatoria** con `backend/profile.example.json`; si no compila o no cabe, no se registra y se muestra el error):
 
    ```bash
-   .venv/bin/python -m automation.templates_registry add <ruta> --name <nombre> --kind cv|letter [--engine latex|typst] [--compiler tectonic|xelatex|lualatex|typst] [--page-limit N] [--style-rules "texto"]
+   .venv/bin/python -m automation.templates_registry add <ruta> --name <nombre> --kind cv|letter [--engine latex|typst] [--compiler tectonic|xelatex|lualatex|typst] [--page-limit N] [--style-rules "texto"] --trusted
    ```
 
-   Typst exige `typst` en el PATH; LaTeX, Tectonic o TeX Live (sin `--compiler` se usa el primero instalado). Si falta el motor, el error lo dice y cómo instalarlo. `--page-limit` manda sobre `documents:` al preparar candidaturas con esta plantilla y `--style-rules` llega a la IA como reglas de forma (nunca de hechos).
+   `--trusted` es obligatorio: confirma que la plantilla viene de una fuente de confianza (una plantilla puede leer ficheros de tu equipo y meterlos en el PDF que envías). Pregúntaselo al usuario antes; no lo añadas por tu cuenta.
+   Typst exige `typst` en el PATH. Para LaTeX se prefiere xelatex o lualatex (TeX Live), que confinan las lecturas a la carpeta de la plantilla; Tectonic solo se usa si no hay ninguno de los dos, y entonces «Preparar candidatura» avisa de que no está confinada. Si falta el motor, el error lo dice y cómo instalarlo. `--page-limit` manda sobre `documents:` al preparar candidaturas con esta plantilla y `--style-rules` llega a la IA como reglas de forma (nunca de hechos).
 3. Activar: `.venv/bin/python -m automation.templates_registry activate <cv|letter> <nombre>` (se guarda en `documents:` de `jobhunter.yaml`; requiere haber completado el asistente).
 4. Borrar: `.venv/bin/python -m automation.templates_registry delete <cv|letter> <nombre>` (si era la activa, vuelve la integrada).
 5. Genera una candidatura de prueba (`/apply`) y revisa el PDF.

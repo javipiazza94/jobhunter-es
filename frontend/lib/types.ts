@@ -334,6 +334,8 @@ export interface TemplateInfo {
   page_limit: number | null;
   style_rules: string;
   invalid_reason: string | null;
+  /** La persona confirmó al registrarla que viene de una fuente de confianza. */
+  trusted: boolean;
 }
 
 /** GET/PUT /api/settings/sources: una fuente de ofertas y su estado en jobhunter.yaml. */

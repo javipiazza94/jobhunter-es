@@ -213,6 +213,8 @@ export async function uploadTemplate(
   meta: {
     name: string; kind: TemplateKind; engine?: TemplateEngine; compiler?: TemplateCompiler | null;
     page_limit?: number; style_rules?: string;
+    /** Confirmación obligatoria: una plantilla puede leer ficheros del equipo y meterlos en el PDF. */
+    trusted: boolean;
   },
 ): Promise<TemplateInfo> {
   const form = new FormData();
@@ -220,6 +222,7 @@ export async function uploadTemplate(
   form.append("kind", meta.kind);
   if (meta.engine) form.append("engine", meta.engine);
   if (meta.compiler) form.append("compiler", meta.compiler);
+  form.append("trusted", meta.trusted ? "true" : "false");
   if (meta.page_limit) form.append("page_limit", String(meta.page_limit));
   if (meta.style_rules) form.append("style_rules", meta.style_rules);
   form.append("file", file, filename);
