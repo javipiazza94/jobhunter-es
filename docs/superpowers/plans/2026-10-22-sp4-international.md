@@ -84,8 +84,8 @@
 
 **Interfaces:** `detect_language(text: str) -> str | None` (es/en/de/fr/it/pt via stopword frequency on normalized text, min 20 words, confidence margin; None when unsure); stored on offers as `job_offers.language` via a new migration (007) filled at persist time (and lazily for existing rows when needed by documents). `language_gate`: variants and requirement/level phrases for de/fr/it ("Deutschkenntnisse", "fließend", "verhandlungssicher", "courant", "bilingue", "obligatoire", "richiesto", "fluente", "madrelingua"…); `posting_guard`: injection patterns in de/fr/it mirroring the es block.
 
-- [ ] Tests per language with invented sentences; migration 007 on a v6 DB; existing language_gate results unchanged for es/en fixtures.
-- [ ] Commit `feat(i18n): idioma de la oferta y filtros de idioma en de/fr/it`.
+- [x] Tests per language with invented sentences; migration 007 on a v6 DB; existing language_gate results unchanged for es/en fixtures.
+- [x] Commit `feat(i18n): idioma de la oferta y filtros de idioma en de/fr/it`.
 
 ### Task 7: Templates per language (letters, follow-ups, LaTeX labels)
 

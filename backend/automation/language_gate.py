@@ -23,8 +23,8 @@ _BASE_LANGUAGES = {
     "español": ["español", "castellano", "spanish"],
     "inglés": ["inglés", "english"],
     "italiano": ["italiano", "italian"],
-    "alemán": ["alemán", "german", "deutsch"],
-    "francés": ["francés", "french"],
+    "alemán": ["alemán", "german", "deutsch", "deutschkenntnisse"],
+    "francés": ["francés", "french", "français", "francais"],
     "portugués": ["portugués", "portuguese"],
     "neerlandés": ["neerlandés", "holandés", "dutch"],
     "catalán": ["catalán", "català"],
@@ -60,20 +60,33 @@ def _with_unaccented(variants: list[str]) -> list[str]:
 LANGUAGES = {canon: _with_unaccented(variants) for canon, variants in _BASE_LANGUAGES.items()}
 
 _LEVELS = {"a1": 1, "a2": 2, "b1": 3, "b2": 4, "c1": 5, "c2": 6}
-# palabras que equivalen a un nivel MCER
+# palabras que equivalen a un nivel MCER (es, en, de, fr, it)
 _LEVEL_WORDS = {
     "nativo": 7, "native": 7, "bilingüe": 7, "bilingue": 7, "bilingual": 7, "mother tongue": 7,
     "fluido": 5, "fluent": 5, "fluency": 5, "fluidez": 5, "avanzado": 5, "advanced": 5,
     "proficient": 5, "proficiency": 5, "nivel alto": 5, "alto nivel": 5, "high level": 5,
     "business level": 5, "dominio": 5, "excelente": 5, "excellent": 5,
+    # Alemán
+    "fließend": 5, "fliessend": 5, "verhandlungssicher": 5, "konversationssicher": 4,
+    "muttersprache": 7, "zweisprachig": 7,
+    # Francés
+    "courant": 5, "maîtrise": 5, "maitrise": 5, "langue maternelle": 7,
+    # Italiano
+    "madrelingua": 7, "fluente": 5, "ottimo": 5,
 }
 _REQUIRED = re.compile(
     r"\b(imprescindible|obligatori[oa]|requisito|requerid[oa]|necesari[oa]|indispensable|"
-    r"required|mandatory|essential|exigid[oa]|se requiere)\b", re.I)
+    r"required|mandatory|essential|exigid[oa]|se requiere|"
+    r"erforderlich|voraussetzung|zwingend|notwendig|pflicht|"
+    r"obligatoire|requis[e]?|exig[eé][e]?|"
+    r"obbligatorio|richiesto|necessario)\b", re.I)
 _NICE_TO_HAVE = re.compile(
     r"(valorable|se valorar[aá]|valoraremos|valorar[aá]|deseable|preferible|\bplus\b|nice to have|"
     r"\bbonus\b|advantage|ventaja|\bideally\b|idealmente|would be (a )?(plus|great)|is a plus|desirable|"
-    r"te har[aá] destacar|destacar[aá]s|puntos extra|nice-to-have)",
+    r"te har[aá] destacar|destacar[aá]s|puntos extra|nice-to-have|"
+    r"von vorteil|wünschenswert|wunschenswert|idealerweise|"
+    r"un plus|souhait[eé]|souhaitable|appr[eé]ci[eé]|atout|"
+    r"gradito|preferibile|desiderabile)",
     re.I)
 _LEVEL_RX = re.compile(
     r"\b(a1|a2|b1|b2|c1|c2)\b|" + "|".join(rf"\b{re.escape(w)}\b" for w in _LEVEL_WORDS), re.I)

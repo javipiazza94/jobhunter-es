@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS job_offers (
     is_relevant     INTEGER DEFAULT 0,
     relevance_score REAL DEFAULT 0.0,
     cv_profile      TEXT DEFAULT NULL,  -- LEGADO: ya no se escribe; el perfil se calcula con classify_track
+    language        TEXT DEFAULT NULL,  -- es, en, de, fr, it, pt o NULL
     scraped_at      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_offers_company ON job_offers(company_id);
@@ -215,13 +216,21 @@ def _migration_006_offer_evaluations(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_007_add_offer_language(conn: sqlite3.Connection) -> None:
+    """Columna language en job_offers (es, en, de, fr, it, pt o NULL)."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(job_offers)").fetchall()}
+    if "language" not in cols:
+        conn.execute("ALTER TABLE job_offers ADD COLUMN language TEXT DEFAULT NULL")
+
+
 # Cada migración lleva la BD de la versión i a la i+1 (PRAGMA user_version) y se ejecuta una sola
 # vez, dentro de una transacción: si falla se deshace entera y la versión no sube.
 # Para cambiar el esquema: añade una función _migration_00N_… al final de esta lista y NO edites
 # las anteriores. Las funciones no deben hacer commit.
 MIGRATIONS = [_migration_001_baseline, _migration_002_application_indexes,
               _migration_003_review_flags_and_followups, _migration_004_generic_track_columns,
-              _migration_005_job_key, _migration_006_offer_evaluations]
+              _migration_005_job_key, _migration_006_offer_evaluations,
+              _migration_007_add_offer_language]
 
 
 def schema_version(conn: sqlite3.Connection) -> int:
@@ -337,6 +346,13 @@ def upsert_job_offer(conn: sqlite3.Connection, data: dict) -> str:
     if not existing:
         existing = _same_posting_by_key(conn, job_key, data.get("location"))
 
+    lang = data.get("language")
+    if not lang and (data.get("description") or data.get("title")):
+        from automation.language_detect import detect_language
+
+        text_to_detect = f"{data.get('title', '')}\n\n{data.get('description', '')}"
+        lang = detect_language(text_to_detect)
+
     if existing:
         oid = existing["id"]
         conn.execute(
@@ -344,13 +360,13 @@ def upsert_job_offer(conn: sqlite3.Connection, data: dict) -> str:
                location=COALESCE(?,location), salary_min=COALESCE(?,salary_min),
                salary_max=COALESCE(?,salary_max), tech_stack=COALESCE(?,tech_stack),
                is_relevant=?, relevance_score=?, scraped_at=?, review_flags=?,
-               followed_tier=COALESCE(?,followed_tier)
+               followed_tier=COALESCE(?,followed_tier), language=COALESCE(?,language)
                WHERE id=?""",
             (data["title"], data.get("description"), data.get("location"),
              data.get("salary_min"), data.get("salary_max"), data.get("tech_stack"),
              int(data.get("is_relevant", 0)), data.get("relevance_score", 0.0),
              datetime.now().isoformat(), data.get("review_flags"),
-             data.get("followed_tier"), oid),
+             data.get("followed_tier"), lang, oid),
         )
     else:
         oid = _new_id()
@@ -358,14 +374,14 @@ def upsert_job_offer(conn: sqlite3.Connection, data: dict) -> str:
             """INSERT INTO job_offers
                (id, company_id, title, description, location, salary_min, salary_max,
                 tech_stack, url, source, posted_at, is_relevant, relevance_score, scraped_at, review_flags,
-                followed_tier, job_key)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                followed_tier, job_key, language)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (oid, data["company_id"], data["title"], data.get("description"),
              data.get("location"), data.get("salary_min"), data.get("salary_max"),
              data.get("tech_stack"), data["url"], data.get("source"),
              data.get("posted_at"), int(data.get("is_relevant", 0)),
              data.get("relevance_score", 0.0), datetime.now().isoformat(), data.get("review_flags"),
-             data.get("followed_tier"), job_key),
+             data.get("followed_tier"), job_key, lang),
         )
     conn.commit()
     return oid

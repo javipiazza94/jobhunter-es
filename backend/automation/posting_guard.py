@@ -155,6 +155,30 @@ INSTRUCTION_PATTERNS = [re.compile(p, re.I) for p in (
     r"\bno (?:se lo )?(?:digas|cuentes|menciones|reveles)(?: esto| nada)? al usuario\b",
     r"\b(?:ejecuta|lanza) (?:el siguiente|los siguientes|este) (?:comando|comandos|script|c[oó]digo)\b",
     r"\bprompt del sistema\b",
+    # Alemán: Anweisungen an Agenten.
+    r"\bignoriere (?:alle |die )?(?:vorherigen |bisherigen )?(?:anweisungen|instruktionen)\b",
+    r"\bvergiss (?:alles |die )?(?:vorherige|vorherigen anweisungen)\b",
+    r"\bdu bist (?:ein|eine|der|die) (?:ki(?![\w-])|ki-assistent|sprachmodell|llm|agent)\b",
+    r"\bals (?:sprachmodell|ki-sprachmodell|ki-assistent)\b",
+    r"\b(?:sag|verrate|erw[aä]hne) (?:dem )?(?:benutzer|nutzer|user) nichts\b",
+    r"\bf[uü]hre (?:den folgenden|folgenden|dieses) (?:befehl|skript|code) aus\b",
+    r"\bsystem(?:-| )?prompt\b",
+    # Francés: directives destinées à un agent.
+    r"\bignore(?:z)? (?:toutes? )?(?:les )?(?:instructions|directives) pr[eé]c[eé]dentes\b",
+    r"\boublie(?:z)? (?:tout )?(?:ce qui pr[eé]c[eè]de|les instructions pr[eé]c[eé]dentes)\b",
+    r"\b(?:tu es|vous [eê]tes) (?:un|une|l')?(?:ia(?![\w-])|assistant|mod[eè]le de langage|llm|agent)\b",
+    r"\ben tant que (?:mod[eè]le de langage|assistant ia)\b",
+    r"\bne (?:dis|dites|r[eé]v[eè]le(?:z)?|mentionne(?:z)?) (?:rien |ceci )?[aà] l['\u2019]utilisateur\b",
+    r"\bex[eé]cute(?:z)? (?:la commande suivante|le script suivant|ce code)\b",
+    r"\bprompt syst[eè]me\b",
+    # Italiano: istruzioni destinate a un agente.
+    r"\bignora (?:tutte |le )?istruzioni precedenti\b",
+    r"\bdimentica (?:tutto |le istruzioni precedenti|ci[oò] che precede)\b",
+    r"\bsei (?:un['\u2019]|un |una )?(?:ia(?![\w-])|assistente|modello linguistico|llm|agente)\b",
+    r"\bcome (?:modello linguistico|assistente ia)\b",
+    r"\bnon (?:dire|rivelare|menzionare) (?:nulla |questo )?all['\u2019]utente\b",
+    r"\besegui (?:il seguente|questo) (?:comando|script|codice)\b",
+    r"\bprompt di sistema\b",
 )]
 WORD = re.compile(r"\w+", re.UNICODE)
 LATIN = re.compile(r"[A-Za-z]")
