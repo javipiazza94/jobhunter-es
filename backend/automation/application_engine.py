@@ -20,7 +20,7 @@ from database import (
     record_application,
     record_history,
 )
-from automation.application_archive import get_application_attachments
+from automation.application_archive import application_lock, get_application_attachments
 from automation.ai_writing import AIBudget, adapt_cover_letter
 from automation.cover_letter import generate as generate_letter
 from automation.email_sender import send_email
@@ -297,14 +297,6 @@ def _send_approved(conn, application_id: str) -> bool:
     cv = select_cv(cv_profile, profile, app.get("track_tag"), app.get("job_title"))
     cover_letter_docx = cover_letter_docx_for(cv_profile, profile)
 
-    # Si existen documentos archivados en JH_HOME/applications/<id>/, se usan preferentemente
-    archived_cv, archived_cover = get_application_attachments(application_id)
-    # (Path, no str: email_sender lee .exists()/.name de cada adjunto)
-    if archived_cv and archived_cv.is_file():
-        cv = archived_cv
-    if archived_cover and archived_cover.is_file():
-        cover_letter_docx = archived_cover
-
     body = app.get("cover_letter_edited") or app.get("cover_letter_used") or ""
     subject = (
         f"Solicitud: {app['job_title']} — {personal.get('name', '')}"
@@ -312,14 +304,24 @@ def _send_approved(conn, application_id: str) -> bool:
         else f"Candidatura — {personal.get('name', '')}"
     )
 
-    success, _message_id = send_email(
-        to=app["contact_value"],
-        subject=subject,
-        body=body,
-        cv_path=cv,
-        cover_letter_path=cover_letter_docx,
-        dry_run=False,
-    )
+    # Si existen documentos archivados en JH_HOME/applications/<id>/, se usan preferentemente.
+    # Con el cerrojo de la candidatura: nunca se adjunta durante una preparación o sustitución.
+    with application_lock(application_id):
+        archived_cv, archived_cover = get_application_attachments(application_id)
+        # (Path, no str: email_sender lee .exists()/.name de cada adjunto)
+        if archived_cv and archived_cv.is_file():
+            cv = archived_cv
+        if archived_cover and archived_cover.is_file():
+            cover_letter_docx = archived_cover
+
+        success, _message_id = send_email(
+            to=app["contact_value"],
+            subject=subject,
+            body=body,
+            cv_path=cv,
+            cover_letter_path=cover_letter_docx,
+            dry_run=False,
+        )
 
     if success:
         now = datetime.now().isoformat()

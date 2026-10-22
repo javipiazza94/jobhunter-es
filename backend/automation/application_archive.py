@@ -30,7 +30,9 @@ INTERVIEW_FILE = "interview.md"
 # Ficheros que se regeneran en cada preparación; el resto (pack de entrevista) se conserva.
 GENERATED_FILES = ("cv.pdf", "cover.pdf", "cv.tex", "cover.tex", "job_posting.md", "metadata.json")
 
-_locks: dict[str, threading.Lock] = {}
+LEFTOVER_SUFFIXES = (".old", ".tmp", ".work")  # restos de una preparación cortada a medias
+
+_locks: dict[str, threading.RLock] = {}
 _locks_guard = threading.Lock()
 
 
@@ -38,11 +40,12 @@ def _root() -> Path:
     return Path(APPLICATIONS_DIR) if APPLICATIONS_DIR is not None else Path(config.APPLICATIONS_DIR)
 
 
-def application_lock(application_id: str | int) -> threading.Lock:
-    """Cerrojo por candidatura: serializa preparación y pack de entrevista dentro del proceso."""
+def application_lock(application_id: str | int) -> threading.RLock:
+    """Cerrojo (reentrante) por candidatura: serializa preparación, pack de entrevista y envío del
+    email dentro del proceso, para que nadie vea la carpeta a medio sustituir."""
     key = str(application_id)
     with _locks_guard:
-        return _locks.setdefault(key, threading.Lock())
+        return _locks.setdefault(key, threading.RLock())
 
 
 def get_application_dir(application_id: str | int) -> Path:
@@ -53,6 +56,22 @@ def get_application_dir(application_id: str | int) -> Path:
     if not name or name in (".", "..") or "/" in name or "\\" in name or "\x00" in name or name.startswith("."):
         raise ValueError(f"Id de candidatura no válido: {name!r}")
     return _root() / name
+
+
+def recover_application_dir(application_id: str | int) -> Path:
+    """Repara el archivo tras un corte: si falta `<id>/` pero queda `<id>.old/`, lo restaura; con
+    `<id>/` presente, borra los restos `<id>.old/`, `<id>.tmp/` y `<id>.work/`. Devuelve `<id>/`."""
+    app_dir = get_application_dir(application_id)
+    with application_lock(application_id):
+        old = app_dir.with_name(f"{app_dir.name}.old")
+        if not app_dir.exists() and old.is_dir():
+            os.replace(old, app_dir)
+        if app_dir.exists():
+            for suffix in LEFTOVER_SUFFIXES:
+                leftover = app_dir.with_name(f"{app_dir.name}{suffix}")
+                if leftover.exists():
+                    shutil.rmtree(leftover, ignore_errors=True)
+    return app_dir
 
 
 def _swap_in(staging: Path, app_dir: Path) -> None:
@@ -97,7 +116,7 @@ def archive_application(
     Guarda los documentos de una candidatura en su carpeta de archivo JH_HOME/applications/<id>/.
 
     Copia o escribe:
-      - cv.pdf y cover.pdf
+      - cv.pdf y cover.pdf (obligatorios: ValueError si falta alguno)
       - cv.tex y cover.tex (opcional)
       - job_posting.md (la oferta limpia)
       - metadata.json (metadatos de la candidatura y ficheros archivados)
@@ -107,9 +126,13 @@ def archive_application(
     Retorna la ruta al directorio de la candidatura.
     """
     app_dir = get_application_dir(application_id)
+    for label, source in (("CV", cv_pdf), ("carta", cover_pdf)):
+        if not source or not Path(source).is_file():
+            raise ValueError(f"Falta el PDF de la {label} para archivar la candidatura {application_id}")
     app_dir.parent.mkdir(parents=True, exist_ok=True)
     staging = app_dir.with_name(f"{app_dir.name}.tmp")
 
+    # Sin recover_application_dir aquí: los PDFs de origen pueden estar en `<id>.work/` (los limpia el llamador).
     with application_lock(application_id):
         if staging.exists():
             shutil.rmtree(staging)
@@ -137,7 +160,8 @@ def archive_application(
             previous_meta: dict = {}
             if app_dir.is_dir():
                 for old_file in app_dir.iterdir():
-                    if old_file.is_file() and old_file.name not in GENERATED_FILES:
+                    if (old_file.is_file() and old_file.name not in GENERATED_FILES
+                            and not old_file.name.startswith(".")):
                         shutil.copy2(old_file, staging / old_file.name)
                 try:
                     previous_meta = json.loads((app_dir / "metadata.json").read_text(encoding="utf-8"))
@@ -167,9 +191,9 @@ def get_application_attachments(
     Obtiene las rutas al CV y carta de presentación archivados para una candidatura.
 
     Retorna (cv_pdf_path, cover_pdf_path).
-    Si alguno no existe en el archivo, su posición será None.
+    Si alguno no existe en el archivo, su posición será None. Antes repara un corte a medias.
     """
-    app_dir = get_application_dir(application_id)
+    app_dir = recover_application_dir(application_id)
     cv_pdf = app_dir / "cv.pdf"
     cover_pdf = app_dir / "cover.pdf"
 
@@ -214,7 +238,7 @@ def save_interview_prep(
 
 def load_application_archive(application_id: str | int) -> dict:
     """Carga los metadatos y lista de ficheros existentes en el archivo de la candidatura."""
-    app_dir = get_application_dir(application_id)
+    app_dir = recover_application_dir(application_id)
     if not app_dir.is_dir():
         return {}
 

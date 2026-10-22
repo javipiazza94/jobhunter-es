@@ -416,15 +416,19 @@ def list_application_documents(app_id: str, conn: sqlite3.Connection = Depends(g
 
 
 @app.get("/api/applications/{app_id}/documents/{name}")
-def get_application_document(app_id: str, name: str, conn: sqlite3.Connection = Depends(get_db)):
-    """Descarga un documento archivado; solo los de la lista blanca (cv.pdf, cover.pdf, job_posting.md, interview.md)."""
+def get_application_document(app_id: str, name: str, inline: bool = False,
+                             conn: sqlite3.Connection = Depends(get_db)):
+    """Descarga un documento archivado; solo los de la lista blanca (cv.pdf, cover.pdf, job_posting.md,
+    interview.md). `?inline=1` muestra los PDFs en el navegador en vez de descargarlos."""
     _require_application(conn, app_id)
     try:
         path = application_documents.document_path(app_id, name)
     except (FileNotFoundError, ValueError):
         raise HTTPException(404, "Documento no encontrado") from None
+    disposition = "inline" if inline and path.suffix == ".pdf" else "attachment"
     return FileResponse(path, media_type=_DOCUMENT_MEDIA_TYPES.get(path.suffix, "application/octet-stream"),
-                        filename=path.name)
+                        filename=path.name, content_disposition_type=disposition,
+                        headers={"X-Content-Type-Options": "nosniff"})
 
 
 @app.post("/api/applications/{app_id}/approve")

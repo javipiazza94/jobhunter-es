@@ -230,7 +230,9 @@ def prepare_application(application_id: str, use_ai: bool | None = None) -> Prep
     app_dir = application_archive.get_application_dir(application_id)
     app_dir.parent.mkdir(parents=True, exist_ok=True)
     work_dir = app_dir.with_name(f"{app_dir.name}.work")
-    with application_archive.application_lock(f"prepare:{application_id}"):
+    # Mismo cerrojo que el archivo y el envío: mientras se prepara, nadie adjunta ni limpia `<id>.work/`
+    with application_archive.application_lock(application_id):
+        application_archive.recover_application_dir(application_id)
         if work_dir.exists():
             shutil.rmtree(work_dir)
         try:

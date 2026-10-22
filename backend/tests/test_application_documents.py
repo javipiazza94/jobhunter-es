@@ -316,3 +316,90 @@ def test_integracion_prepara_pdfs_reales(env, tmp_path, monkeypatch):
     assert docs.verification["pages"]["cover"] == 1
     assert docs.verification["pages"]["cv"] <= 2
     assert Path(docs.cv_pdf).read_bytes().startswith(b"%PDF")
+
+
+# ── Recuperación tras un corte, cerrojo en el envío y descarga en línea ───────
+
+def test_recupera_old_si_falta_la_carpeta_y_limpia_restos(env, fake_generator):
+    application_documents.prepare_application(env["app_id"])
+    app_dir = env["apps_dir"] / env["app_id"]
+    old = app_dir.with_name(f"{app_dir.name}.old")
+    app_dir.rename(old)  # corte entre los dos renombrados
+
+    cv, cover = application_archive.get_application_attachments(env["app_id"])
+    assert cv == app_dir / "cv.pdf" and cover == app_dir / "cover.pdf"
+    assert not old.exists()
+
+    for suffix in (".old", ".tmp", ".work"):
+        leftover = app_dir.with_name(f"{app_dir.name}{suffix}")
+        leftover.mkdir()
+        (leftover / "cv.pdf").write_bytes(b"resto")
+    assert application_archive.load_application_archive(env["app_id"])["application_id"] == env["app_id"]
+    assert sorted(p.name for p in env["apps_dir"].iterdir()) == [env["app_id"]]
+    assert (app_dir / "cv.pdf").read_bytes() != b"resto"
+
+
+def test_preparar_recupera_old_antes_de_generar(env, fake_generator):
+    application_documents.prepare_application(env["app_id"])
+    app_dir = env["apps_dir"] / env["app_id"]
+    (app_dir / "interview.md").write_text("# Pack", encoding="utf-8")
+    app_dir.rename(app_dir.with_name(f"{app_dir.name}.old"))
+
+    application_documents.prepare_application(env["app_id"])
+    assert (app_dir / "interview.md").read_text(encoding="utf-8") == "# Pack"
+    assert sorted(p.name for p in env["apps_dir"].iterdir()) == [env["app_id"]]
+
+
+def test_archivar_exige_cv_y_carta(env, tmp_path):
+    pdf = tmp_path / "x.pdf"
+    pdf.write_bytes(b"%PDF")
+    with pytest.raises(ValueError):
+        application_archive.archive_application(env["app_id"], cv_pdf=pdf, cover_pdf=None)
+    with pytest.raises(ValueError):
+        application_archive.archive_application(env["app_id"], cv_pdf=tmp_path / "no.pdf", cover_pdf=pdf)
+    assert not (env["apps_dir"] / env["app_id"]).exists()
+
+
+def test_no_arrastra_ficheros_ocultos(env, fake_generator):
+    application_documents.prepare_application(env["app_id"])
+    app_dir = env["apps_dir"] / env["app_id"]
+    (app_dir / ".interview.md.tmp").write_text("a medias", encoding="utf-8")
+    application_documents.prepare_application(env["app_id"])
+    assert not (app_dir / ".interview.md.tmp").exists()
+
+
+def test_el_envio_espera_al_cerrojo_de_la_candidatura(env, fake_generator, monkeypatch):
+    import threading
+
+    from automation import application_engine
+
+    application_documents.prepare_application(env["app_id"])
+    sent: list = []
+    monkeypatch.setattr(application_engine, "send_email",
+                        lambda **kw: sent.append(kw) or (True, "<id@test>"))
+    lock = application_archive.application_lock(env["app_id"])
+    lock.acquire()
+    try:
+        worker = threading.Thread(target=application_engine.send_approved, args=(env["app_id"],))
+        worker.start()
+        worker.join(0.3)
+        assert worker.is_alive() and sent == []  # no resuelve adjuntos mientras alguien archiva
+    finally:
+        lock.release()
+    worker.join(5)
+    assert not worker.is_alive()
+    assert sent[0]["cv_path"] == env["apps_dir"] / env["app_id"] / "cv.pdf"
+
+
+def test_api_descarga_en_linea_y_nosniff(env, fake_generator):
+    application_documents.prepare_application(env["app_id"])
+    base = f"/api/applications/{env['app_id']}/documents/"
+    status, headers, _ = call("GET", base + "cv.pdf", headers=[CLIENT], query="inline=1")
+    assert status == 200
+    assert headers["content-disposition"].startswith("inline")
+    assert headers["x-content-type-options"] == "nosniff"
+    status, headers, _ = call("GET", base + "cv.pdf", headers=[CLIENT])
+    assert headers["content-disposition"].startswith("attachment")
+    assert headers["x-content-type-options"] == "nosniff"
+    status, headers, _ = call("GET", base + "job_posting.md", headers=[CLIENT], query="inline=1")
+    assert headers["content-disposition"].startswith("attachment")  # en línea solo PDFs
