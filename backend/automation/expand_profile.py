@@ -237,3 +237,23 @@ def accept(items: list[dict]) -> dict:
 
     profile_store.modify_profile(merge, setup_builder.normalize_profile)
     return {"added": list(added), "skipped": list(skipped)}
+
+
+# ── CLI: python -m automation.expand_profile <url> [<url> ...] (solo propone: no guarda nada) ──
+
+def _cli(argv: list[str] | None = None) -> int:
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(
+        prog="python -m automation.expand_profile",
+        description="Propone competencias nuevas desde enlaces (GitHub, portfolio...); nada se guarda sin aceptarlo en la app.",
+    )
+    parser.add_argument("urls", nargs="+")
+    args = parser.parse_args(argv)
+    print(json.dumps(propose(args.urls), ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_cli())

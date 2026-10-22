@@ -299,3 +299,34 @@ def build_report(conn: sqlite3.Connection, scope: str, offer_ids: list[str] | No
     path = save_report(markdown, today)
     return {"report_path": str(path), "markdown": markdown, "offers_analyzed": summary["offers_analyzed"],
             "gaps": summary["gaps"], "ai_used": ai is not None}
+
+
+# ── CLI: python -m automation.upskill [--scope saved|evaluated|applied|one] [--offer ID ...] ──
+
+def _cli(argv: list[str] | None = None) -> int:
+    import argparse
+
+    from database import get_conn
+
+    parser = argparse.ArgumentParser(
+        prog="python -m automation.upskill",
+        description="Mapa de huecos de habilidades; guarda el informe en JH_HOME/reports/.",
+    )
+    parser.add_argument("--scope", choices=SCOPES, default="saved")
+    parser.add_argument("--offer", action="append", default=[], dest="offers", help="Id de oferta (con --scope one)")
+    args = parser.parse_args(argv)
+    conn = get_conn()
+    try:
+        report = build_report(conn, args.scope, args.offers or None)
+    except (UpskillError, NoOffers) as exc:
+        print(f"Error: {exc}")
+        return 1
+    finally:
+        conn.close()
+    print(report["markdown"])
+    print(f"\nInforme guardado en {report['report_path']}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_cli())

@@ -52,7 +52,7 @@ from schemas import (
     ExpandAcceptIn, ExpandAcceptOut, ExpandIn, ExpandOut, UpskillIn, UpskillOut,
 )
 from scraper.jobs import SOURCES as SCRAPER_SOURCES, TRACK_JOB_PREFIX, TRACK_PIPELINE_SOURCES
-from automation import application_documents, company_researcher, cv_reader, email_sender, expand_profile, followup, offer_evaluation, profile_proposal, screening, upskill
+from automation import application_documents, company_researcher, cv_reader, email_sender, expand_profile, followup, offer_evaluation, profile_proposal, screening, templates_registry, upskill
 from automation.filter_engine import classify_track
 from automation.location import parse_modality
 from automation.experience_classifier import classify_experience, classify_contract
@@ -503,6 +503,92 @@ def get_application_document(app_id: str, name: str, inline: bool = False,
     return FileResponse(path, media_type=_DOCUMENT_MEDIA_TYPES.get(path.suffix, "application/octet-stream"),
                         filename=path.name, content_disposition_type=disposition,
                         headers={"X-Content-Type-Options": "nosniff"})
+
+
+_TEMPLATE_UPLOAD_MAX = templates_registry.MAX_ZIP_BYTES
+
+
+def _template_http_error(exc: templates_registry.TemplateError) -> HTTPException:
+    if isinstance(exc, templates_registry.EngineMissing):
+        return HTTPException(409, str(exc))
+    if isinstance(exc, templates_registry.TemplateNotFound):
+        return HTTPException(404, str(exc))
+    return HTTPException(422, str(exc))
+
+
+@app.get("/api/templates", response_model=list[templates_registry.TemplateInfo])
+def list_document_templates():
+    """Plantillas de CV y carta (integradas + propias) con la activa de cada tipo."""
+    return templates_registry.list_templates()
+
+
+@app.post("/api/templates", response_model=templates_registry.TemplateInfo)
+async def register_document_template(request: Request):
+    """Registra una plantilla propia (multipart: `file` = .zip o un único .tex.j2/.typ.j2, y `name`, `kind`
+    cv|letter, `engine` latex|typst, `compile_cmd`, `page_limit`, `style_rules`). Compila de prueba antes de
+    aceptarla: si no compila, no se registra (422); sin el motor necesario, 409."""
+    length = request.headers.get("content-length")
+    if length is None or not length.isdigit():
+        raise HTTPException(411, "Falta Content-Length")
+    if int(length) > _TEMPLATE_UPLOAD_MAX + _MULTIPART_OVERHEAD:
+        raise HTTPException(413, "La plantilla es demasiado grande (máx. 5 MB)")
+    form = await request.form(max_files=1, max_fields=10)
+    try:
+        upload = form.get("file")
+        if not isinstance(upload, UploadFile):
+            raise HTTPException(400, "Falta el archivo de la plantilla (campo 'file')")
+        data = await upload.read(_TEMPLATE_UPLOAD_MAX + 1)
+        if len(data) > _TEMPLATE_UPLOAD_MAX:
+            raise HTTPException(413, "La plantilla es demasiado grande (máx. 5 MB)")
+        filename = Path(upload.filename or "").name
+
+        def text(key: str) -> str:
+            return str(form.get(key) or "")
+
+        raw_limit = text("page_limit").strip()
+        if raw_limit and not raw_limit.isdigit():
+            raise HTTPException(422, "page_limit debe ser un número")
+        engine = text("engine") or ("typst" if filename.endswith(".typ.j2") else "latex")
+
+        def register():
+            files = (templates_registry.files_from_zip(data) if filename.lower().endswith(".zip")
+                     else {filename or "template": data})
+            return templates_registry.register_template(
+                text("name"), text("kind"), files, engine=engine, main_file=text("main_file") or None,
+                compile_cmd=text("compile_cmd") or None, page_limit=int(raw_limit) if raw_limit else None,
+                style_rules=text("style_rules"),
+            )
+
+        try:
+            return await run_in_threadpool(register)
+        except templates_registry.TemplateError as exc:
+            raise _template_http_error(exc) from None
+        except ValidationError:
+            raise HTTPException(422, "page_limit debe estar entre 1 y 6") from None
+    finally:
+        await form.close()
+
+
+@app.post("/api/templates/{name}/activate", response_model=templates_registry.TemplateInfo)
+def activate_document_template(name: str, kind: str):
+    """Activa una plantilla (`?kind=cv|letter`); se guarda en `documents:` de jobhunter.yaml."""
+    _require_user_config()
+    try:
+        return templates_registry.activate_template(kind, name)
+    except templates_registry.TemplateError as exc:
+        raise _template_http_error(exc) from None
+    except ConfigError as exc:
+        raise HTTPException(422, str(exc)) from None
+
+
+@app.delete("/api/templates/{name}")
+def delete_document_template(name: str, kind: str):
+    """Borra una plantilla propia (`?kind=cv|letter`); las integradas no se pueden borrar."""
+    try:
+        templates_registry.delete_template(kind, name)
+    except templates_registry.TemplateError as exc:
+        raise _template_http_error(exc) from None
+    return {"deleted": name}
 
 
 @app.post("/api/applications/{app_id}/approve")

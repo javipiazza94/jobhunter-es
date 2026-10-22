@@ -282,12 +282,22 @@ class EmailSettings(_Model):
     from_name: str | None = None
 
 
+class DocumentSettings(_Model):
+    """Plantillas activas de CV y carta (por defecto las integradas) y su límite de páginas."""
+
+    cv_template: str = "moderncv-banking"
+    letter_template: str = "cover-cls"
+    cv_pages: int = Field(2, ge=1, le=6)
+    letter_pages: int = Field(1, ge=1, le=3)
+
+
 class JobHunterConfig(_Model):
     scoring: Scoring
     tracks: list[Track]
     sources: dict[str, dict] = {}
     ai: AISettings = AISettings()
     email: EmailSettings = EmailSettings()
+    documents: DocumentSettings = DocumentSettings()
 
     @field_validator("tracks")
     @classmethod

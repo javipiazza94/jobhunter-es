@@ -27,7 +27,7 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 from ai import AIError, get_provider
-from automation import application_archive
+from automation import application_archive, templates_registry
 from automation.ai_documents import AI_DEADLINE_SECONDS, cap_warnings, run_ai_flow, shorten_documents
 from automation.document_generator import (
     PageOverflow,
@@ -194,6 +194,19 @@ def _resolve_use_ai(use_ai: bool | None) -> bool:
         return False
 
 
+def _page_limits() -> dict[str, int]:
+    """Límites de páginas de `documents:` en jobhunter.yaml (por defecto CV 2, carta 1)."""
+    from search_config import get_config
+
+    docs = get_config().documents
+    return {"cv_pages": docs.cv_pages, "letter_pages": docs.letter_pages}
+
+
+def _latex_source(path: Path | str | None) -> Path | str | None:
+    """El archivo guarda el fuente como cv.tex/cover.tex: un fuente Typst (plantilla propia) no se archiva con ese nombre."""
+    return path if path and Path(path).suffix == ".tex" else None
+
+
 def _generate(
     profile: dict,
     app: dict,
@@ -230,6 +243,7 @@ def _generate(
         output_dir=output_dir,
         verify=True,
         offer_keywords=keywords,
+        **_page_limits(),
     )
     return result, "deterministic", warnings
 
@@ -258,7 +272,8 @@ def _generate_with_ai(
     cv_ctx, letter_ctx, warnings = run_ai_flow(profile, offer, provider, track=summary_key, deadline=deadline)
     try:
         result = generate_documents_from_context(
-            cv_ctx, letter_ctx, output_dir=output_dir, verify=True, offer_keywords=keywords, trim=False
+            cv_ctx, letter_ctx, output_dir=output_dir, verify=True, offer_keywords=keywords, trim=False,
+            **_page_limits(),
         )
     except PageOverflow as overflow:
         if time.monotonic() >= deadline:
@@ -272,7 +287,8 @@ def _generate_with_ai(
             except AIError as exc:
                 warnings.append(f"{overflow}: la IA no pudo acortarlo ({exc}), se recorta sin IA")
         result = generate_documents_from_context(
-            cv_ctx, letter_ctx, output_dir=output_dir, verify=True, offer_keywords=keywords, trim=True
+            cv_ctx, letter_ctx, output_dir=output_dir, verify=True, offer_keywords=keywords, trim=True,
+            **_page_limits(),
         )
     return result, cap_warnings(warnings)
 
@@ -285,7 +301,8 @@ def prepare_application(application_id: str, use_ai: bool | None = None) -> Prep
     from search_config import get_config
 
     app = load_application(application_id)
-    if engine_available() is None:
+    needs_latex = any(templates_registry.active_suffix(kind) == ".tex" for kind in ("cv", "letter"))
+    if needs_latex and engine_available() is None:
         raise NoTexEngine()
 
     cfg = get_config()
@@ -317,8 +334,8 @@ def prepare_application(application_id: str, use_ai: bool | None = None) -> Prep
                 application_id,
                 cv_pdf=result["cv_pdf"],
                 cover_pdf=result["cover_pdf"],
-                cv_tex=result.get("cv_tex"),
-                cover_tex=result.get("cover_tex"),
+                cv_tex=_latex_source(result.get("cv_tex")),
+                cover_tex=_latex_source(result.get("cover_tex")),
                 job_posting=job_posting_markdown(app),
                 metadata={
                     "source": source,
@@ -369,3 +386,33 @@ def document_path(application_id: str, name: str) -> Path:
     if not path.is_file():
         raise FileNotFoundError(name)
     return path
+
+
+# ── CLI: python -m automation.application_documents prepare <id> [--ai | --no-ai] ──
+
+def _cli(argv: list[str] | None = None) -> int:
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(
+        prog="python -m automation.application_documents",
+        description="Genera CV y carta en PDF de una candidatura y los archiva en JH_HOME/applications/<id>/.",
+    )
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    prep = sub.add_parser("prepare", help="Prepara la candidatura")
+    prep.add_argument("application_id")
+    group = prep.add_mutually_exclusive_group()
+    group.add_argument("--ai", dest="use_ai", action="store_true", default=None, help="Redactar con IA (exige proveedor)")
+    group.add_argument("--no-ai", dest="use_ai", action="store_false", help="Solo versión determinista")
+    args = parser.parse_args(argv)
+    try:
+        docs = prepare_application(args.application_id, use_ai=args.use_ai)
+    except DocumentsError as exc:
+        print(f"Error: {exc}")
+        return 1
+    print(json.dumps(docs.model_dump(), ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_cli())

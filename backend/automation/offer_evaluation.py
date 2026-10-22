@@ -289,3 +289,27 @@ def evaluate_batch(
     count = lambda s: sum(r.status == s for r in results)  # noqa: E731
     return BatchResult(results=results, evaluated=count("evaluated"), skipped=count("skipped"),
                        failed=count("error"))
+
+
+# ── CLI: python -m automation.offer_evaluation <offer_id> ──
+
+def _cli(argv: list[str] | None = None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="python -m automation.offer_evaluation",
+        description="Evalúa una oferta con IA y guarda el resultado (nunca cambia relevance_score).",
+    )
+    parser.add_argument("offer_id")
+    args = parser.parse_args(argv)
+    try:
+        evaluation = evaluate_offer(args.offer_id)
+    except (OfferNotFound, AIError) as exc:
+        print(f"Error: {exc}")
+        return 1
+    print(evaluation.model_dump_json(indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_cli())

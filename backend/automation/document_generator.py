@@ -27,6 +27,7 @@ from urllib.parse import quote
 import jinja2
 
 import config
+from automation import templates_registry
 from automation.latex_compiler import compile_latex, resolve_template_path
 from automation.verify_layout import find_pdftotext, parse_pdf, report
 from automation.verify_pdf import VerificationError, extract_text_layer, keyword_coverage, verify_pdf
@@ -365,14 +366,22 @@ def prepare_cover_letter_context(
 
 
 def render_cv_from_context(context: dict) -> str:
-    """Renderiza el LaTeX del CV a partir de un contexto ya preparado (determinista o de la IA)."""
+    """Renderiza el LaTeX del CV a partir de un contexto ya preparado (determinista o de la IA).
+    Si hay una plantilla propia activa (templates_registry), manda sobre la integrada."""
+    custom = templates_registry.render_active("cv", context)
+    if custom is not None:
+        return custom
     tpl_path = resolve_template_path("cv/cv.tex.j2")
     env = _get_jinja_env(tpl_path.parent)
     return env.get_template(tpl_path.name).render(**context)
 
 
 def render_cover_letter_from_context(context: dict) -> str:
-    """Renderiza el LaTeX de la carta a partir de un contexto ya preparado (determinista o de la IA)."""
+    """Renderiza el LaTeX de la carta a partir de un contexto ya preparado (determinista o de la IA).
+    Si hay una plantilla propia activa (templates_registry), manda sobre la integrada."""
+    custom = templates_registry.render_active("letter", context)
+    if custom is not None:
+        return custom
     tpl_path = resolve_template_path("cover_letters/cover.tex.j2")
     env = _get_jinja_env(tpl_path.parent)
     return env.get_template(tpl_path.name).render(**context)
@@ -501,8 +510,18 @@ def _layout_warnings(pdf_path: Path) -> list[str] | str:
         return f"skipped: {exc}"
 
 
+def _compile_source(src: Path, out: Path, passes: int, kind: str) -> Path:
+    """Compila con LaTeX (plantilla integrada) o con el motor de la plantilla propia activa."""
+    if templates_registry.active_template(kind) is None:
+        return compile_latex(src, output_dir=out, passes=passes)
+    return templates_registry.compile_source(src, out, passes=passes, kind=kind)
+
+
 def _ensure_cover_dependencies(out: Path) -> None:
-    """Copia cover.cls y enlaza OpenFonts junto a cover.tex (la clase usa rutas relativas)."""
+    """Copia cover.cls y enlaza OpenFonts junto a cover.tex (la clase usa rutas relativas).
+    Con plantilla de carta propia activa se copian sus ficheros de apoyo en su lugar."""
+    if templates_registry.copy_assets("letter", out):
+        return
     cover_cls_src = resolve_template_path("cover_letters/cover.cls")
     cover_cls_dst = out / "cover.cls"
     if not cover_cls_dst.exists():
@@ -653,13 +672,14 @@ def _build_documents(
     out = Path(output_dir).resolve() if output_dir else (config.APPLICATIONS_DIR / "_preview").resolve()
     out.mkdir(parents=True, exist_ok=True)
     _ensure_cover_dependencies(out)
+    templates_registry.copy_assets("cv", out)
 
     # 1. CV: compilar sin recortes; si no cabe, probar con todos los recortes (demuestra que cabe)
     #    y bisecar con pasos gruesos (TRIM_BISECT_STEPS compilaciones como mucho). Cada intento se
     #    guarda en memoria para restaurar el mejor sin recompilar: <= 2 + TRIM_BISECT_STEPS en total.
     keywords = [k for k in (offer_keywords or []) if k and str(k).strip()]
     ops = plan_trim_operations(trim_base, keywords)
-    cv_tex_path = out / "cv.tex"
+    cv_tex_path = out / f"cv{templates_registry.active_suffix('cv')}"
     cv_pdf_path = out / "cv.pdf"
     attempts: dict[int, tuple[str, bytes, int]] = {}
 
@@ -668,7 +688,7 @@ def _build_documents(
         cv_tex_path.write_text(source, encoding="utf-8")
         # Una sola pasada: la segunda solo añade los marcadores (outline) de hyperref, que un CV
         # no necesita (pdfpagemode=UseNone); texto, enlaces y maquetación salen idénticos.
-        pdf = compile_latex(cv_tex_path, output_dir=out, passes=1)
+        pdf = _compile_source(cv_tex_path, out, 1, "cv")
         pages = _page_count(pdf)
         attempts[k] = (source, pdf.read_bytes(), pages)
         return pages
@@ -700,9 +720,9 @@ def _build_documents(
     cv_pdf_path.write_bytes(pdf_bytes)
 
     # 2. Carta
-    cover_tex_path = out / "cover.tex"
+    cover_tex_path = out / f"cover{templates_registry.active_suffix('letter')}"
     cover_tex_path.write_text(cover_source, encoding="utf-8")
-    cover_pdf_path = compile_latex(cover_tex_path, output_dir=out)
+    cover_pdf_path = _compile_source(cover_tex_path, out, 2, "letter")
     cover_pages = _page_count(cover_pdf_path)
     if cover_pages > letter_pages and not trim:
         overflows.append(("cover", cover_pages, letter_pages))
