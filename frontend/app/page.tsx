@@ -21,6 +21,7 @@ import { FollowupsTab } from "@/app/components/tabs/FollowupsTab";
 import { ProfileTab } from "@/app/components/tabs/ProfileTab";
 import { SetupWizard } from "@/app/components/setup/SetupWizard";
 import { InterviewPackPanel } from "@/app/components/InterviewPackPanel";
+import { CompanyResearchPanel } from "@/app/components/CompanyResearchPanel";
 import { OfferEvaluationPanel, T as EVAL_T, runBatchEvaluation } from "@/app/components/OfferEvaluationPanel";
 import { setupPrompt, type RunSummary } from "@/lib/setup";
 
@@ -528,6 +529,8 @@ export default function Dashboard() {
               </div>
 
               <OfferEvaluationPanel key={selectedOffer.id} offerId={selectedOffer.id} onEvaluated={handleOfferEvaluated} />
+
+              {selectedOffer.company_name && <CompanyResearchPanel key={selectedOffer.company_name} company={selectedOffer.company_name} />}
 
               {parseReviewFlags(selectedOffer.review_flags).length > 0 && (
                 <div className="mb-6 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
