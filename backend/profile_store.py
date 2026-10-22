@@ -51,3 +51,12 @@ def update_profile(changes: dict, normalize=lambda p: p) -> dict:
         merged = normalize({**load_profile(), **changes})
         save_profile(merged)
         return load_profile()
+
+
+def modify_profile(change, normalize=lambda p: p) -> dict:
+    """Aplica `change(perfil) -> perfil` bajo el mismo cerrojo que `update_profile` (leer, modificar, escribir
+    sin pisarse con otras secciones que guardan a la vez) y devuelve el perfil guardado."""
+    with _LOCK:
+        modified = normalize(change(load_profile()))
+        save_profile(modified)
+        return load_profile()

@@ -49,9 +49,10 @@ from schemas import (
     AISettingsIn, AISettingsOut, CheckOut, EmailSettingsIn, EmailSettingsOut, MarketSourceOut, SetupApplyOut,
     DocumentFileOut, InterviewPackOut, PrepareIn, ProfileIn, ScreeningRequestIn, ScreeningResultOut, SetupProposalOut, SetupStatusOut, SetupTextIn,
     AIKeyIn, AIKeyOut, SourceSettingOut, SourcesIn, EvaluateBatchIn, CompanyResearchOut,
+    ExpandAcceptIn, ExpandAcceptOut, ExpandIn, ExpandOut, UpskillIn, UpskillOut,
 )
 from scraper.jobs import SOURCES as SCRAPER_SOURCES, TRACK_JOB_PREFIX, TRACK_PIPELINE_SOURCES
-from automation import application_documents, company_researcher, cv_reader, email_sender, followup, offer_evaluation, profile_proposal, screening
+from automation import application_documents, company_researcher, cv_reader, email_sender, expand_profile, followup, offer_evaluation, profile_proposal, screening, upskill
 from automation.filter_engine import classify_track
 from automation.location import parse_modality
 from automation.experience_classifier import classify_experience, classify_contract
@@ -848,6 +849,32 @@ def patch_profile(changes: ProfileIn = Body(...)):
     perfil resultante. Mismas validación y campos derivados que el PUT; las claves con valor null se ignoran."""
     given = {k: v for k, v in changes.model_dump(exclude_unset=True).items() if v is not None}
     return profile_store.update_profile(given, setup_builder.normalize_profile)
+
+
+@app.post("/api/profile/expand", response_model=ExpandOut)
+def expand_profile_endpoint(body: ExpandIn):
+    """Propone competencias nuevas leyendo las páginas que enlaza el usuario. No guarda nada: eso lo hace
+    `/api/profile/expand/accept` con lo que el usuario acepte."""
+    return expand_profile.propose(body.sources)
+
+
+@app.post("/api/profile/expand/accept", response_model=ExpandAcceptOut, dependencies=[Depends(_limit_profile_size)])
+def accept_expanded_skills(body: ExpandAcceptIn):
+    """Fusiona en el perfil las competencias aceptadas (sin duplicados, con su fuente) bajo el cerrojo del perfil."""
+    return expand_profile.accept([i.model_dump() for i in body.items])
+
+
+# ── Upskill: mapa de huecos y plan de estudio (automation/upskill.py) ──
+
+@app.post("/api/upskill", response_model=UpskillOut)
+def upskill_endpoint(body: UpskillIn, conn: sqlite3.Connection = Depends(get_db)):
+    """Huecos de habilidades frente a las ofertas del ámbito; guarda el informe en JH_HOME/reports/."""
+    try:
+        return upskill.build_report(conn, body.scope, body.offer_ids)
+    except upskill.UpskillError as exc:
+        raise HTTPException(422, str(exc)) from None
+    except upskill.NoOffers:
+        raise HTTPException(404, "No hay ofertas en ese ámbito") from None
 
 
 def _merge_settings(model, current, updates: dict):

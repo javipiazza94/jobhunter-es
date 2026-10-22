@@ -433,3 +433,55 @@ class CompanyResearchOut(_Out):
     fetched_date: str
     age_days: int = 0
     provider: str = ""
+
+
+class UpskillIn(BaseModel):
+    """POST /api/upskill: ámbito del mapa de huecos; `offer_ids` restringe el ámbito (y es obligatorio con «one»)."""
+    scope: Literal["saved", "evaluated", "applied", "one"] = "saved"
+    offer_ids: list[str] = Field(default_factory=list, max_length=200)
+
+
+class UpskillGapOut(_Out):
+    skill: str
+    count: int
+
+
+class UpskillOut(_Out):
+    """Informe de huecos: ruta del Markdown guardado, su texto y el recuento determinista."""
+    report_path: str
+    markdown: str
+    offers_analyzed: int = 0
+    gaps: list[UpskillGapOut] = Field(default_factory=list)
+    ai_used: bool = False
+
+
+class ExpandIn(BaseModel):
+    """POST /api/profile/expand: páginas que enlaza el usuario (GitHub, portfolio, certificaciones…)."""
+    sources: list[str] = Field(min_length=1, max_length=5)  # = expand_profile.MAX_SOURCES
+
+
+class ExpandProposalOut(_Out):
+    """Competencia propuesta con su prueba y la fuente de la que sale."""
+    name: str
+    evidence: str = ""
+    source_url: str = ""
+
+
+class ExpandErrorOut(_Out):
+    url: str
+    error: str
+
+
+class ExpandOut(_Out):
+    proposals: list[ExpandProposalOut]
+    errors: list[ExpandErrorOut]
+
+
+class ExpandAcceptIn(BaseModel):
+    """POST /api/profile/expand/accept: solo las propuestas que el usuario acepta."""
+    items: list[ExpandProposalOut] = Field(min_length=1, max_length=100)
+
+
+class ExpandAcceptOut(_Out):
+    added: list[str]
+    skipped: list[str]

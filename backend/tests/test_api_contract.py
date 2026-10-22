@@ -67,6 +67,15 @@ PAIRS = {
     "ScreeningRequest": schemas.ScreeningRequestIn,
     "ScreeningAnswer": schemas.ScreeningAnswerOut,
     "ScreeningResult": schemas.ScreeningResultOut,
+    "UpskillRequest": schemas.UpskillIn,
+    "UpskillGap": schemas.UpskillGapOut,
+    "UpskillReport": schemas.UpskillOut,
+    "ExpandRequest": schemas.ExpandIn,
+    "ExpandProposal": schemas.ExpandProposalOut,
+    "ExpandError": schemas.ExpandErrorOut,
+    "ExpandResult": schemas.ExpandOut,
+    "ExpandAcceptRequest": schemas.ExpandAcceptIn,
+    "ExpandAcceptResult": schemas.ExpandAcceptOut,
 }
 
 

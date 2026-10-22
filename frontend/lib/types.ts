@@ -427,3 +427,60 @@ export interface ScreeningAnswer {
 export interface ScreeningResult {
   answers: ScreeningAnswer[];
 }
+
+/** Ámbito del mapa de huecos: ofertas guardadas, evaluadas con IA, con candidatura, o una sola. */
+export type UpskillScope = "saved" | "evaluated" | "applied" | "one";
+
+/** POST /api/upskill: cuerpo. */
+export interface UpskillRequest {
+  scope: UpskillScope;
+  offer_ids?: string[];
+}
+
+export interface UpskillGap {
+  skill: string;
+  count: number;
+}
+
+/** POST /api/upskill: respuesta (informe Markdown ya guardado en JH_HOME/reports/). */
+export interface UpskillReport {
+  report_path: string;
+  markdown: string;
+  offers_analyzed: number;
+  gaps: UpskillGap[];
+  ai_used: boolean;
+}
+
+/** POST /api/profile/expand: cuerpo (páginas que enlaza el usuario). */
+export interface ExpandRequest {
+  sources: string[];
+}
+
+/** Competencia propuesta con su prueba y la fuente de la que sale (no se guarda hasta aceptarla). */
+export interface ExpandProposal {
+  name: string;
+  evidence?: string;
+  source_url?: string;
+}
+
+export interface ExpandError {
+  url: string;
+  error: string;
+}
+
+/** POST /api/profile/expand: respuesta. */
+export interface ExpandResult {
+  proposals: ExpandProposal[];
+  errors: ExpandError[];
+}
+
+/** POST /api/profile/expand/accept: cuerpo. */
+export interface ExpandAcceptRequest {
+  items: ExpandProposal[];
+}
+
+/** POST /api/profile/expand/accept: respuesta. */
+export interface ExpandAcceptResult {
+  added: string[];
+  skipped: string[];
+}
