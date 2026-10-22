@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Building2, Briefcase, Send, Users, Play, Check, ChevronRight, Sparkles, Trash2 } from "lucide-react";
-import { fetchStats, fetchCompanies, fetchOffers, fetchTracks, fetchContacts, fetchApplications, triggerScraper, fetchPendingApplications, createDrafts, markOfferSent, unmarkOfferSent, updateApplicationStatus, discardOffer, fetchFollowups, fetchStaleApplications, fetchSetupStatus, evaluateOffersBatch, ApiError, type PendingApplication } from "@/lib/api";
+import { fetchStats, fetchCompanies, fetchOffers, fetchTracks, fetchContacts, fetchApplications, triggerScraper, fetchPendingApplications, createDrafts, markOfferSent, unmarkOfferSent, updateApplicationStatus, discardOffer, fetchFollowups, fetchStaleApplications, fetchSetupStatus, ApiError, type PendingApplication } from "@/lib/api";
 import type { Application, Company, Contact, JobOffer, OfferEvaluation, QuietApplication, Stats, Track } from "@/lib/types";
 import { failureMessage, isObject, settle, type Failures } from "@/lib/safeLoad";
 import { MODALITY_BADGE, SOURCE_COLORS, STATUS_COLORS, parseReviewFlags, trackBadge, trackTabs } from "@/lib/ui";
@@ -21,7 +21,7 @@ import { FollowupsTab } from "@/app/components/tabs/FollowupsTab";
 import { ProfileTab } from "@/app/components/tabs/ProfileTab";
 import { SetupWizard } from "@/app/components/setup/SetupWizard";
 import { InterviewPackPanel } from "@/app/components/InterviewPackPanel";
-import { OfferEvaluationPanel, T as EVAL_T, batchSummary } from "@/app/components/OfferEvaluationPanel";
+import { OfferEvaluationPanel, T as EVAL_T, runBatchEvaluation } from "@/app/components/OfferEvaluationPanel";
 import { setupPrompt, type RunSummary } from "@/lib/setup";
 
 // Matches the `valid` set in backend/main.py::update_application_status
@@ -245,19 +245,9 @@ export default function Dashboard() {
     const ids = [...selectedIds];
     setLoading(true);
     setActionMsg(EVAL_T.bulkBusy(ids.length));
-    const total = { evaluated: 0, skipped: 0, failed: 0 };
-    try {
-      for (let i = 0; i < ids.length; i += 50) {
-        const r = await evaluateOffersBatch(ids.slice(i, i + 50));
-        total.evaluated += r.evaluated;
-        total.skipped += r.skipped;
-        total.failed += r.failed;
-      }
-      setActionMsg(batchSummary(total));
-    } catch (e) {
-      setActionMsg(total.evaluated ? `${batchSummary(total)}. ${(e as Error).message}` : (e as Error).message);
-    }
-    setSelectedIds(new Set());
+    const { message, remaining } = await runBatchEvaluation(ids);
+    setActionMsg(message);
+    setSelectedIds(new Set(remaining)); // las no evaluadas siguen seleccionadas para reintentar
     await load();
     setLoading(false);
     setTimeout(() => setActionMsg(""), 8000);

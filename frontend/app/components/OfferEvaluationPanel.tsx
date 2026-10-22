@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
-import { evaluateOffer, fetchOfferEvaluation } from "@/lib/api";
+import { evaluateOffer, evaluateOffersBatch, fetchOfferEvaluation } from "@/lib/api";
 import type { EvaluationBatchResult, OfferEvaluation } from "@/lib/types";
 
 // Textos de la interfaz en un solo sitio (la traducción llega en SP4).
@@ -45,6 +45,42 @@ export function batchSummary(r: Pick<EvaluationBatchResult, "evaluated" | "skipp
   if (r.skipped) parts.push(T.bulkSkipped(r.skipped));
   if (r.failed) parts.push(T.bulkFailed(r.failed));
   return parts.join(", ");
+}
+
+/** Tamaño de cada petición de lote (= offer_evaluation.MAX_BATCH en el backend). */
+export const BATCH_SIZE = 20;
+
+/** Evalúa `ids` en peticiones de BATCH_SIZE, una tras otra. Devuelve el mensaje para la barra de acciones
+ *  (resumen + primer error) y los ids que siguen sin evaluar (sin presupuesto, con error o no enviados por
+ *  un fallo de la petición) para dejarlos seleccionados; las que no existen se sueltan. */
+export async function runBatchEvaluation(
+  ids: string[],
+  evaluate: (ids: string[]) => Promise<EvaluationBatchResult> = evaluateOffersBatch,
+): Promise<{ message: string; remaining: string[] }> {
+  const total = { evaluated: 0, skipped: 0, failed: 0 };
+  const remaining: string[] = [];
+  let firstError = "";
+  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+    const chunk = ids.slice(i, i + BATCH_SIZE);
+    let r: EvaluationBatchResult;
+    try {
+      r = await evaluate(chunk);
+    } catch (e) {
+      remaining.push(...ids.slice(i));
+      firstError ||= (e as Error).message;
+      break;
+    }
+    total.evaluated += r.evaluated;
+    total.skipped += r.skipped;
+    total.failed += r.failed;
+    for (const item of r.results) {
+      if (item.status === "skipped" || item.status === "error") remaining.push(item.offer_id);
+      if (item.status === "error" && item.error) firstError ||= item.error;
+    }
+  }
+  const started = total.evaluated + total.skipped + total.failed > 0;
+  const message = [started ? batchSummary(total) : "", firstError].filter(Boolean).join(". ");
+  return { message, remaining };
 }
 
 /** Color del veredicto según la nota global (mismas bandas que /rank: 75, 60, 45). */

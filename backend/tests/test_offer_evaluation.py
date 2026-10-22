@@ -305,3 +305,61 @@ def test_rank_state_sqlite_guarda_evaluacion_sin_tocar_relevance(db, monkeypatch
     assert tuple(_offer("o1")) == (0.42, 0)
     _, seen = rank_state.load_state(rank_state.default_state())
     assert seen[key]["status"] == "ranked" and seen[key]["rank_score"] == 78
+
+
+def test_lote_un_fallo_de_bd_al_guardar_no_corta_el_lote(db, monkeypatch):
+    real_store = ev._store
+
+    def flaky(conn, evaluation):
+        if evaluation.offer_id == "o1":
+            raise sqlite3.OperationalError("database is locked")
+        real_store(conn, evaluation)
+
+    monkeypatch.setattr(ev, "_store", flaky)
+    out = ev.evaluate_batch(["o1", "o2"], provider=Fake(data=_answer()))
+    assert [r.status for r in out.results] == ["error", "evaluated"]
+    assert out.results[0].error.startswith("Error inesperado") and "OperationalError" in out.results[0].error
+    assert (out.evaluated, out.failed) == (1, 1) and _row("o1") is None and _row("o2") is not None
+
+
+def test_lote_excepcion_cualquiera_del_proveedor_es_error_con_mensaje_y_sigue(db):
+    out = ev.evaluate_batch(["o1", "o2"], provider=Fake(exc=RuntimeError("boom")),
+                            budget=AIBudget(max_seconds=999, max_failures=5))
+    assert [r.status for r in out.results] == ["error", "error"]
+    assert all(r.error and "RuntimeError" in r.error for r in out.results)
+    ai_fail = ev.evaluate_batch(["o1"], provider=Fake(exc=AIError("x")))
+    assert ai_fail.results[0].error.startswith("La IA no pudo evaluar")
+
+
+def test_lote_presupuesto_por_defecto_120_s_y_maximo_20(db, monkeypatch):
+    import schemas
+
+    seen = {}
+
+    class Spy(AIBudget):
+        def __init__(self, **kw):
+            seen.update(kw)
+            super().__init__(**kw)
+
+    monkeypatch.setattr(ev, "AIBudget", Spy)
+    ev.evaluate_batch(["o1"], provider=Fake(data=_answer()))
+    assert seen == {"max_seconds": 120.0} and ev.BATCH_MAX_SECONDS == 120.0
+    assert ev.MAX_BATCH == 20
+    assert schemas.EvaluateBatchIn.model_fields["ids"].metadata[-1].max_length == ev.MAX_BATCH
+
+
+def test_api_lote_devuelve_resultados_parciales(db, monkeypatch):
+    real_store = ev._store
+
+    def flaky(conn, evaluation):
+        if evaluation.offer_id == "o2":
+            raise sqlite3.OperationalError("database is locked")
+        real_store(conn, evaluation)
+
+    monkeypatch.setattr(ev, "_store", flaky)
+    monkeypatch.setattr(ev, "get_provider", lambda: Fake(data=_answer()))
+    hdrs = H + [("content-type", "application/json")]
+    status, _, body = call("POST", "/api/offers/evaluate-batch", headers=hdrs, body=b'{"ids": ["o1", "o2", "o3"]}')
+    data = json.loads(body)
+    assert status == 200 and [r["status"] for r in data["results"]] == ["evaluated", "error", "evaluated"]
+    assert "Error inesperado" in data["results"][1]["error"]

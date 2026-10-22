@@ -5,6 +5,11 @@ Portado y adaptado de MadsLorentzen/ai-job-search @ e16acee (tools/rank_state.py
 Copyright (c) 2026 Mads Lorentzen). Adaptado para soporte nativo de SQLite: sin seen_jobs.json en JH_HOME
 se lee la BD de `config.DB_PATH` y las puntuaciones se guardan en `offer_evaluations` (nunca en
 relevance_score). Las rutas (JH_HOME, BD, tracker) se resuelven desde `config` al llamar, no al importar.
+Límites del modo SQLite (Task 11 adaptará rank.md): solo persiste las puntuaciones (veredicto, nota,
+puntos fuertes, huecos, urgencia derivada de la fecha límite) y `expired` (discard_status). NO guarda la
+fecha límite (`deadline`), los vetos (`location_verdict`/`language_gate`/`language_note`, `guard`) ni el
+estado `unreachable` con su historial de reintentos: en la siguiente pasada esas ofertas vuelven como
+`new` (o `ranked` si ya tienen evaluación) y sin fecha límite, así que `sweep` no las caduca.
 
 /rank reads the whole of seen_jobs.json into the model's context to filter it
 by eye (Step 1), then re-emits the whole file to record scores (Step 4). That

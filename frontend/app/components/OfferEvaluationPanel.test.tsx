@@ -1,8 +1,8 @@
 // Marcado estático del panel de evaluación con IA de una oferta. Se ejecuta con `bun test`.
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { OfferEvaluationPanel, T, batchSummary, verdictLabel } from "./OfferEvaluationPanel";
-import type { OfferEvaluation } from "@/lib/types";
+import { BATCH_SIZE, OfferEvaluationPanel, T, batchSummary, runBatchEvaluation, verdictLabel } from "./OfferEvaluationPanel";
+import type { EvaluationBatchItem, EvaluationBatchResult, OfferEvaluation } from "@/lib/types";
 
 const EVAL: OfferEvaluation = {
   offer_id: "o1", verdict: "Strong Fit", score: 78, strengths: ["Python a diario", "<b>SQL</b>"], gaps: ["Kafka"],
@@ -47,4 +47,43 @@ test("resumen del lote: evaluadas siempre; pendientes por presupuesto y errores 
   expect(batchSummary({ evaluated: 1, skipped: 3, failed: 1 })).toBe(
     `${T.bulkEvaluated(1)}, ${T.bulkSkipped(3)}, ${T.bulkFailed(1)}`,
   );
+});
+
+const item = (offer_id: string, status: EvaluationBatchItem["status"], error: string | null = null): EvaluationBatchItem =>
+  ({ offer_id, status, evaluation: status === "evaluated" ? { ...EVAL, offer_id } : null, error });
+const result = (results: EvaluationBatchItem[]): EvaluationBatchResult => ({
+  results,
+  evaluated: results.filter(r => r.status === "evaluated").length,
+  skipped: results.filter(r => r.status === "skipped").length,
+  failed: results.filter(r => r.status === "error").length,
+});
+
+test("lote: quedan seleccionadas las sin presupuesto y con error, y se muestra el primer error", async () => {
+  const sent: string[][] = [];
+  const out = await runBatchEvaluation(["a", "b", "c", "d", "e"], async ids => {
+    sent.push(ids);
+    return result([item("a", "evaluated"), item("b", "error", "Error inesperado al guardar (OperationalError)"),
+      item("c", "not_found"), item("d", "error", "La IA no pudo evaluar la oferta (AIError)"), item("e", "skipped")]);
+  });
+  expect(sent).toEqual([["a", "b", "c", "d", "e"]]);
+  expect(out.remaining).toEqual(["b", "d", "e"]);
+  expect(out.message).toBe(`${batchSummary({ evaluated: 1, skipped: 1, failed: 2 })}. Error inesperado al guardar (OperationalError)`);
+});
+
+test("lote: trocea en peticiones de BATCH_SIZE y si una petición falla deja seleccionado lo que falta", async () => {
+  const ids = Array.from({ length: BATCH_SIZE * 2 + 1 }, (_, i) => `o${i}`);
+  let calls = 0;
+  const out = await runBatchEvaluation(ids, async chunk => {
+    calls += 1;
+    if (calls === 2) throw new Error("IA no disponible: sin proveedor. Configura un proveedor en Perfil.");
+    return result(chunk.map(id => item(id, "evaluated")));
+  });
+  expect(calls).toBe(2);
+  expect(out.remaining).toEqual(ids.slice(BATCH_SIZE));
+  expect(out.message).toBe(`${T.bulkEvaluated(BATCH_SIZE)}. IA no disponible: sin proveedor. Configura un proveedor en Perfil.`);
+});
+
+test("lote: un 409 de entrada solo muestra el mensaje de la API y no suelta nada", async () => {
+  const out = await runBatchEvaluation(["a"], async () => { throw new Error("IA no disponible"); });
+  expect(out).toEqual({ message: "IA no disponible", remaining: ["a"] });
 });

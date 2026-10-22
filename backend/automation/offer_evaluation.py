@@ -17,6 +17,7 @@ datos personales de contacto (`profile["personal"]`) no se envían al proveedor.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from datetime import date, datetime, timezone
 from typing import Any, Literal
@@ -32,8 +33,11 @@ from database import get_conn
 
 MAX_POINTS = 3
 MAX_POINT_CHARS = 200
-MAX_BATCH = 50
+MAX_BATCH = 20
+BATCH_MAX_SECONDS = 120.0  # presupuesto de IA de un lote (la petición HTTP espera al lote entero)
 DIMENSIONS = tuple(rank_state.WEIGHTS)
+
+logger = logging.getLogger(__name__)
 
 Urgency = Literal["expired", "urgent", "normal", "unknown"]
 
@@ -252,11 +256,13 @@ def evaluate_batch(
 ) -> BatchResult:
     """
     Evalúa varias ofertas una tras otra. Con el presupuesto de IA agotado (tiempo total o fallos
-    seguidos, ver `AIBudget`) el resto queda `skipped`: se pueden volver a pedir después.
+    seguidos, ver `AIBudget`) el resto queda `skipped`: se pueden volver a pedir después. Un fallo de
+    una oferta (IA, BD, disco…) queda como `error` con su mensaje y el lote sigue: siempre se devuelven
+    los resultados parciales.
     Lanza `AIUnavailable` antes de empezar si no hay IA configurada.
     """
     provider = _resolve_provider(provider)
-    budget = budget or AIBudget()
+    budget = budget or AIBudget(max_seconds=BATCH_MAX_SECONDS)
     results: list[BatchItem] = []
     for offer_id in dict.fromkeys(offer_ids):  # sin repetidas, en el orden pedido
         if not budget.before_call():
@@ -269,7 +275,14 @@ def evaluate_batch(
             continue
         except AIError as exc:
             budget.record("error")
-            results.append(BatchItem(offer_id=offer_id, status="error", error=type(exc).__name__))
+            results.append(BatchItem(offer_id=offer_id, status="error",
+                                     error=f"La IA no pudo evaluar la oferta ({type(exc).__name__})"))
+            continue
+        except Exception as exc:  # noqa: BLE001 — un fallo de una oferta (BD, disco…) no corta el lote
+            logger.exception("Fallo inesperado al evaluar la oferta %s", offer_id)
+            budget.record("error")
+            results.append(BatchItem(offer_id=offer_id, status="error",
+                                     error=f"Error inesperado al evaluar o guardar la evaluación ({type(exc).__name__})"))
             continue
         budget.record("ai")
         results.append(BatchItem(offer_id=offer_id, status="evaluated", evaluation=evaluation))

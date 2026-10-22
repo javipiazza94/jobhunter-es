@@ -285,8 +285,8 @@ class SourceSettingOut(_Out):
 
 class SourcesIn(BaseModel):
     """PUT /api/settings/sources: fuentes activadas y fuentes `requires_ack` cuyo aviso aceptó el usuario."""
-    enabled: list[str] = Field(default_factory=list, max_length=50)  # = offer_evaluation.MAX_BATCH
-    acknowledged: list[str] = Field(default_factory=list, max_length=50)  # = offer_evaluation.MAX_BATCH
+    enabled: list[str] = Field(default_factory=list, max_length=50)
+    acknowledged: list[str] = Field(default_factory=list, max_length=50)
 
 
 class AIKeyIn(BaseModel):
@@ -387,4 +387,4 @@ class InterviewPackOut(_Out):
 
 class EvaluateBatchIn(BaseModel):
     """POST /api/offers/evaluate-batch: ofertas a evaluar con IA, una tras otra."""
-    ids: list[str] = Field(min_length=1, max_length=50)  # = offer_evaluation.MAX_BATCH
+    ids: list[str] = Field(min_length=1, max_length=20)  # = offer_evaluation.MAX_BATCH
