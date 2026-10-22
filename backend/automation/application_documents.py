@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import re
 import shutil
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -27,7 +28,7 @@ from pydantic import BaseModel
 
 from ai import AIError, get_provider
 from automation import application_archive
-from automation.ai_documents import run_ai_flow, shorten_documents
+from automation.ai_documents import AI_DEADLINE_SECONDS, cap_warnings, run_ai_flow, shorten_documents
 from automation.document_generator import (
     PageOverflow,
     generate_deterministic_documents,
@@ -216,6 +217,10 @@ def _generate(
             warnings.append(f"{AI_UNAVAILABLE_PREFIX}{exc}")
         except (VerificationError, LaTeXCompilationError) as exc:
             warnings.append(f"La versión con IA no superó la verificación ({exc}); se usa la determinista")
+        except Exception:  # noqa: BLE001 — un fallo inesperado de la vía con IA nunca debe dar un 500
+            logger.exception("Fallo inesperado en la vía con IA de la candidatura %s", app.get("id"))
+            warnings.append("La vía con IA falló por un error inesperado; se usa la versión determinista")
+        warnings = cap_warnings(warnings)
         shutil.rmtree(output_dir, ignore_errors=True)
     result = generate_deterministic_documents(
         profile_data=profile,
@@ -233,7 +238,10 @@ def _generate_with_ai(
     profile: dict, app: dict, summary_key: str, keywords: list[str], output_dir: Path
 ) -> tuple[dict, list[str]]:
     """Redactor + revisor con IA; compila sin recortar y, si algo no cabe, pide a la IA que acorte
-    y vuelve a compilar con el recorte determinista como red. Lanza AIError o VerificationError."""
+    (una sola petición para CV y carta) y vuelve a compilar con el recorte determinista como red.
+    Si acortar falla o se agotó el plazo de IA (AI_DEADLINE_SECONDS), se recorta sin IA con aviso.
+    Lanza AIError (redactor/revisor) o VerificationError."""
+    deadline = time.monotonic() + AI_DEADLINE_SECONDS
     try:
         provider = get_provider()
     except AIError:
@@ -247,20 +255,26 @@ def _generate_with_ai(
         "tech_stack": app.get("tech_stack") or "",
         "keywords": keywords,
     }
-    cv_ctx, letter_ctx, warnings = run_ai_flow(profile, offer, provider, track=summary_key)
+    cv_ctx, letter_ctx, warnings = run_ai_flow(profile, offer, provider, track=summary_key, deadline=deadline)
     try:
         result = generate_documents_from_context(
             cv_ctx, letter_ctx, output_dir=output_dir, verify=True, offer_keywords=keywords, trim=False
         )
     except PageOverflow as overflow:
-        cv_ctx, letter_ctx, more = shorten_documents(
-            cv_ctx, letter_ctx, profile, offer, provider, overflow, track=summary_key
-        )
-        warnings = list(dict.fromkeys([*warnings, *more, f"{overflow}: se pidió a la IA una versión más corta"]))
+        if time.monotonic() >= deadline:
+            warnings.append(f"{overflow}: tiempo de IA agotado, se recorta sin IA")
+        else:
+            try:
+                cv_ctx, letter_ctx, more = shorten_documents(
+                    cv_ctx, letter_ctx, profile, offer, provider, overflow, track=summary_key
+                )
+                warnings += [*more, f"{overflow}: se pidió a la IA una versión más corta"]
+            except AIError as exc:
+                warnings.append(f"{overflow}: la IA no pudo acortarlo ({exc}), se recorta sin IA")
         result = generate_documents_from_context(
             cv_ctx, letter_ctx, output_dir=output_dir, verify=True, offer_keywords=keywords, trim=True
         )
-    return result, warnings
+    return result, cap_warnings(warnings)
 
 
 def prepare_application(application_id: str, use_ai: bool | None = None) -> PreparedDocs:

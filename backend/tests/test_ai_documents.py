@@ -237,7 +237,7 @@ def test_acortar_pide_una_revision_mas_corta():
     provider = ScriptedProvider([draft_payload(), REVIEW_OK, draft_payload(summary="Consultora SAP SD.")])
     cv_ctx, letter_ctx, _ = ai_documents.run_ai_flow(PROFILE, OFFER, provider)
     cv2, _, _ = ai_documents.shorten_documents(cv_ctx, letter_ctx, PROFILE, OFFER, provider,
-                                               PageOverflow("cv", 3, 2))
+                                               PageOverflow([("cv", 3, 2)]))
     assert "acorta" in provider.calls[-1]["prompt"].lower()
     assert "3 páginas" in provider.calls[-1]["prompt"]
     assert cv2["summary_text"] == "Consultora SAP SD."
@@ -256,7 +256,7 @@ def fake_ai_render(monkeypatch):
         if state["fail"]:
             raise state["fail"]
         if state["overflow_first"] and not kwargs.get("trim", True):
-            raise PageOverflow("cv", 3, 2)
+            raise PageOverflow([("cv", 3, 2)])
         out = Path(kwargs["output_dir"])
         out.mkdir(parents=True, exist_ok=True)
         for name in ("cv.pdf", "cover.pdf", "cv.tex", "cover.tex"):
@@ -339,3 +339,165 @@ def test_integracion_compila_los_contextos_de_la_ia(tmp_path):
     assert result["verification"]["pages"] == {"cv": 1, "cover": 1}
     assert "billing plan" in result["verification"]["present_keywords"]
     assert "Rust" not in (tmp_path / "cv.tex").read_text(encoding="utf-8")
+
+
+# ── Casos de la revisión (honestidad reforzada, plazos y fallos) ─────────────
+
+OFFER_FIGURES = {**OFFER, "description": "Más de 10 años en SAP SD; equipo de 15 personas; intercompany."}
+
+
+def _validate(cv=None, letter=None, offer=OFFER_FIGURES, profile=PROFILE, **kw):
+    draft = ai_documents.DocsDraft(cv=cv or cv_payload(), letter=letter or letter_payload())
+    return ai_documents.validate_honesty(draft, profile, offer, None, **kw)
+
+
+def test_resumen_con_cifras_de_la_oferta_se_sustituye_por_el_del_perfil():
+    cleaned, removed = _validate(cv=cv_payload(summary="Consultora con 10 años de experiencia en SAP SD."))
+    assert cleaned.cv["summary_text"] == "Analista de datos con base en consultoría SAP SD."
+    assert any("Resumen" in r for r in removed)
+
+
+def test_apertura_de_la_carta_puede_citar_cifras_de_la_oferta_pero_no_el_cuerpo():
+    letter = letter_payload(opening="Su equipo de 15 personas busca consultora SAP SD.")
+    letter["body_paragraph"] = "Llevo 10 años con SAP SD."
+    cleaned, _ = _validate(letter=letter)
+    assert cleaned.letter["opening_paragraph"].startswith("Su equipo de 15 personas")
+    assert cleaned.letter["body_paragraph"] == ""  # se rellena con el párrafo del perfil
+
+
+def test_categoria_inventada_cka_se_sustituye_por_la_del_perfil():
+    cv = cv_payload(competencies=[["CKA", "Python, Kubernetes"], ["SAP Modules", "SAP SD"]])
+    cleaned, removed = _validate(cv=cv)
+    comps = dict(cleaned.cv["competencies"])
+    assert "CKA" not in comps and comps["Programming Languages"] == "Python" and comps["SAP Modules"] == "SAP SD"
+    assert any("CKA" in r for r in removed) and any("Kubernetes" in r for r in removed)
+
+
+def test_vineta_con_termino_de_la_oferta_sin_respaldo_se_quita():
+    cv = cv_payload()
+    cv["experience"][0]["bullets"] = ["Configuración de pricing y billing plan en SAP SD",
+                                      "Gestión de flujos intercompany en SAP SD"]
+    cleaned, removed = _validate(cv=cv)
+    assert cleaned.cv["experience"][0]["bullets"] == ["Configuración de pricing y billing plan en SAP SD"]
+    assert any("intercompany" in r for r in removed)
+
+
+def test_cka_en_la_carta_se_quita():
+    letter = letter_payload()
+    letter["body_paragraph"] = "Tengo la certificación CKA y experiencia en Python."
+    letter["bullets"] = ["Certificado CKA", "Automaticé 12 informes de ventas"]
+    cleaned, _ = _validate(letter=letter)
+    assert cleaned.letter["body_paragraph"] == ""
+    assert cleaned.letter["bullets"] == ["Automaticé 12 informes de ventas"]
+    # Una certificación del perfil sí puede citarse
+    letter["bullets"] = ["Certificado SAP Certified Associate - SD"]
+    cleaned, _ = _validate(letter=letter)
+    assert cleaned.letter["bullets"] == ["Certificado SAP Certified Associate - SD"]
+
+
+def test_vineta_con_cifra_inventada_se_quita_aunque_este_en_la_oferta():
+    cv = cv_payload()
+    cv["experience"][1]["bullets"] = ["Automaticé 12 informes de ventas con Python y SQL",
+                                      "Ahorré 15 millones de euros", "Lideré un equipo de 15 personas"]
+    cleaned, _ = _validate(cv=cv)
+    assert cleaned.cv["experience"][1]["bullets"] == ["Automaticé 12 informes de ventas con Python y SQL"]
+
+
+def test_cifras_de_viñeta_solo_del_propio_empleo():
+    cv = cv_payload()
+    cv["experience"][0]["bullets"].append("Preparé 12 informes de facturación")  # el 12 es de Nimbus
+    cleaned, _ = _validate(cv=cv)
+    assert "Preparé 12 informes de facturación" not in cleaned.cv["experience"][0]["bullets"]
+
+
+def test_puesto_inflado_se_restaura_sin_quitar_el_empleo():
+    cv = cv_payload()
+    cv["experience"][1]["role"] = "Head of Data"
+    cleaned, removed = _validate(cv=cv)
+    assert [e["role"] for e in cleaned.cv["experience"]] == ["Consultora SAP SD junior", "Analista de datos"]
+    assert any("Head of Data" in r for r in removed)
+
+
+def test_skills_con_calificativos_y_cifras_con_separador_de_miles():
+    profile = copy.deepcopy(PROFILE)
+    profile["experience"][0]["bullets"].append("Procesé 1.000 pedidos diarios")
+    cv = cv_payload(competencies=[["Programming Languages", "Python (avanzado), SQL"]])
+    cv["experience"][1]["bullets"] = ["Procesé 1000 pedidos diarios"]
+    cleaned, _ = _validate(cv=cv, profile=profile)
+    assert dict(cleaned.cv["competencies"])["Programming Languages"] == "Python, SQL"
+    assert cleaned.cv["experience"][1]["bullets"] == ["Procesé 1000 pedidos diarios"]
+
+
+def test_el_revisor_recibe_el_perfil_y_sus_afirmaciones_sin_respaldo_se_quitan():
+    claim = "Cuadros de mando en Power BI para 300 tiendas"
+    first = draft_payload()
+    first["cv"]["experience"][1]["bullets"].append(claim)  # 300 no está en el perfil: se quita ya en el borrador
+    first["cv"]["experience"][1]["bullets"].append("Diseñé el modelo de datos comercial")
+    review = {"verdict": "ok", "issues": [], "missing_keywords": ["x" * 41, "billing plan"],
+              "unsupported_claims": ["Diseñé el modelo de datos comercial"]}
+    revised = draft_payload()
+    revised["cv"]["experience"][1]["bullets"].append("Diseñé el modelo de datos comercial")
+    provider = ScriptedProvider([first, review, revised, REVIEW_OK])
+    cv_ctx, _, warnings = ai_documents.run_ai_flow(PROFILE, OFFER, provider)
+
+    assert "Nimbus Datos" in provider.calls[1]["prompt"] and "PERFIL" in provider.calls[1]["prompt"]
+    revise_prompt = provider.calls[2]["prompt"]
+    block = revise_prompt[revise_prompt.index("<critica_revisor>"):revise_prompt.index("</critica_revisor>")]
+    assert block.index("Diseñé el modelo") < block.index("Problemas")
+    assert "billing plan" in block and "x" * 41 not in revise_prompt
+    bullets = cv_ctx["experience"][1]["bullets"]
+    assert "Diseñé el modelo de datos comercial" not in bullets and claim not in bullets
+
+
+def test_plazo_de_ia_agotado_omite_la_revision():
+    provider = ScriptedProvider([draft_payload()])  # el borrador tardó tanto que ya no hay revisión
+    _, _, warnings = ai_documents.run_ai_flow(PROFILE, OFFER, provider, deadline=240.0, clock=lambda: 500.0)
+    assert len(provider.calls) == 1
+    assert any("Tiempo de IA agotado" in w for w in warnings)
+
+
+def test_acortar_cubre_cv_y_carta_en_una_peticion():
+    provider = ScriptedProvider([draft_payload(), REVIEW_OK, draft_payload()])
+    cv_ctx, letter_ctx, _ = ai_documents.run_ai_flow(PROFILE, OFFER, provider)
+    ai_documents.shorten_documents(cv_ctx, letter_ctx, PROFILE, OFFER, provider,
+                                   PageOverflow([("cv", 3, 2), ("cover", 2, 1)]))
+    prompt = provider.calls[-1]["prompt"]
+    assert "El CV ocupa 3 páginas" in prompt and "La carta ocupa 2 páginas" in prompt
+
+
+def test_cap_warnings_recorta_y_limita():
+    warnings = ai_documents.cap_warnings(["a" * 300] + [f"aviso {i}" for i in range(20)] + ["aviso 1"])
+    assert len(warnings) == 16 and warnings[-1] == "y 6 más"
+    assert len(warnings[0]) == 120 and warnings[0].endswith("…")
+
+
+def test_preparar_si_acortar_falla_recorta_sin_ia(env, fake_generator, fake_ai_render, monkeypatch):
+    _use_provider(monkeypatch, ScriptedProvider([draft_payload(), REVIEW_OK, AIError("timeout")]))
+    calls, state = fake_ai_render
+    state["overflow_first"] = True
+    docs = application_documents.prepare_application(env["app_id"], use_ai=True)
+    assert docs.source == "ai" and [c["trim"] for c in calls] == [False, True]
+    assert any("no pudo acortarlo" in w for w in docs.warnings)
+    assert not any(w.startswith("IA no disponible") for w in docs.warnings)
+
+
+def test_preparar_con_error_inesperado_usa_la_determinista(env, fake_generator, fake_ai_render, monkeypatch):
+    _use_provider(monkeypatch, ScriptedProvider([draft_payload(), REVIEW_OK]))
+    fake_ai_render[1]["fail"] = KeyError("cv_pdf")
+    docs = application_documents.prepare_application(env["app_id"], use_ai=True)
+    assert docs.source == "deterministic"
+    assert docs.warnings == ["La vía con IA falló por un error inesperado; se usa la versión determinista"]
+
+
+@pytest.mark.integration
+@requires_engine
+def test_integracion_desborde_compila_cv_y_carta_antes_de_avisar(tmp_path):
+    from automation.document_generator import generate_documents_from_context
+
+    provider = ScriptedProvider([draft_payload(), REVIEW_OK])
+    cv_ctx, letter_ctx, _ = ai_documents.run_ai_flow(PROFILE, OFFER, provider)
+    cv_ctx["experience"] = cv_ctx["experience"] * 12
+    letter_ctx["body_paragraph"] = " ".join(["Experiencia en SAP SD y Python."] * 120)
+    with pytest.raises(PageOverflow) as exc:
+        generate_documents_from_context(cv_ctx, letter_ctx, output_dir=tmp_path, trim=False)
+    assert [doc for doc, _, _ in exc.value.overflows] == ["cv", "cover"]

@@ -577,12 +577,17 @@ def generate_deterministic_documents(
 
 
 class PageOverflow(VerificationError):
-    """Un documento no cabe en su límite de páginas y no se pidió recortarlo (`doc`: "cv" o "cover")."""
+    """CV y/o carta no caben en su límite de páginas y no se pidió recortar.
 
-    def __init__(self, doc: str, pages: int, limit: int):
-        self.doc, self.pages, self.limit = doc, pages, limit
-        label = "El CV" if doc == "cv" else "La carta"
-        super().__init__(f"{label} ocupa {pages} páginas y el límite es {limit}")
+    `overflows`: lista de (doc, páginas, límite) con doc "cv" o "cover" (ambos se compilan antes de
+    lanzarla, así el llamador puede pedir una sola versión más corta que cubra los dos)."""
+
+    def __init__(self, overflows: list[tuple[str, int, int]]):
+        self.overflows = list(overflows)
+        super().__init__("; ".join(
+            f"{'El CV' if doc == 'cv' else 'La carta'} ocupa {pages} páginas y el límite es {limit}"
+            for doc, pages, limit in self.overflows
+        ))
 
 
 def generate_documents_from_context(
@@ -601,8 +606,9 @@ def generate_documents_from_context(
 
     - El recorte opera sobre `cv_context["experience"]` (cada empleo con `bullets`, `role`, `company` y
       opcionalmente `start`/`end` para saber cuál es el más reciente).
-    - trim=False: si el CV pasa de `cv_pages` o la carta de `letter_pages` se lanza `PageOverflow`
-      sin recortar (el llamador puede pedir a la IA una versión más corta y reintentar con trim=True).
+    - trim=False: se compilan CV y carta sin recortar y, si alguno pasa de su límite, se lanza
+      `PageOverflow` con todos los desbordes (el llamador puede pedir a la IA una versión más corta y
+      reintentar con trim=True).
     """
     return _build_documents(
         trim_base=cv_context,
@@ -669,9 +675,10 @@ def _build_documents(
 
     first_pages = build_cv(0)
     best = 0
+    overflows: list[tuple[str, int, int]] = []
     if first_pages > cv_pages and not trim:
-        raise PageOverflow("cv", first_pages, cv_pages)
-    if first_pages > cv_pages:
+        overflows.append(("cv", first_pages, cv_pages))
+    elif first_pages > cv_pages:
         if not ops or build_cv(len(ops)) > cv_pages:
             raise VerificationError(
                 f"El CV ocupa {first_pages} páginas y no cabe en {cv_pages} ni quitando todo lo "
@@ -698,7 +705,9 @@ def _build_documents(
     cover_pdf_path = compile_latex(cover_tex_path, output_dir=out)
     cover_pages = _page_count(cover_pdf_path)
     if cover_pages > letter_pages and not trim:
-        raise PageOverflow("cover", cover_pages, letter_pages)
+        overflows.append(("cover", cover_pages, letter_pages))
+    if overflows:
+        raise PageOverflow(overflows)
 
     verification: dict[str, Any] = {
         "pages": {"cv": best_pages, "cover": cover_pages},
