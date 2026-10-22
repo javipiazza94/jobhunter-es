@@ -17,6 +17,8 @@ export const T = {
   copy: "Copiar",
   copied: "Copiada",
   noAnswer: "Sin respuesta: añade este dato en Perfil → Respuestas de cribado.",
+  suggestion: (q: string) => `Pregunta guardada parecida (no equivalente): «${q}»`,
+  truncated: "Recortada para respetar el límite",
   chars: (n: number) => `${n} caracteres`,
   sources: { profile: "perfil", ai: "IA", needs_input: "falta dato" } as Record<ScreeningSource, string>,
 };
@@ -48,6 +50,7 @@ export function ScreeningPanel({ applicationId, initialText = "", initialAnswers
     setError("");
     try {
       setAnswers((await answerScreeningQuestions(applicationId, questions)).answers);
+      setCopied(null); // las filas son otras: el «Copiada» anterior ya no aplica
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -96,7 +99,10 @@ export function ScreeningPanel({ applicationId, initialText = "", initialAnswers
                 </span>
               </div>
               {a.source === "needs_input" ? (
-                <p className="text-xs text-amber-300">{T.noAnswer}</p>
+                <>
+                  <p className="text-xs text-amber-300">{T.noAnswer}</p>
+                  {a.suggestion && <p className="text-xs text-gray-500">{T.suggestion(a.suggestion)}</p>}
+                </>
               ) : (
                 <>
                   <p className="whitespace-pre-wrap text-sm text-gray-100">{a.answer}</p>
@@ -105,6 +111,7 @@ export function ScreeningPanel({ applicationId, initialText = "", initialAnswers
                       {copied === i ? T.copied : T.copy}
                     </button>
                     <span>{T.chars(a.answer.length)}</span>
+                    {a.truncated && <span className="text-amber-300">{T.truncated}</span>}
                   </div>
                 </>
               )}

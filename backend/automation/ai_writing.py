@@ -49,13 +49,22 @@ def _profile_facts(profile: dict) -> dict:
     return {k: profile[k] for k in _PROFILE_KEYS if profile.get(k)}
 
 
+def _untrusted(tag: str, text: str) -> str:
+    """Texto de terceros entre etiquetas; cualquier etiqueta `<tag>` / `</tag>` dentro se neutraliza para que no cierre el bloque."""
+    cleaned = re.sub(rf"<\s*/?\s*{tag}\b[^>]*>", f"[{tag}]", text, flags=re.IGNORECASE)
+    return f"<{tag}>\n{cleaned}\n</{tag}>"
+
+
 def _offer_block(offer: dict) -> str:
+    def clean(value: object) -> str:
+        return re.sub(r"<\s*/?\s*oferta\b[^>]*>", "[oferta]", str(value or ""), flags=re.IGNORECASE)
+
     desc = (offer.get("description") or "")[:_MAX_DESCRIPTION_CHARS]
     return (
-        f"Empresa: {offer.get('company_name') or ''}\n"
-        f"Puesto: {offer.get('title') or offer.get('job_title') or ''}\n"
-        f"Tecnologías: {offer.get('tech_stack') or ''}\n"
-        f"<oferta>\n{desc}\n</oferta>"
+        f"Empresa: {clean(offer.get('company_name'))}\n"
+        f"Puesto: {clean(offer.get('title') or offer.get('job_title'))}\n"
+        f"Tecnologías: {clean(offer.get('tech_stack'))}\n"
+        f"{_untrusted('oferta', desc)}"
     )
 
 

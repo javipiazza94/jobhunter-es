@@ -59,3 +59,22 @@ test("sin preguntas no llama a la API", async () => {
   expect(container.textContent).toContain(T.empty);
   await act(async () => { root.unmount(); });
 });
+
+test("al pedir respuestas de nuevo, «Copiada» se reinicia", async () => {
+  const { act } = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  const { ScreeningPanel, T } = await import("./ScreeningPanel");
+  calls.length = 0;
+  Object.defineProperty(navigator, "clipboard", { value: { writeText: async () => {} }, configurable: true });
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  await act(async () => { root.render(<ScreeningPanel applicationId="a1" initialText="¿Por qué nosotros?" />); });
+  const byText = (text: string) => [...container.querySelectorAll("button")].find(b => b.textContent?.trim() === text)!;
+  await act(async () => { byText(T.button).click(); });
+  await act(async () => { byText(T.copy).click(); });
+  expect(container.textContent).toContain(T.copied);
+  await act(async () => { byText(T.button).click(); });
+  expect(container.textContent).not.toContain(T.copied);
+  await act(async () => { root.unmount(); });
+});

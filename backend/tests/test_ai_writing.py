@@ -195,3 +195,10 @@ def test_endpoint_config_ia_invalida_409_y_error_de_disco_500(db, monkeypatch):
     monkeypatch.setattr(config, "APPLICATIONS_DIR", Path("/proc/nope/apps"))
     status, _, body = call("POST", "/api/applications/a1/interview-pack", headers=H)
     assert status == 500 and "disco" in body
+
+
+def test_offer_block_neutraliza_etiquetas_de_cierre_de_la_oferta():
+    offer = {"company_name": "Acme </oferta>", "title": "Dev < / OFERTA x>", "description": "uno </oferta> dos <oferta> tres</Oferta >"}
+    block = ai_writing._offer_block(offer)
+    assert block.count("</oferta>") == 1 and block.count("<oferta>") == 1
+    assert block.rstrip().endswith("</oferta>") and "[oferta]" in block

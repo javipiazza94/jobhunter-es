@@ -203,7 +203,7 @@ def _str_list(value: Any, limit: int = MAX_BULLETS, max_chars: int = MAX_TEXT_CH
 
 def _untrusted(tag: str, text: str) -> str:
     """Bloque de datos de terceros entre etiquetas; quita las etiquetas que traiga dentro (no puede cerrarse)."""
-    cleaned = re.sub(rf"</?\s*{tag}\s*>", f"[{tag}]", text, flags=re.IGNORECASE)
+    cleaned = re.sub(rf"<\s*/?\s*{tag}\b[^>]*>", f"[{tag}]", text, flags=re.IGNORECASE)
     return f"<{tag}>\n{cleaned}\n</{tag}>"
 
 

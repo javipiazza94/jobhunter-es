@@ -234,6 +234,12 @@ def test_api_get_sin_cache_es_null_y_con_cache_devuelve_la_forma_publica(env):
     assert data["warnings"] == ["aviso"] and data["fetched_date"] == date.today().isoformat() and data["age_days"] == 0
 
 
+def test_api_get_entrada_sin_resumen_cuenta_como_no_encontrada(env):
+    cache.save_cached_research("Acme Robotics", extra={"products": ["brazos"]})  # formato antiguo/incompleto
+    status, _, body = call("GET", "/api/companies/Acme Robotics/research", headers=H)
+    assert (status, json.loads(body)) == (200, None)
+
+
 def test_api_cache_antigua_con_sources_dict(env):
     cache.save_cached_research("Acme Robotics", sources={"website": {"url": "https://acme.example", "notes": "n"}},
                                extra={"summary": "vieja"})

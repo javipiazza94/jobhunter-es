@@ -6,9 +6,12 @@ La ruta se lee de `config.PROFILE_PATH` en cada llamada (no se importa por valor
 """
 import json
 import os
+import threading
 from pathlib import Path
 
 import config
+
+_LOCK = threading.RLock()  # serializa leer-fusionar-escribir (PATCH) frente a otras escrituras del perfil
 
 
 def load_profile() -> dict:
@@ -29,12 +32,22 @@ def save_profile(data: dict) -> Path:
     path = Path(config.PROFILE_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
-    try:
-        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        os.replace(tmp, path)
-    finally:
-        tmp.unlink(missing_ok=True)
+    with _LOCK:
+        try:
+            tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            os.replace(tmp, path)
+        finally:
+            tmp.unlink(missing_ok=True)
     from automation import language_gate  # import tardío: evita ciclos al importar el paquete
 
     language_gate.candidate_languages.cache_clear()
     return path
+
+
+def update_profile(changes: dict, normalize=lambda p: p) -> dict:
+    """Fusiona `changes` (claves de primer nivel) con el perfil guardado y lo escribe; devuelve el resultado.
+    Leer, fusionar y escribir ocurren bajo un cerrojo: dos secciones que guardan a la vez no se pisan."""
+    with _LOCK:
+        merged = normalize({**load_profile(), **changes})
+        save_profile(merged)
+        return load_profile()

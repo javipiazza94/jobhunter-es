@@ -394,6 +394,8 @@ class ScreeningAnswerOut(_Out):
     question: str
     answer: str
     source: Literal["profile", "ai", "needs_input"]
+    suggestion: str | None = None
+    truncated: bool = False
 
 
 class ScreeningResultOut(_Out):

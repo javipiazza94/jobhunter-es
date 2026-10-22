@@ -30,3 +30,17 @@ test("cada respuesta lleva su insignia de origen y copiar; lo que falta avisa si
 test("muestra el error de la API", () => {
   expect(renderToStaticMarkup(<ScreeningPanel applicationId="a1" initialError="Candidatura no encontrada" />)).toContain("Candidatura no encontrada");
 });
+
+test("avisa de la pregunta guardada parecida y de las respuestas recortadas", () => {
+  const h = renderToStaticMarkup(
+    <ScreeningPanel
+      applicationId="a1"
+      initialAnswers={[
+        { question: "Python", answer: "", source: "needs_input", suggestion: "¿Experiencia con Java?" },
+        { question: "Motivo", answer: "Corta.", source: "profile", truncated: true },
+      ]}
+    />,
+  );
+  expect(h).toContain("¿Experiencia con Java?");
+  expect(h).toContain(T.truncated);
+});

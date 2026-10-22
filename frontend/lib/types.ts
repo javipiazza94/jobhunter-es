@@ -417,6 +417,10 @@ export interface ScreeningAnswer {
   question: string;
   answer: string;
   source: ScreeningSource;
+  /** Pregunta guardada parecida pero no equivalente (solo con `needs_input`). */
+  suggestion?: string | null;
+  /** La respuesta se recortó para respetar `max_chars`. */
+  truncated?: boolean;
 }
 
 /** POST /api/applications/{id}/answers: respuesta. */

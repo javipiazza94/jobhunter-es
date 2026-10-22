@@ -100,6 +100,14 @@ async def _dismiss_cookies(page: Page) -> None:
             continue
 
 
+async def _is_empty(inp) -> bool:
+    """El campo no tiene ya un valor (lo escrito por el usuario o por la página nunca se pisa)."""
+    try:
+        return not (await inp.input_value() or "").strip()
+    except Exception:  # noqa: BLE001 — si no se puede leer, no se arriesga a pisar
+        return False
+
+
 async def _question_text(page: Page, inp) -> str:
     """Texto de la pregunta de un campo: `<label for>` asociada, `aria-label` o placeholder ('' si no hay)."""
     field_id = await inp.get_attribute("id")
@@ -145,6 +153,8 @@ async def fill_generic(
                 if cv_path and cv_path.exists():
                     await inp.set_input_files(str(cv_path))
                     filled += 1
+                continue
+            if not await _is_empty(inp):
                 continue
             name = (await inp.get_attribute("name") or "").lower()
             placeholder = (await inp.get_attribute("placeholder") or "").lower()

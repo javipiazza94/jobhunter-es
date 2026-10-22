@@ -9,7 +9,7 @@ import {
   fetchSourceSettings,
   saveAISettings,
   saveEmailSettings,
-  saveProfile,
+  patchProfile,
   saveSourceSettings,
   testAI,
   testEmail,
@@ -166,8 +166,9 @@ function ProfileSection({ initial }: { initial: StoredProfile }) {
 
   const save = () =>
     run(async () => {
-      // Se relee el perfil: otra sección (p. ej. «Respuestas de cribado») pudo guardar mientras tanto.
-      const saved = await saveProfile(formToProfile(await fetchProfile().catch(() => stored), form));
+      // PATCH: solo las claves que edita esta sección; lo demás del perfil (p. ej. las respuestas de cribado) no se toca.
+      const { personal, languages } = formToProfile(stored, form);
+      const saved = await patchProfile({ personal, languages });
       setStored(saved);
       setForm(profileToForm(saved));
       return { ok: true, message: T.saved };
@@ -218,8 +219,7 @@ function ProfileSection({ initial }: { initial: StoredProfile }) {
 
 // ── Respuestas de cribado ───────────────────────────────────────────────────────────────────────
 
-/** Lista editable de `profile.screening_answers`. Al guardar relee el perfil y solo cambia esa clave, para no
- *  pisar lo que haya guardado la sección «Perfil» (PUT /api/profile sustituye el perfil entero). */
+/** Lista editable de `profile.screening_answers`. Guarda con PATCH /api/profile: solo cambia esa clave. */
 function ScreeningSection({ initial }: { initial: StoredProfile }) {
   const [items, setItems] = useState<ScreeningAnswerSaved[]>(() => savedAnswers(initial));
   const { busy, feedback, run } = useAction();
@@ -228,7 +228,7 @@ function ScreeningSection({ initial }: { initial: StoredProfile }) {
 
   const save = () =>
     run(async () => {
-      const saved = await saveProfile(withSavedAnswers(await fetchProfile(), items));
+      const saved = await patchProfile({ screening_answers: withSavedAnswers({}, items).screening_answers });
       setItems(savedAnswers(saved));
       return { ok: true, message: T.saved };
     });

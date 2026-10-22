@@ -55,7 +55,7 @@ async function checked<T>(res: Response): Promise<T> {
   return body as T;
 }
 
-function sendJson(url: string, method: "POST" | "PUT", body?: unknown): Promise<Response> {
+function sendJson(url: string, method: "POST" | "PUT" | "PATCH", body?: unknown): Promise<Response> {
   return request(url, {
     method,
     ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
@@ -125,6 +125,11 @@ export async function fetchProfile(): Promise<StoredProfile> {
 
 export async function saveProfile(profile: StoredProfile): Promise<StoredProfile> {
   return checked(await sendJson(`${BASE}/api/profile`, "PUT", profile));
+}
+
+/** Fusiona las claves de primer nivel dadas con el perfil guardado (el resto no se toca). */
+export async function patchProfile(changes: StoredProfile): Promise<StoredProfile> {
+  return checked(await sendJson(`${BASE}/api/profile`, "PATCH", changes));
 }
 
 export async function fetchAISettings(): Promise<AISettingsView> {

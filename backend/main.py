@@ -50,7 +50,6 @@ from schemas import (
     DocumentFileOut, InterviewPackOut, PrepareIn, ProfileIn, ScreeningRequestIn, ScreeningResultOut, SetupProposalOut, SetupStatusOut, SetupTextIn,
     AIKeyIn, AIKeyOut, SourceSettingOut, SourcesIn, EvaluateBatchIn, CompanyResearchOut,
 )
-from automation.company_research import get_cached_research
 from scraper.jobs import SOURCES as SCRAPER_SOURCES, TRACK_JOB_PREFIX, TRACK_PIPELINE_SOURCES
 from automation import application_documents, company_researcher, cv_reader, email_sender, followup, offer_evaluation, profile_proposal, screening
 from automation.filter_engine import classify_track
@@ -287,7 +286,7 @@ def get_offer_evaluation(offer_id: str, conn: sqlite3.Connection = Depends(get_d
 @app.get("/api/companies/{name:path}/research", response_model=CompanyResearchOut | None)
 def get_company_research(name: str):
     """Investigación vigente (caché de 30 días) de la empresa, o null si no hay."""
-    cached = get_cached_research(name)
+    cached = company_researcher.cached_research(name)  # una entrada sin resumen cuenta como no encontrada
     return company_researcher.public_view(cached) if cached else None
 
 
@@ -841,6 +840,14 @@ def put_profile(profile: ProfileIn = Body(...)):
     derivados (código de país, permiso de trabajo, nombre canónico de idioma) se recalculan como en el asistente."""
     profile_store.save_profile(setup_builder.normalize_profile(profile.model_dump(exclude_unset=True)))
     return profile_store.load_profile()
+
+
+@app.patch("/api/profile", dependencies=[Depends(_limit_profile_size)])
+def patch_profile(changes: ProfileIn = Body(...)):
+    """Fusiona las claves de primer nivel enviadas con el perfil guardado (el resto no se toca) y devuelve el
+    perfil resultante. Mismas validación y campos derivados que el PUT; las claves con valor null se ignoran."""
+    given = {k: v for k, v in changes.model_dump(exclude_unset=True).items() if v is not None}
+    return profile_store.update_profile(given, setup_builder.normalize_profile)
 
 
 def _merge_settings(model, current, updates: dict):

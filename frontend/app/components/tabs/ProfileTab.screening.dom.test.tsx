@@ -4,8 +4,6 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
 type Call = { method: string; path: string; body: unknown };
 const calls: Call[] = [];
-// Lo que hay "en disco": otra sección pudo cambiar la ciudad después de cargar la pestaña.
-const DISK = { personal: { name: "Ana", city: "Sevilla" }, custom_key: 1, screening_answers: [{ question: "P1", answer: "R1" }] };
 
 beforeAll(() => {
   GlobalRegistrator.register();
@@ -14,7 +12,7 @@ beforeAll(() => {
     const method = (init.method ?? "GET").toUpperCase();
     const body = init.body ? JSON.parse(String(init.body)) : null;
     calls.push({ method, path: new URL(String(url)).pathname, body });
-    return { ok: true, status: 200, json: async () => (method === "PUT" ? body : DISK) } as Response;
+    return { ok: true, status: 200, json: async () => body } as Response;
   };
 });
 
@@ -22,7 +20,7 @@ afterAll(async () => {
   await GlobalRegistrator.unregister();
 });
 
-test("añadir y guardar una respuesta relee el perfil y solo cambia screening_answers", async () => {
+test("añadir y guardar una respuesta envía un PATCH solo con screening_answers", async () => {
   const { act } = await import("react");
   const { createRoot } = await import("react-dom/client");
   const { ProfileTab, T } = await import("./ProfileTab");
@@ -49,12 +47,28 @@ test("añadir y guardar una respuesta relee el perfil y solo cambia screening_an
   await setValue(section.querySelector("#sa-a-1")!, "Sí, B.");
   await click(T.save);
 
-  const put = calls.find(c => c.method === "PUT")!;
-  expect(calls.map(c => c.method)).toEqual(["GET", "PUT"]);
-  expect(put.path).toBe("/api/profile");
-  expect(put.body).toEqual({
-    personal: { name: "Ana", city: "Sevilla" }, custom_key: 1,
+  expect(calls.map(c => c.method)).toEqual(["PATCH"]);
+  expect(calls[0].path).toBe("/api/profile");
+  expect(calls[0].body).toEqual({
     screening_answers: [{ question: "P1", answer: "R1" }, { question: "¿Carné?", answer: "Sí, B." }],
   });
+  await act(async () => { root.unmount(); });
+});
+
+test("guardar la sección Perfil envía un PATCH solo con personal e idiomas", async () => {
+  const { act } = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  const { ProfileTab, T } = await import("./ProfileTab");
+  calls.length = 0;
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const stored = { personal: { name: "Ana", city: "Madrid" }, languages: [], screening_answers: [{ question: "P1", answer: "R1" }] };
+  await act(async () => { root.render(<ProfileTab initial={{ profile: stored }} onRerunWizard={() => {}} />); });
+  const section = [...container.querySelectorAll("section")].find(s => s.textContent?.includes(T.fullName))!;
+  const save = [...section.querySelectorAll("button")].find(b => b.textContent?.includes(T.save))!;
+  await act(async () => { save.click(); });
+  expect(calls.map(c => c.method)).toEqual(["PATCH"]);
+  expect(Object.keys(calls[0].body as object).sort()).toEqual(["languages", "personal"]);
   await act(async () => { root.unmount(); });
 });

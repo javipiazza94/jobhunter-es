@@ -161,7 +161,7 @@ def company_context(name: str) -> tuple[str | None, str | None]:
 # ── Investigación ─────────────────────────────────────────────────────────────
 
 def _untrusted(tag: str, text: str) -> str:
-    cleaned = re.sub(rf"</?\s*{tag}\s*>", f"[{tag}]", text, flags=re.IGNORECASE)
+    cleaned = re.sub(rf"<\s*/?\s*{tag}\b[^>]*>", f"[{tag}]", text, flags=re.IGNORECASE)
     return f"<{tag}>\n{cleaned}\n</{tag}>"
 
 
