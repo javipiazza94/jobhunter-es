@@ -139,6 +139,46 @@ Choose it in the wizard or in Perfil (a "Test" button checks it). The model can 
 
 Sending is always manual and approved by you. In Perfil > Email choose the Gmail preset (`smtp.gmail.com:587`, STARTTLS, needs an app password) or a custom SMTP server (host, port, STARTTLS, username, sender name). The password goes to the keychain; "Test" connects and authenticates without sending anything. An install without an `email:` section keeps working as before with `GMAIL_USER` and `GMAIL_APP_PASSWORD`.
 
+### Document & Application Preparation
+
+The **"Preparar candidatura"** button in the dashboard (or `POST /api/applications/{id}/prepare`) generates and compiles a customized CV and cover letter in PDF tailored to the job offer:
+
+- **Without AI (Deterministic):** Generates the CV and cover letter from `profile.json` and the active template, trimming the least relevant experience bullets if content overflows the page limits.
+- **With AI (Writer + Reviewer):** When an AI provider is configured, a writer adapts the profile summary, competencies, and achievements to align with the offer, while a reviewer critiques the match. A strict **honesty validator** strips any unbacked employers, degrees, dates, or skills not found in the profile. If documents overflow page limits, the AI is asked to shorten them, falling back to deterministic trimming if necessary.
+- **Limits & Verification:** The CV fits within 2 pages (configurable) and the cover letter is strictly 1 page. All generated PDFs pass `verify_pdf` ensuring ATS-readability, exact literal contact details (email and phone), and standard ASCII dates.
+- **Per-Application Archive:** Output PDFs are atomically archived in `JH_HOME/applications/<id>/` (`cv.pdf`, `cover.pdf`, `job_posting.md`, and `metadata.json`). Approving an application automatically attaches these archived PDFs to the email.
+
+#### PDF Compilation Engine (Tectonic / LaTeX)
+
+To compile LaTeX templates to PDF, **Tectonic** is recommended (a modern, self-contained engine that fetches necessary packages on demand without requiring a full TeX Live install). If no engine is found on the system, preparation returns a 409 status with installation instructions:
+
+- **Linux:**
+  ```bash
+  curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.tectonic-typesetting.github.io/install-sh | sh
+  # Or via package manager / cargo:
+  # sudo apt install tectonic   # Ubuntu/Debian
+  # sudo pacman -S tectonic     # Arch
+  # cargo install tectonic
+  ```
+- **macOS:**
+  ```bash
+  brew install tectonic
+  ```
+- **Windows:**
+  ```powershell
+  winget install Tectonic.Tectonic
+  # Or via Scoop: scoop install tectonic
+  ```
+
+*Note:* Standard system engines like `xelatex` or `lualatex` are also detected and supported if present on your `PATH`.
+
+#### Custom CV & Cover Letter Templates
+
+JobHunter provides built-in templates based on `moderncv` (banking) for CVs and `cover.cls` for cover letters. You can register custom templates in LaTeX (`.tex.j2`) or Typst (`.typ.j2`):
+- From the dashboard in **Perfil > Plantillas**.
+- Via the API with `POST /api/templates` or the Claude Code command `/add-template`.
+- Every registered template undergoes a **mandatory test compilation** against `profile.example.json` to verify correctness before being saved to `JH_HOME/templates/<kind>/<name>/`.
+
 ---
 
 ## Running Scrapers

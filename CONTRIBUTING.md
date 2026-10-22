@@ -87,6 +87,20 @@ JobHunter targets the Spanish job market, but cover letters can be written in ot
 - Core scoring logic is implemented in `backend/automation/filter_engine.py` and `backend/automation/generic_filter.py`.
 - Ensure tests verify edge cases with neutral fixtures (`backend/tests/fixtures/config_test.yaml`).
 
+### Adding and Testing Custom Templates
+Custom templates for CVs and cover letters live in `JH_HOME/templates/<kind>/<name>/` and are managed via `backend/automation/templates_registry.py`:
+- Supported engines: LaTeX (`.tex.j2`, compiled with Tectonic / XeLaTeX) and Typst (`.typ.j2`, compiled with `typst compile`).
+- Registering a template (`POST /api/templates` or `python -m automation.templates_registry add ...`) runs a **mandatory test compilation** against `backend/profile.example.json` to verify valid syntax, macros, and page limits before activation.
+- Templates must respect page limits (default: CV ≤ 2 pages, cover letter = 1 page) and use ATS-friendly text formatting without custom binary dependencies.
+- Unit and integration tests for template management are in `backend/tests/test_templates_registry.py`.
+
+### Claude Code Commands and Agents
+Claude Code integrations reside under `.claude/`:
+- **Commands:** `.claude/commands/{apply,rank,add-template,add-portal,expand,upskill}.md`.
+- **Agents:** `.claude/agents/{posting-fetcher,posting-scorer,application-reviewer}.md`.
+- All commands and agents reference repository modules directly (`python -m automation.<module>`) and write to `JH_HOME`.
+- Verify Claude Code contracts using `backend/tests/test_claude_commands.py`, which checks that all command files exist, referenced modules can be imported, and obsolete upstream references are absent.
+
 ---
 
 ## Pull Request Guidelines

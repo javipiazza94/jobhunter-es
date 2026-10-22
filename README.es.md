@@ -129,6 +129,46 @@ Se elige en el asistente o en Perfil (un botón «Probar» lo comprueba). El mod
 
 El envío es siempre manual y aprobado por ti. En Perfil > Email elige el preset de Gmail (`smtp.gmail.com:587`, STARTTLS, requiere contraseña de aplicación) o un servidor SMTP propio (host, puerto, STARTTLS, usuario, nombre del remitente). La contraseña va al llavero; «Probar» se conecta y autentica sin enviar nada. Una instalación sin sección `email:` sigue funcionando como antes con `GMAIL_USER` y `GMAIL_APP_PASSWORD`.
 
+### Preparación de documentos y candidaturas
+
+El botón **"Preparar candidatura"** en la tarjeta de revisión (o el endpoint `POST /api/applications/{id}/prepare`) genera y compila un CV y una carta de presentación en PDF a medida de la oferta:
+
+- **Sin IA (determinista):** genera el CV y la carta a partir de los datos de `profile.json` y la plantilla activa, recortando viñetas menos relevantes si desborda el límite de páginas.
+- **Con IA (redactor + revisor):** si hay un proveedor de IA configurado, un redactor adapta el resumen, competencias y viñetas del perfil para alinearlos con la oferta, y un revisor critica el encaje. Un **validador de honestidad** estricto descarta cualquier empresa, titulación o habilidad inventada que no figure en el perfil. Si el documento desborda las páginas límite, se solicita un recorte a la IA y, de persistir, se aplica el recorte determinista.
+- **Límites y verificación:** el CV se ciñe a un máximo de 2 páginas (configurable) y la carta a 1 página exacta. Se comprueba mediante `verify_pdf` que los PDFs son legibles por ATS, contienen los datos de contacto literales (email y teléfono) y fechas en formato estándar.
+- **Archivo por candidatura:** los PDFs resultantes se archivan de forma atómica en `JH_HOME/applications/<id>/` (`cv.pdf`, `cover.pdf`, `job_posting.md` y `metadata.json`). Al pulsar **"Aprobar y enviar"**, se adjuntan automáticamente los PDFs archivados.
+
+#### Motor de compilación (Tectonic / LaTeX)
+
+Para compilar las plantillas LaTeX a PDF se recomienda **Tectonic** (motor autónomo y moderno que descarga paquetes bajo demanda sin necesidad de instalar TeX Live completo). Si no hay ningún motor en el sistema, la preparación responde con un aviso 409 indicando cómo instalarlo:
+
+- **Linux:**
+  ```bash
+  curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.tectonic-typesetting.github.io/install-sh | sh
+  # O vía gestor de paquetes / cargo:
+  # sudo apt install tectonic   # Ubuntu/Debian
+  # sudo pacman -S tectonic     # Arch
+  # cargo install tectonic
+  ```
+- **macOS:**
+  ```bash
+  brew install tectonic
+  ```
+- **Windows:**
+  ```powershell
+  winget install Tectonic.Tectonic
+  # O con Scoop: scoop install tectonic
+  ```
+
+*Nota:* También se detectan y soportan motores tradicionales como `xelatex` o `lualatex` si ya están en el `PATH`.
+
+#### Plantillas personalizadas de CV y carta
+
+JobHunter incluye por defecto plantillas integradas basadas en `moderncv` (banking) para CV y `cover.cls` para cartas. Es posible añadir y activar plantillas propias en formato LaTeX (`.tex.j2`) o Typst (`.typ.j2`):
+- Desde el dashboard en **Perfil > Plantillas**.
+- Vía API con `POST /api/templates` o el comando Claude Code `/add-template`.
+- Cada plantilla registrada realiza una **compilación de prueba obligatoria** contra el perfil de ejemplo (`profile.example.json`) para garantizar que compila sin errores antes de guardarse en `JH_HOME/templates/<kind>/<name>/`.
+
 ---
 
 ## Uso
