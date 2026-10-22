@@ -9,6 +9,8 @@ import random
 import shutil
 from pathlib import Path
 from playwright.async_api import async_playwright
+
+from automation.browser_install import ensure_chromium_async
 from scraper.base import USER_AGENTS
 from automation.ats_handlers import detect_ats
 
@@ -44,6 +46,7 @@ async def _run_fill(
     if system_chromium:
         launch_kwargs["executable_path"] = system_chromium
 
+    await ensure_chromium_async()
     playwright = await async_playwright().start()
     try:
         browser = await playwright.chromium.launch(**launch_kwargs)

@@ -76,9 +76,9 @@ Tauri 2 (desktop/src-tauri, Rust)
 
 **Interfaces:** `ensure_chromium() -> None` (async-safe, idempotente, con candado): si ya existe el Chromium de la versión de Playwright instalada, no hace nada; si no, ejecuta el instalador del driver (`playwright install chromium`) y falla con un mensaje claro si no hay red.
 
-- [ ] Tests con el instalador simulado: ya instalado → no instala; falta → instala una sola vez aunque haya dos llamadas simultáneas; error → mensaje legible.
-- [ ] Llamar a `ensure_chromium()` justo antes de `chromium.launch(...)` en los tres sitios, sin cambiar su comportamiento si ya está instalado.
-- [ ] Commit `feat(desktop): descarga de Chromium la primera vez que se usa el navegador`.
+- [x] Tests con el instalador simulado: ya instalado → no instala; falta → instala una sola vez aunque haya dos llamadas simultáneas; error → mensaje legible.
+- [x] Llamar a `ensure_chromium()` justo antes de `chromium.launch(...)` en los tres sitios, sin cambiar su comportamiento si ya está instalado.
+- [x] Commit `feat(desktop): descarga de Chromium la primera vez que se usa el navegador`.
 
 ### Tarea 4: Detección de Ollama
 

@@ -15,6 +15,8 @@ import shutil
 from pathlib import Path
 from urllib.parse import urlencode
 from playwright.async_api import async_playwright, Page
+
+from automation.browser_install import ensure_chromium_async
 from scraper.base import USER_AGENTS
 from config import LINKEDIN_SESSION_PATH
 from search_config import source_settings
@@ -57,6 +59,7 @@ def _is_checkpoint(url: str, html: str) -> bool:
 async def run_linkedin_login() -> None:
     """Open headful Chromium — user logs in manually, then cookies are saved."""
     system_chromium = shutil.which("chromium") or shutil.which("chromium-browser")
+    await ensure_chromium_async()
     playwright = await async_playwright().start()
     launch_kwargs: dict = {"headless": False}
     if system_chromium:
@@ -144,6 +147,7 @@ async def run_linkedin_jobs(max_per_search: int = 25, track: str | None = None) 
         return []
 
     system_chromium = shutil.which("chromium") or shutil.which("chromium-browser")
+    await ensure_chromium_async()
     playwright = await async_playwright().start()
     launch_kwargs: dict = {
         "headless": False,

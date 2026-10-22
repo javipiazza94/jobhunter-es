@@ -7,6 +7,8 @@ import logging
 from typing import Optional
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
+from automation.browser_install import ensure_chromium_async
+
 logger = logging.getLogger(__name__)
 
 USER_AGENTS = [
@@ -30,6 +32,7 @@ class BaseScraper:
 
     async def __aenter__(self):
         import shutil
+        await ensure_chromium_async()
         self._playwright = await async_playwright().start()
         system_chromium = shutil.which("chromium") or shutil.which("chromium-browser")
         launch_kwargs: dict = {
