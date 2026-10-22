@@ -16,7 +16,6 @@ scoring:
     area: [pradoverde, lomaclara]
   experience:
     weight: 0.15
-    priority_max_years: 3
   salary:
     weight: 0.1
     min_base: 24000
