@@ -7,7 +7,7 @@ frontend/lib/types.ts; tests/test_api_contract.py comprueba que no se desajusten
 """
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from automation.profile_proposal import ProfileDraft
 from search_config import AISettings, EmailSettings
@@ -479,9 +479,26 @@ class ExpandOut(_Out):
     errors: list[ExpandErrorOut]
 
 
+class ExpandAcceptItemIn(BaseModel):
+    """Competencia aceptada: nombre y fuente http(s) obligatorios (la procedencia queda en `skills_sources`)."""
+    name: str = Field(min_length=1, max_length=200)
+    evidence: str = Field("", max_length=1000)
+    source_url: str
+
+    @field_validator("source_url")
+    @classmethod
+    def _http_source(cls, value: str) -> str:
+        from automation.expand_profile import clean_url
+
+        url = clean_url(value)
+        if url is None:
+            raise ValueError("la fuente debe ser una URL http(s) sin credenciales")
+        return url
+
+
 class ExpandAcceptIn(BaseModel):
     """POST /api/profile/expand/accept: solo las propuestas que el usuario acepta."""
-    items: list[ExpandProposalOut] = Field(min_length=1, max_length=100)
+    items: list[ExpandAcceptItemIn] = Field(min_length=1, max_length=100)
 
 
 class ExpandAcceptOut(_Out):

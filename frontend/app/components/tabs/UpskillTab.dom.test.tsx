@@ -43,3 +43,20 @@ test("«Generar mapa de huecos» pide el informe y lo pinta como texto", async (
   expect(container.querySelector("img")).toBeNull();
   await act(async () => { root.unmount(); });
 });
+
+test("en el detalle de una oferta pide el ámbito «one» con esa oferta y no enseña el selector", async () => {
+  const { act } = await import("react");
+  const { createRoot } = await import("react-dom/client");
+  const { UpskillTab, T } = await import("./UpskillTab");
+  calls.length = 0;
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  await act(async () => { root.render(<UpskillTab offerId="o 1" />); });
+  expect(container.querySelector("select")).toBeNull();
+  const button = [...container.querySelectorAll("button")].find(b => b.textContent?.includes(T.forOffer)) as HTMLButtonElement;
+  await act(async () => { button.click(); });
+  expect(calls[0]).toEqual({ method: "POST", path: "/api/upskill", client: "dashboard", body: { scope: "one", offer_ids: ["o 1"] } });
+  expect(container.textContent).toContain("Kafka — 2 oferta(s)");
+  await act(async () => { root.unmount(); });
+});

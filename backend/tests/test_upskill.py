@@ -100,6 +100,14 @@ def test_informe_sin_ia_se_escribe(env):
     assert not list(path.parent.glob("*.tmp"))
 
 
+def test_informes_del_mismo_dia_no_se_pisan(env):
+    """Revisión SP3 M1: un segundo informe el mismo día (otro ámbito) no sustituye al primero."""
+    first = Path(upskill.build_report(env, "saved", provider=Fake(name="none"), today=TODAY)["report_path"])
+    second = Path(upskill.build_report(env, "saved", provider=Fake(name="none"), today=TODAY)["report_path"])
+    assert first.name == "upskill-2026-10-22.md" and second.name == "upskill-2026-10-22-2.md"
+    assert first.is_file() and second.is_file()
+
+
 def test_plan_de_la_ia_limpio_y_recursos_sin_verificar(env):
     ai = Fake(data={
         "study_plan": [{"skill": "kafka", "steps": ["Leer la guía <script>", "Montar un clúster"], "weeks": 3},

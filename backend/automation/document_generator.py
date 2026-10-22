@@ -34,6 +34,9 @@ from automation.verify_pdf import VerificationError, extract_text_layer, keyword
 from config import REPO_ROOT
 
 LAYOUT_SKIPPED = "skipped: poppler no instalado"
+# Grupo de competencias con las habilidades sueltas de `profile.skills` (p. ej. las aceptadas en «Ampliar
+# perfil», con su fuente en `skills_sources`) que no estén ya en `stack`.
+OTHER_SKILLS_LABEL = "Other Skills"
 TRIM_BISECT_STEPS = 3  # compilaciones de bisección como mucho al recortar el CV
 
 _SPANISH_MONTHS = (
@@ -234,10 +237,22 @@ def prepare_cv_context(profile: dict, track: str = "general", lang: str = "es") 
         ("other_tools", "Tools & Platforms"),
     ]
     competencies = []
+    in_stack: set[str] = set()
     for key, label in category_labels:
-        items = stack.get(key, [])
+        items = stack.get(key, []) if isinstance(stack, dict) else []
         if items and isinstance(items, list):
             competencies.append((label, ", ".join(str(x) for x in items)))
+            in_stack.update(str(x).strip().casefold() for x in items)
+    if isinstance(stack, list):  # perfiles antiguos con el stack como lista plana
+        in_stack.update(str(x).strip().casefold() for x in stack)
+    extra: list[str] = []
+    for skill in profile.get("skills") or []:
+        name = str(skill).strip() if isinstance(skill, str) else ""
+        if name and name.casefold() not in in_stack:
+            in_stack.add(name.casefold())
+            extra.append(name)
+    if extra:
+        competencies.append((OTHER_SKILLS_LABEL, ", ".join(extra)))
 
     # Experiencia
     exp_list = []

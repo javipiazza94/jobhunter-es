@@ -22,7 +22,7 @@ API = "https://api.github.com/users/ana-test/repos?per_page=100&sort=pushed"
 REPOS = json.dumps([
     {"name": "robot", "language": "Rust", "topics": ["robotics", "embedded"], "fork": False},
     {"name": "web", "language": "Rust", "topics": [], "fork": False},
-    {"name": "libpy", "language": "Python", "topics": [], "fork": False},
+    {"name": "libpy", "language": "Python", "topics": ["hacktoberfest", "dotfiles"], "fork": False},
     {"name": "copia", "language": "Go", "topics": ["golang"], "fork": True},  # fork: no cuenta
 ])
 
@@ -136,4 +136,35 @@ def test_api(env):
     status, _, body = call("POST", "/api/profile/expand/accept", H, body=json.dumps({"items": [data["proposals"][0]]}).encode())
     assert status == 200 and json.loads(body)["added"] == [data["proposals"][0]["name"]]
     assert call("POST", "/api/profile/expand/accept", H, body=b'{"items": []}')[0] == 422
+    # Revisión SP3 M3: cada competencia aceptada debe traer su fuente http(s)
+    for bad in ("", "javascript:alert(1)", "ftp://x.example/a", "https://user:pw@x.example/"):
+        item = {"items": [{"name": "Zig", "evidence": "x", "source_url": bad}]}
+        assert call("POST", "/api/profile/expand/accept", H, body=json.dumps(item).encode())[0] == 422, bad
+    assert call("POST", "/api/profile/expand/accept", H, body=b'{"items": [{"name": "Zig"}]}')[0] == 422
     assert call("POST", "/api/profile/expand/accept", [("content-type", "application/json")], body=b'{"items": [{"name": "x"}]}')[0] == 403
+
+
+def test_competencia_aceptada_llega_al_cv_determinista_y_a_la_ia(env):
+    """Revisión SP3 I1: lo aceptado en «Ampliar perfil» aparece en el CV (también sin IA) y en lo que la IA puede usar."""
+    import profile_store
+    from automation import ai_documents, document_generator
+
+    ex.accept([{"name": "Rust", "evidence": "2 repos", "source_url": GH}])
+    profile = profile_store.load_profile()
+    ctx = document_generator.prepare_cv_context(profile)
+    assert (document_generator.OTHER_SKILLS_LABEL, "SQL, Rust") in ctx["competencies"]
+    assert "Rust" in document_generator.render_cv_from_context(ctx)
+    assert "Rust" in ai_documents._allowed_skills(profile)
+    # lo que ya está en el stack no se repite
+    profile["skills"] = ["Rust", "python", ""]
+    ctx = document_generator.prepare_cv_context(profile)
+    assert (document_generator.OTHER_SKILLS_LABEL, "Rust") in ctx["competencies"]
+    # sin competencias aceptadas no hay grupo extra
+    assert all(label != document_generator.OTHER_SKILLS_LABEL
+               for label, _ in document_generator.prepare_cv_context({"stack": {"programming": ["Go"]}})["competencies"])
+
+
+def test_temas_de_github_que_no_son_competencias_no_se_proponen(env):
+    """Revisión SP3 M2: temas como «hacktoberfest» o «dotfiles» no son habilidades."""
+    names = {p["name"] for p in ex.propose([GH])["proposals"]}
+    assert "robotics" in names and not names & {"hacktoberfest", "dotfiles"}

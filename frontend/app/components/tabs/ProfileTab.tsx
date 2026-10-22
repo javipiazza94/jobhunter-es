@@ -585,7 +585,7 @@ export function ProfileTab({ initial, onRerunWizard }: { initial?: Partial<Profi
     <div className="grid gap-6 lg:grid-cols-2 animate-fade-in">
       <SlotView slot={slots.profile} onRetry={() => retry("profile")}>{d => <ProfileSection initial={d} />}</SlotView>
       <SlotView slot={slots.profile} onRetry={() => retry("profile")}>{d => <ScreeningSection initial={d} />}</SlotView>
-      <SlotView slot={slots.profile} onRetry={() => retry("profile")}>{() => <ExpandProfilePanel />}</SlotView>
+      <SlotView slot={slots.profile} onRetry={() => retry("profile")}>{d => <ExpandProfilePanel initialProfile={d} />}</SlotView>
       <section className={`${card} lg:col-span-2`}><TemplatesPanel autoLoad={!initial} /></section>
       <SlotView slot={slots.ai} onRetry={() => retry("ai")}>{d => <AISection initial={d} />}</SlotView>
       <SlotView slot={slots.email} onRetry={() => retry("email")}>{d => <EmailSection initial={d} />}</SlotView>

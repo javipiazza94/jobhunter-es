@@ -467,3 +467,16 @@ def test_api_incluye_suggestion_y_truncated(db, monkeypatch):
                                                  {"text": "¿Tienes permiso de trabajo en Alemania?"}]})
     a, b = json.loads(body)["answers"]
     assert status == 200 and a["truncated"] is True and b["source"] == "needs_input" and b["suggestion"]
+
+
+def test_competencias_aceptadas_cuentan_como_hechos_del_perfil():
+    """Revisión SP3 I1: una competencia aceptada en «Ampliar perfil» (`skills`) respalda la respuesta de la IA;
+    sin ella, la misma respuesta se descarta por no tener respaldo."""
+    answer = {"answers": [{"index": 0, "answer": "Sí, he trabajado con Rust en proyectos personales."}]}
+    with_skill = {**PROFILE, "skills": ["Rust"], "skills_sources": [{"name": "Rust", "source_url": "https://github.com/ana-test"}]}
+    provider = Fake(data=answer)
+    out = screening.answer_questions([q("¿Has trabajado con lenguajes de sistemas?")], with_skill, OFFER, provider)
+    assert out[0]["source"] == "ai" and "Rust" in out[0]["answer"]
+    assert "Rust" in provider.calls[0]
+    out = screening.answer_questions([q("¿Has trabajado con lenguajes de sistemas?")], PROFILE, OFFER, Fake(data=answer))
+    assert out[0]["source"] == "needs_input"

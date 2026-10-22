@@ -261,10 +261,18 @@ def render_markdown(today: date, scope: str, summary: dict, ai: dict | None, not
 
 
 def save_report(markdown: str, today: date) -> Path:
-    """Escribe `JH_HOME/reports/upskill-<fecha>.md` de forma atómica (el del mismo día se sustituye)."""
+    """Escribe `JH_HOME/reports/upskill-<fecha>.md` de forma atómica; si ese día ya hay informe, el nuevo
+    se guarda como `upskill-<fecha>-2.md`, `-3`... (nunca se pisa uno anterior)."""
     folder = Path(config.JH_HOME) / "reports"
     folder.mkdir(parents=True, exist_ok=True)
-    path = folder / f"upskill-{today.isoformat()}.md"
+    n = 1
+    while True:
+        path = folder / (f"upskill-{today.isoformat()}.md" if n == 1 else f"upskill-{today.isoformat()}-{n}.md")
+        try:
+            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644))  # reserva el nombre
+            break
+        except FileExistsError:
+            n += 1
     tmp = path.with_name(path.name + ".tmp")
     try:
         tmp.write_text(markdown, encoding="utf-8")

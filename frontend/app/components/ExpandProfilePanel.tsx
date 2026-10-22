@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Loader2, Sparkles, X } from "lucide-react";
-import { acceptExpansion, expandProfile } from "@/lib/api";
+import { Check, Loader2, Sparkles, Trash2, X } from "lucide-react";
+import { acceptExpansion, expandProfile, fetchProfile, patchProfile } from "@/lib/api";
 import { parseSources, safeHref } from "@/lib/report";
+import type { StoredProfile } from "@/lib/setup";
 import type { ExpandError, ExpandProposal } from "@/lib/types";
 
 // Textos de la interfaz en un solo sitio (la traducción llega en SP4).
@@ -19,17 +20,64 @@ export const T = {
   reject: "Rechazar",
   source: "Fuente",
   accepted: (n: number) => `${n} competencia(s) añadida(s) al perfil`,
+  skillsTitle: "Competencias añadidas",
+  skillsHint: "Las aceptadas aquí salen en el CV (también sin IA, en «Other Skills»), en lo que la IA puede usar y en las respuestas de cribado. Quita las que no quieras.",
+  noSkills: "Todavía no has añadido competencias.",
+  noSource: "sin fuente",
+  removeSkill: (name: string) => `Quitar ${name}`,
 };
+
+/** Competencia de `profile.skills` con su procedencia (`skills_sources`, si la tiene). */
+export interface AcceptedSkill {
+  name: string;
+  source_url: string;
+  evidence: string;
+}
+
+const fold = (v: string) => v.trim().toLocaleLowerCase("es");
+
+/** Competencias sueltas del perfil (`skills`) con la fuente y la prueba de `skills_sources`. */
+export function acceptedSkills(profile: StoredProfile | null | undefined): AcceptedSkill[] {
+  const skills = Array.isArray(profile?.skills) ? (profile!.skills as unknown[]) : [];
+  const sources = Array.isArray(profile?.skills_sources) ? (profile!.skills_sources as unknown[]) : [];
+  const byName = new Map<string, { source_url?: unknown; evidence?: unknown }>();
+  for (const src of sources) {
+    if (src && typeof src === "object" && typeof (src as { name?: unknown }).name === "string") {
+      byName.set(fold((src as { name: string }).name), src as { source_url?: unknown; evidence?: unknown });
+    }
+  }
+  return skills
+    .filter((s): s is string => typeof s === "string" && s.trim() !== "")
+    .map(name => {
+      const src = byName.get(fold(name));
+      return { name, source_url: String(src?.source_url ?? ""), evidence: String(src?.evidence ?? "") };
+    });
+}
+
+/** Cambios para PATCH /api/profile que quitan una competencia y su procedencia (el resto no se toca). */
+export function withoutSkill(profile: StoredProfile, name: string): { skills: unknown[]; skills_sources: unknown[] } {
+  const skills = Array.isArray(profile.skills) ? (profile.skills as unknown[]) : [];
+  const sources = Array.isArray(profile.skills_sources) ? (profile.skills_sources as unknown[]) : [];
+  const target = fold(name);
+  return {
+    skills: skills.filter(s => !(typeof s === "string" && fold(s) === target)),
+    skills_sources: sources.filter(s => !(s && typeof s === "object" && typeof (s as { name?: unknown }).name === "string"
+      && fold((s as { name: string }).name) === target)),
+  };
+}
 
 const btn = "inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-sm font-medium disabled:opacity-50";
 
 /** Propuestas de competencias a partir de las páginas que enlaza el usuario. Proponer no guarda nada; «Aceptar»
  *  fusiona esa competencia en el perfil y «Rechazar» la descarta de la lista. */
-export function ExpandProfilePanel({ initialProposals = [], initialErrors = [], initialText = "" }: {
+export function ExpandProfilePanel({ initialProposals = [], initialErrors = [], initialText = "", initialProfile }: {
   initialProposals?: ExpandProposal[];
   initialErrors?: ExpandError[];
   initialText?: string;
+  /** Perfil guardado: si se da, se listan las competencias añadidas con su fuente y se pueden quitar. */
+  initialProfile?: StoredProfile;
 }) {
+  const [skills, setSkills] = useState<AcceptedSkill[]>(() => acceptedSkills(initialProfile));
   const [text, setText] = useState(initialText);
   const [proposals, setProposals] = useState<ExpandProposal[]>(initialProposals);
   const [errors, setErrors] = useState<ExpandError[]>(initialErrors);
@@ -63,6 +111,24 @@ export function ExpandProfilePanel({ initialProposals = [], initialErrors = [], 
       const res = await acceptExpansion([item]);
       setProposals(list => list.filter(p => p !== item));
       setMessage(T.accepted(res.added.length));
+      if (res.added.includes(item.name)) {
+        setSkills(list => [...list, { name: item.name, source_url: item.source_url ?? "", evidence: item.evidence ?? "" }]);
+      }
+    } catch (e) {
+      setFailure((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeSkill = async (name: string) => {
+    setBusy(true);
+    setFailure("");
+    setMessage("");
+    try {
+      // Se parte del perfil recién leído: así no se pisa lo que haya cambiado en otra pestaña.
+      const saved = await patchProfile(withoutSkill(await fetchProfile(), name));
+      setSkills(acceptedSkills(saved));
     } catch (e) {
       setFailure((e as Error).message);
     } finally {
@@ -120,6 +186,35 @@ export function ExpandProfilePanel({ initialProposals = [], initialErrors = [], 
             );
           })}
         </ul>
+      )}
+      {initialProfile !== undefined && (
+        <div className="space-y-2 border-t border-white/10 pt-4">
+          <h4 className="text-sm font-semibold text-gray-200">{T.skillsTitle}</h4>
+          <p className="text-xs text-gray-500">{T.skillsHint}</p>
+          {skills.length === 0 && <p className="text-xs text-gray-400">{T.noSkills}</p>}
+          <ul aria-label={T.skillsTitle} className="space-y-1.5">
+            {skills.map(skill => {
+              const href = safeHref(skill.source_url);
+              return (
+                <li key={skill.name} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                  <div className="min-w-0 text-xs text-gray-400">
+                    <span className="text-sm font-medium text-gray-100">{skill.name}</span>
+                    <span className="ml-2 break-all">
+                      {T.source}:{" "}
+                      {href ? <a href={href} target="_blank" rel="noopener noreferrer nofollow" className="text-indigo-300 hover:text-indigo-200">{skill.source_url}</a>
+                        : skill.source_url || T.noSource}
+                    </span>
+                    {skill.evidence && <p className="text-gray-500">{skill.evidence}</p>}
+                  </div>
+                  <button disabled={busy} aria-label={T.removeSkill(skill.name)} onClick={() => removeSkill(skill.name)}
+                    className="text-red-300 hover:text-red-200 disabled:opacity-40">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </section>
   );

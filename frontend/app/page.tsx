@@ -536,6 +536,8 @@ export default function Dashboard() {
 
               {selectedOffer.company_name && <CompanyResearchPanel key={selectedOffer.company_name} company={selectedOffer.company_name} />}
 
+              <UpskillTab key={`upskill-${selectedOffer.id}`} offerId={selectedOffer.id} />
+
               {parseReviewFlags(selectedOffer.review_flags).length > 0 && (
                 <div className="mb-6 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
                   <h3 className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">Avisos de revisión</h3>

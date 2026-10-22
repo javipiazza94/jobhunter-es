@@ -52,6 +52,18 @@ SKILLS_SCHEMA: dict[str, Any] = {
 }
 
 
+# Temas de GitHub habituales que describen el repositorio, no una competencia.
+NON_SKILL_TOPICS = frozenset({
+    "hacktoberfest", "hacktoberfest2020", "hacktoberfest2021", "hacktoberfest2022", "hacktoberfest2023",
+    "hacktoberfest2024", "hacktoberfest2025", "hacktoberfest2026", "dotfiles", "awesome", "awesome-list",
+    "portfolio", "personal-website", "website", "homepage", "blog", "readme", "profile-readme", "github-profile",
+    "config", "configuration", "template", "boilerplate", "starter", "learning", "tutorial", "course", "homework",
+    "exercises", "practice", "challenge", "first-contributions", "good-first-issue", "beginner-friendly", "demo",
+    "example", "examples", "playground", "test", "testing-repo", "wip", "archive", "archived", "fork", "hobby",
+    "side-project", "open-source", "opensource", "free", "cli-app", "school-project", "university", "assignment",
+})
+
+
 class Unreadable(Exception):
     """La fuente no se pudo leer o no aportó nada utilizable (el mensaje va al usuario)."""
 
@@ -106,7 +118,7 @@ def _github_proposals(user: str, source_url: str) -> list[dict]:
         if isinstance(lang, str) and lang.strip():
             languages[lang.strip()] += 1
         for topic in repo.get("topics") or []:
-            if isinstance(topic, str) and topic.strip():
+            if isinstance(topic, str) and topic.strip() and topic.strip().lower() not in NON_SKILL_TOPICS:
                 topics.setdefault(topic.strip(), str(repo.get("name") or ""))
     out = [{"name": lang, "evidence": f"{n} repositorio(s) públicos propios en {lang} (GitHub: {user})", "source_url": source_url}
            for lang, n in languages.most_common()]
