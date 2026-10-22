@@ -156,10 +156,6 @@ def company_context(name: str) -> tuple[str | None, str | None]:
     conn = get_conn()
     try:
         row = conn.execute(
-            "SELECT c.website, (SELECT jo.title || E'\\n' FROM job_offers jo WHERE 0) AS _ "
-            "FROM companies c WHERE lower(c.name) = lower(?) LIMIT 1",
-            (name.strip(),),
-        ).fetchone() if False else conn.execute(
             "SELECT id, website FROM companies WHERE lower(name) = lower(?) LIMIT 1", (name.strip(),)
         ).fetchone()
         if row is None:

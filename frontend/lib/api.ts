@@ -7,6 +7,7 @@ import type {
   CheckResult,
   EmailSettingsUpdate,
   EmailSettingsView,
+  CompanyResearch,
   EvaluationBatchResult,
   InboxReport,
   InboxStatus,
@@ -164,6 +165,16 @@ export async function fetchOfferEvaluation(offerId: string): Promise<OfferEvalua
 
 export async function evaluateOffersBatch(ids: string[]): Promise<EvaluationBatchResult> {
   return checked(await sendJson(`${BASE}/api/offers/evaluate-batch`, "POST", { ids }));
+}
+
+// ── Investigación de empresas con IA (caché de 30 días compartida con redactor, evaluación y entrevista) ──
+
+export async function fetchCompanyResearch(name: string): Promise<CompanyResearch | null> {
+  return checked(await request(`${BASE}/api/companies/${encodeURIComponent(name)}/research`));
+}
+
+export async function researchCompany(name: string): Promise<CompanyResearch> {
+  return checked(await sendJson(`${BASE}/api/companies/${encodeURIComponent(name)}/research`, "POST"));
 }
 
 export async function fetchStats() {

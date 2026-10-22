@@ -154,6 +154,56 @@ def _inside_repo(path: Path) -> bool:
     return True
 
 
+class RobotsRefused(Exception):
+    """robots.txt no permite la ruta pedida (o la de una redirección)."""
+
+
+def download(url: str, out: Path, say=print, check=None) -> str:
+    """GET `url` (siguiendo redirecciones una a una, con robots.txt en cada salto) y guarda el cuerpo en `out`.
+
+    Devuelve «HTTP <código> size=<bytes>». Lanza `RobotsRefused` si robots lo impide y cualquier otra
+    excepción ante fallos de transporte. `say` recibe los mensajes de robots; `check(url)` (opcional) se
+    llama antes de cada salto y puede lanzar para rechazarlo (p. ej. destinos de red interna).
+    """
+    current = url
+    deadline = None
+    for redirects in range(MAX_REDIRECTS + 1):
+        scheme = urlsplit(current).scheme.lower()
+        if scheme not in ("http", "https"):
+            raise ValueError(f"redirect target must be http(s), got scheme {scheme!r}")
+        if check is not None:
+            check(current)
+        rc, message = gate(current)
+        say(message)
+        if rc != 0:
+            raise RobotsRefused(current)
+        if deadline is None:
+            deadline = time.monotonic() + TIMEOUT_SECONDS
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("fetch exceeded the time limit")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        fd, body_name = tempfile.mkstemp(dir=out.parent, prefix=".fetch_page.", suffix=".tmp")
+        os.close(fd)  # curl/urllib may reopen the path on Windows
+        body = Path(body_name)
+        try:
+            code, location = (
+                fetch_with_curl(current, body, remaining)
+                if shutil.which("curl") else fetch_with_urllib(current, body, remaining)
+            )
+            if code in (301, 302, 303, 307, 308) and location:
+                if redirects == MAX_REDIRECTS:
+                    raise RuntimeError(f"more than {MAX_REDIRECTS} redirects")
+                # Encode the header's raw bytes before resolving; preserve Unicode in the base URL.
+                current = urljoin(current, quote(location, encoding="iso-8859-1", safe=string.punctuation))
+                continue
+            os.replace(body, out)
+            return f"HTTP {code} size={out.stat().st_size}"
+        finally:
+            body.unlink(missing_ok=True)
+    raise RuntimeError("redirect loop")  # inalcanzable: el último salto lanza arriba
+
+
 def _force_utf8_output() -> None:
     """Write UTF-8 whatever the host's default encoding is.
 
@@ -195,46 +245,14 @@ def main(argv=None) -> int:
         return 2
 
     try:
-        current = args.url
-        deadline = None
-        for redirects in range(MAX_REDIRECTS + 1):
-            scheme = urlsplit(current).scheme.lower()
-            if scheme not in ("http", "https"):
-                raise ValueError(f"redirect target must be http(s), got scheme {scheme!r}")
-            rc, message = gate(current)
-            print(message)
-            if rc != 0:
-                print(
-                    "fetch_page: refused - robots.txt does not permit this path, so the "
-                    "browser-header retry does not run. Go to escalation step 4: search for "
-                    "the employer's own posting."
-                )
-                return 1
-            if deadline is None:
-                deadline = time.monotonic() + TIMEOUT_SECONDS
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise TimeoutError("fetch exceeded the time limit")
-            out.parent.mkdir(parents=True, exist_ok=True)
-            fd, body_name = tempfile.mkstemp(dir=out.parent, prefix=".fetch_page.", suffix=".tmp")
-            os.close(fd)  # curl/urllib may reopen the path on Windows
-            body = Path(body_name)
-            try:
-                code, location = (
-                    fetch_with_curl(current, body, remaining)
-                    if shutil.which("curl") else fetch_with_urllib(current, body, remaining)
-                )
-                if code in (301, 302, 303, 307, 308) and location:
-                    if redirects == MAX_REDIRECTS:
-                        raise RuntimeError(f"more than {MAX_REDIRECTS} redirects")
-                    # Encode the header's raw bytes before resolving; preserve Unicode in the base URL.
-                    current = urljoin(current, quote(location, encoding="iso-8859-1", safe=string.punctuation))
-                    continue
-                os.replace(body, out)
-                status = f"HTTP {code} size={out.stat().st_size}"
-                break
-            finally:
-                body.unlink(missing_ok=True)
+        status = download(args.url, out)
+    except RobotsRefused:
+        print(
+            "fetch_page: refused - robots.txt does not permit this path, so the "
+            "browser-header retry does not run. Go to escalation step 4: search for "
+            "the employer's own posting."
+        )
+        return 1
     except Exception as exc:  # transport failures of any shape: report, exit 2
         print(f"fetch_page: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2

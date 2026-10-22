@@ -43,3 +43,14 @@ def _test_search_config():
     search_config.set_config(search_config.load_config(_BACKEND / "tests" / "fixtures" / "config_test.yaml"))
     yield
     search_config.set_config(None)
+
+
+@pytest.fixture(autouse=True)
+def _no_company_research(monkeypatch):
+    """Sin red ni segunda llamada a la IA en los tests de los consumidores: la investigación de empresas es None
+    salvo que el test la sustituya (ver tests/test_company_researcher.py)."""
+    for module in ("automation.ai_documents", "automation.offer_evaluation", "automation.ai_writing"):
+        monkeypatch.setattr(f"{module}.get_or_research", lambda *a, **k: None)
+    from automation import company_researcher
+
+    company_researcher.reset_failures()

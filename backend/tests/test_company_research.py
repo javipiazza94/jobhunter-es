@@ -38,12 +38,12 @@ class TestCompanyResearchCache(unittest.TestCase):
         self.assertEqual(normalize_company_name(""), "unknown-company")
 
     def test_get_company_cache_path(self):
-        with patch("automation.company_research.COMPANY_RESEARCH_DIR", self.fake_cache_dir):
+        with patch("config.COMPANY_RESEARCH_DIR", self.fake_cache_dir):
             p = get_company_cache_path("Acme Corp")
             self.assertEqual(p, self.fake_cache_dir / "acme-corp.json")
 
     def test_save_and_retrieve_fresh_cache(self):
-        with patch("automation.company_research.COMPANY_RESEARCH_DIR", self.fake_cache_dir):
+        with patch("config.COMPANY_RESEARCH_DIR", self.fake_cache_dir):
             sources = {
                 "website": {"url": "https://acme.com", "notes": "Líder en IA"},
                 "reviews": {"url": "https://glassdoor.com/acme", "notes": "4.2 rating"},
@@ -62,7 +62,7 @@ class TestCompanyResearchCache(unittest.TestCase):
             self.assertEqual(cached["_cache_age_days"], 0)
 
     def test_get_cached_research_expired(self):
-        with patch("automation.company_research.COMPANY_RESEARCH_DIR", self.fake_cache_dir):
+        with patch("config.COMPANY_RESEARCH_DIR", self.fake_cache_dir):
             old_date = (date.today() - timedelta(days=35)).isoformat()
             save_cached_research(
                 company_name="Old Company",
@@ -78,7 +78,7 @@ class TestCompanyResearchCache(unittest.TestCase):
             self.assertEqual(fresh_with_higher_ttl["_cache_age_days"], 35)
 
     def test_list_and_clear_expired_cache(self):
-        with patch("automation.company_research.COMPANY_RESEARCH_DIR", self.fake_cache_dir):
+        with patch("config.COMPANY_RESEARCH_DIR", self.fake_cache_dir):
             # 1 fresh
             save_cached_research("Fresh Co", fetched_date=date.today().isoformat())
             # 1 expired

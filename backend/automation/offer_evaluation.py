@@ -28,7 +28,7 @@ from ai import AIError, AIUnavailable, Provider, get_provider
 from automation import rank_state
 from automation.ai_documents import _offer_block, _research_block
 from automation.ai_writing import AIBudget, _profile_facts
-from automation.company_research import get_cached_research
+from automation.company_researcher import get_or_research
 from database import get_conn
 
 MAX_POINTS = 3
@@ -153,8 +153,8 @@ def _load_offer(conn: sqlite3.Connection, offer_id: str) -> dict:
     return dict(row)
 
 
-def _build_prompt(offer: dict, profile: dict) -> str:
-    research = get_cached_research(offer["company_name"]) if offer.get("company_name") else None
+def _build_prompt(offer: dict, profile: dict, provider: Provider) -> str:
+    research = get_or_research(offer.get("company_name"), None, provider, offer.get("description"))
     location = f"\nUbicación: {offer.get('location')}" if offer.get("location") else ""
     return (
         f"{_RUBRIC}\n\n"
@@ -224,7 +224,7 @@ def evaluate_offer(offer_id: str, provider: Provider | None = None, *, today: da
     conn = get_conn()
     try:
         offer = _load_offer(conn, offer_id)
-        data = provider.generate_json(_build_prompt(offer, load_profile()), EVALUATION_SCHEMA, system=SYSTEM_PROMPT)
+        data = provider.generate_json(_build_prompt(offer, load_profile(), provider), EVALUATION_SCHEMA, system=SYSTEM_PROMPT)
         if not isinstance(data, dict):
             raise AIError("La IA no devolvió un objeto")
         scores = data.get("scores")

@@ -16,6 +16,8 @@ import unicodedata
 from pathlib import Path
 
 from ai import AIError, AIUnavailable, Provider, get_provider
+from automation.ai_documents import _research_block
+from automation.company_researcher import get_or_research
 from database import get_conn
 
 logger = logging.getLogger(__name__)
@@ -197,6 +199,7 @@ def generate_interview_pack(application_id: str) -> Path:
     from profile_store import load_profile
 
     profile = load_profile()
+    research = get_or_research(application.get("company_name"), None, provider, application.get("description"))
     sent_letter = application.get("cover_letter_edited") or application.get("cover_letter_used") or ""
     headings = "\n".join(f"## {s}" for s in INTERVIEW_SECTIONS)
     prompt = (
@@ -209,7 +212,7 @@ def generate_interview_pack(application_id: str) -> Path:
         "«[completar]» en vez de inventarla); coherentes con la carta enviada.\n"
         "- Preguntas para hacer: 4-6.\n"
         "- Logística: lista de comprobación con campos «[completar]» para fecha, hora, formato e interlocutores.\n\n"
-        f"OFERTA:\n{_offer_block(application)}\n\n"
+        f"OFERTA:\n{_offer_block(application)}{_research_block(research)}\n\n"
         f"CARTA ENVIADA:\n{sent_letter}\n\n"
         f"PERFIL (JSON):\n{json.dumps(_profile_facts(profile), ensure_ascii=False)}"
     )

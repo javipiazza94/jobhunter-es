@@ -32,7 +32,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from ai import AIError, Provider
-from automation.company_research import get_cached_research
+from automation.company_researcher import get_or_research
 from automation.document_generator import (
     PageOverflow,
     prepare_cover_letter_context,
@@ -656,8 +656,9 @@ def _draft_from_contexts(cv_ctx: dict, letter_ctx: dict) -> DocsDraft:
     )
 
 
-def _research_for(offer: dict) -> dict | None:
-    return get_cached_research(offer["company_name"]) if offer.get("company_name") else None
+def _research_for(offer: dict, provider: Provider) -> dict | None:
+    """Investigación de la empresa (caché de 30 días o nueva); None si no se puede obtener: nunca bloquea."""
+    return get_or_research(offer.get("company_name"), None, provider, offer.get("description")) if offer.get("company_name") else None
 
 
 def run_ai_flow(profile: dict, offer: dict, provider: Provider, max_rounds: int = 2, track: str = "general",
@@ -670,7 +671,7 @@ def run_ai_flow(profile: dict, offer: dict, provider: Provider, max_rounds: int 
     `deadline` (en el reloj `clock`): pasado ese instante no se hacen más revisiones (aviso).
     Devuelve (contexto del CV, contexto de la carta, avisos). Lanza AIError si la IA falla.
     """
-    research = _research_for(offer)
+    research = _research_for(offer, provider)
     warnings: list[str] = []
     claims: list[str] = []
 
@@ -697,7 +698,7 @@ def shorten_documents(cv_ctx: dict, letter_ctx: dict, profile: dict, offer: dict
                       overflow: PageOverflow, track: str = "general") -> tuple[dict, dict, list[str]]:
     """Una revisión más pidiendo a la IA que acorte lo que se sale de su límite de páginas (CV y/o carta
     en una sola petición). Lanza AIError si la IA falla."""
-    research = _research_for(offer)
+    research = _research_for(offer, provider)
     issues = [
         f"{'El CV' if doc == 'cv' else 'La carta'} ocupa {pages} páginas y el límite es {limit}: acorta el "
         "documento quitando lo menos relevante para la oferta (viñetas, empleos antiguos, frases de relleno) "

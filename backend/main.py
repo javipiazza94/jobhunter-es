@@ -48,10 +48,11 @@ from schemas import (
     QuietApplicationOut, ResolveStaleIn, StatsOut, TrackOut,
     AISettingsIn, AISettingsOut, CheckOut, EmailSettingsIn, EmailSettingsOut, MarketSourceOut, SetupApplyOut,
     DocumentFileOut, InterviewPackOut, PrepareIn, ProfileIn, SetupProposalOut, SetupStatusOut, SetupTextIn,
-    AIKeyIn, AIKeyOut, SourceSettingOut, SourcesIn, EvaluateBatchIn,
+    AIKeyIn, AIKeyOut, SourceSettingOut, SourcesIn, EvaluateBatchIn, CompanyResearchOut,
 )
+from automation.company_research import get_cached_research
 from scraper.jobs import SOURCES as SCRAPER_SOURCES, TRACK_JOB_PREFIX, TRACK_PIPELINE_SOURCES
-from automation import application_documents, cv_reader, email_sender, followup, offer_evaluation, profile_proposal
+from automation import application_documents, company_researcher, cv_reader, email_sender, followup, offer_evaluation, profile_proposal
 from automation.filter_engine import classify_track
 from automation.location import parse_modality
 from automation.experience_classifier import classify_experience, classify_contract
@@ -279,6 +280,31 @@ def get_offer_evaluation(offer_id: str, conn: sqlite3.Connection = Depends(get_d
     if not repository.offer_exists(conn, offer_id):
         raise HTTPException(404, "Oferta no encontrada")
     return offer_evaluation.get_evaluation(conn, offer_id)
+
+
+# ── Investigación de empresas con IA y caché compartida (automation/company_researcher.py) ──
+
+@app.get("/api/companies/{name:path}/research", response_model=CompanyResearchOut | None)
+def get_company_research(name: str):
+    """Investigación vigente (caché de 30 días) de la empresa, o null si no hay."""
+    cached = get_cached_research(name)
+    return company_researcher.public_view(cached) if cached else None
+
+
+@app.post("/api/companies/{name:path}/research", response_model=CompanyResearchOut)
+def research_company_endpoint(name: str):
+    """Investiga la empresa (web + texto de su oferta más reciente) y renueva la caché."""
+    try:
+        provider = company_researcher.resolve_provider(None)
+        website, offer_text = company_researcher.company_context(name)
+        data = company_researcher.research_company(name, website, provider, offer_text)
+    except company_researcher.ResearchUnavailable as exc:
+        raise HTTPException(422, str(exc)) from None
+    except ai.AIUnavailable as exc:
+        raise HTTPException(409, _NO_AI.format(exc)) from None
+    except ai.AIError as exc:
+        raise HTTPException(502, f"La IA no pudo investigar la empresa ({type(exc).__name__})") from None
+    return company_researcher.public_view(data)
 
 
 @app.get("/api/applications", response_model=list[ApplicationOut])

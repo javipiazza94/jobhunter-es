@@ -52,6 +52,7 @@ SOFTWARE.
 | `backend/automation/rank_state.py` | `tools/rank_state.py` | Triage y ordenación de ofertas adaptado a SQLite (rutas de `config`, puntuaciones en `offer_evaluations`) |
 | `backend/automation/offer_evaluation.py` | `.claude/commands/rank.md`, `.claude/agents/posting-scorer.md`, `.claude/skills/job-application-assistant/04-job-evaluation.md` | Evaluación con IA de una oferta en la app (rúbrica, pesos y bandas de `/rank`) |
 | `backend/automation/company_research.py` | `company_research/` | Caché con TTL de 30 días para datos de empresa |
+| `backend/automation/company_researcher.py` | `.claude/skills/job-application-assistant/09-web-research.md` | Investigación de empresa con lectura de la web (robots) y caché compartida; reescrita sobre `backend/ai` |
 | `templates/latex/cover_letters/cover.cls` | `cover_letters/cover.cls` | Clase de documento para cartas de presentación |
 | `.claude/commands/` | `.claude/commands/` | Comandos `/apply`, `/rank`, `/expand`, `/add-template`, `/add-portal` |
 | `.claude/agents/` | `.claude/agents/` | Agentes `posting-fetcher`, `application-reviewer`, `posting-scorer` |

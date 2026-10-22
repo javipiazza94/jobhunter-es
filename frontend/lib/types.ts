@@ -377,3 +377,18 @@ export interface EvaluationBatchResult {
   skipped: number;
   failed: number;
 }
+
+/** Investigación de una empresa en caché (GET/POST /api/companies/{name}/research). */
+export interface CompanyResearch {
+  company: string;
+  summary: string;
+  products: string[];
+  culture_signals: string[];
+  tech_stack: string[];
+  size_hint: string;
+  sources: string[];
+  warnings: string[];
+  fetched_date: string;
+  age_days: number;
+  provider: string;
+}

@@ -388,3 +388,18 @@ class InterviewPackOut(_Out):
 class EvaluateBatchIn(BaseModel):
     """POST /api/offers/evaluate-batch: ofertas a evaluar con IA, una tras otra."""
     ids: list[str] = Field(min_length=1, max_length=20)  # = offer_evaluation.MAX_BATCH
+
+
+class CompanyResearchOut(_Out):
+    """Investigación de una empresa en caché (GET/POST /api/companies/{name}/research)."""
+    company: str
+    summary: str
+    products: list[str] = Field(default_factory=list)
+    culture_signals: list[str] = Field(default_factory=list)
+    tech_stack: list[str] = Field(default_factory=list)
+    size_hint: str = ""
+    sources: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    fetched_date: str
+    age_days: int = 0
+    provider: str = ""

@@ -16,9 +16,14 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from config import COMPANY_RESEARCH_DIR
+import config
 
 DEFAULT_TTL_DAYS = 30
+
+
+def _research_dir() -> Path:
+    """Carpeta de la caché, leída de `config` en cada llamada (así un JH_HOME recargado o un test la cambian)."""
+    return Path(config.COMPANY_RESEARCH_DIR)
 
 
 def normalize_company_name(name: str) -> str:
@@ -39,7 +44,7 @@ def normalize_company_name(name: str) -> str:
 def get_company_cache_path(company_name: str) -> Path:
     """Devuelve la ruta al archivo JSON de caché para una empresa."""
     slug = normalize_company_name(company_name)
-    return COMPANY_RESEARCH_DIR / f"{slug}.json"
+    return _research_dir() / f"{slug}.json"
 
 
 def get_cached_research(
@@ -101,7 +106,7 @@ def save_cached_research(
       "network_contacts_note": "..."
     }
     """
-    COMPANY_RESEARCH_DIR.mkdir(parents=True, exist_ok=True)
+    _research_dir().mkdir(parents=True, exist_ok=True)
     path = get_company_cache_path(company_name)
 
     payload: dict[str, Any] = {
@@ -119,11 +124,11 @@ def save_cached_research(
 
 def list_cached_companies(max_age_days: int = DEFAULT_TTL_DAYS) -> list[dict[str, Any]]:
     """Enumera las empresas investigadas en caché indicando su estado y antigüedad."""
-    if not COMPANY_RESEARCH_DIR.is_dir():
+    if not _research_dir().is_dir():
         return []
 
     results = []
-    for file_path in sorted(COMPANY_RESEARCH_DIR.glob("*.json")):
+    for file_path in sorted(_research_dir().glob("*.json")):
         try:
             data = json.loads(file_path.read_text(encoding="utf-8"))
             fetched_str = data.get("fetched_date")
@@ -149,7 +154,7 @@ def list_cached_companies(max_age_days: int = DEFAULT_TTL_DAYS) -> list[dict[str
 
 def clear_expired_cache(max_age_days: int = DEFAULT_TTL_DAYS) -> int:
     """Elimina los archivos de investigación cuya antigüedad supere el TTL. Retorna el número de eliminados."""
-    if not COMPANY_RESEARCH_DIR.is_dir():
+    if not _research_dir().is_dir():
         return 0
 
     removed = 0
