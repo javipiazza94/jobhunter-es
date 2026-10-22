@@ -5,6 +5,8 @@ import logging
 from pathlib import Path
 from playwright.async_api import Page
 
+from automation import screening
+
 logger = logging.getLogger(__name__)
 
 _FIELD_HINTS: dict[str, tuple[str, ...]] = {
@@ -98,6 +100,33 @@ async def _dismiss_cookies(page: Page) -> None:
             continue
 
 
+async def _question_text(page: Page, inp) -> str:
+    """Texto de la pregunta de un campo: `<label for>` asociada, `aria-label` o placeholder ('' si no hay)."""
+    field_id = await inp.get_attribute("id")
+    if field_id:
+        try:
+            label = await page.query_selector(f"label[for='{field_id}']")
+            text = (await label.inner_text()) if label else ""
+            if text and text.strip():
+                return text.strip()
+        except Exception:  # noqa: BLE001 — sin etiqueta asociada
+            pass
+    return (await inp.get_attribute("aria-label") or await inp.get_attribute("placeholder") or "").strip()
+
+
+async def _fill_screening(page: Page, inp, profile: dict) -> bool:
+    """Rellena una pregunta de cribado solo si hay una respuesta guardada en el perfil (nunca inventa)."""
+    question = await _question_text(page, inp)
+    if not question:
+        return False
+    maxlength = await inp.get_attribute("maxlength")
+    answer = screening.saved_answer(question, profile, int(maxlength) if maxlength and maxlength.isdigit() else None)
+    if not answer:
+        return False
+    await inp.fill(answer)
+    return True
+
+
 async def fill_generic(
     page: Page,
     profile: dict,
@@ -122,6 +151,7 @@ async def fill_generic(
             aria = (await inp.get_attribute("aria-label") or "").lower()
             hint = name or placeholder or aria
             if not hint:
+                filled += await _fill_screening(page, inp, profile)
                 continue
             if any(h in hint for h in ("cover_letter", "carta", "motivac", "message", "mensaje")):
                 await inp.fill(cover_letter)
@@ -131,6 +161,8 @@ async def fill_generic(
             if value:
                 await inp.fill(value)
                 filled += 1
+            elif value is None:
+                filled += await _fill_screening(page, inp, profile)
         except Exception as e:
             logger.debug("Field fill error: %s", e)
     logger.info("Generic form: %d fields filled", filled)

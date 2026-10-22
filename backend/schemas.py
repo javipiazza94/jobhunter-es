@@ -301,6 +301,12 @@ class AIKeyOut(_Out):
     key_source: Literal["env", "keychain"] | None = None
 
 
+class ScreeningAnswerIn(BaseModel):
+    """Respuesta guardada a una pregunta de cribado (`profile.screening_answers`)."""
+    question: str = Field(min_length=1, max_length=500)
+    answer: str = Field(max_length=5000)
+
+
 class ProfileIn(BaseModel):
     """Validación laxa de profile.json (PUT /api/profile): solo se exige la forma de las secciones que lee la
     app; cualquier otra clave se guarda tal cual."""
@@ -315,6 +321,7 @@ class ProfileIn(BaseModel):
     experience: list[dict] | None = None
     education: list[dict] | None = None
     certifications: list[str | dict] | None = None
+    screening_answers: list[ScreeningAnswerIn] | None = None
 
 
 class SetupApplyOut(_Out):
@@ -370,6 +377,27 @@ class CheckOut(_Out):
 class PrepareIn(BaseModel):
     """POST /api/applications/{id}/prepare: `use_ai` None = IA si hay proveedor configurado."""
     use_ai: bool | None = None
+
+
+class ScreeningQuestionIn(BaseModel):
+    """Pregunta de cribado de un formulario; `max_chars` = límite de caracteres de la caja de respuesta."""
+    text: str = Field(min_length=1, max_length=1000)
+    max_chars: int | None = Field(default=None, ge=1, le=10000)
+
+
+class ScreeningRequestIn(BaseModel):
+    """POST /api/applications/{id}/answers."""
+    questions: list[ScreeningQuestionIn] = Field(min_length=1, max_length=30)
+
+
+class ScreeningAnswerOut(_Out):
+    question: str
+    answer: str
+    source: Literal["profile", "ai", "needs_input"]
+
+
+class ScreeningResultOut(_Out):
+    answers: list[ScreeningAnswerOut]
 
 
 class DocumentFileOut(_Out):

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, X, FileText, Mail, ExternalLink } from "lucide-react";
 import type { Track } from "@/lib/types";
+import { ScreeningPanel } from "@/app/components/ScreeningPanel";
 import { trackBadge } from "@/lib/ui";
 import { approveApplication, rejectApplication, updateCoverLetter, markApplicationSentManual, type PendingApplication } from "@/lib/api";
 
@@ -157,6 +158,8 @@ export function PendingCard({ app, tracks, onAction }: PendingCardProps) {
           className="w-full text-xs font-mono text-gray-300 border border-white/10 rounded-xl p-3 resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500/50 bg-[#16161f] disabled:opacity-60 transition-all"
         />
       </div>
+
+      <ScreeningPanel applicationId={app.id} />
 
       {isEmailContact && !manualSendStarted && (
         <p className="text-xs text-gray-500">

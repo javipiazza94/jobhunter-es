@@ -62,6 +62,11 @@ PAIRS = {
     "EvaluationBatchResult": offer_evaluation.BatchResult,
     "EvaluateBatchRequest": schemas.EvaluateBatchIn,
     "CompanyResearch": schemas.CompanyResearchOut,
+    "ScreeningAnswerSaved": schemas.ScreeningAnswerIn,
+    "ScreeningQuestion": schemas.ScreeningQuestionIn,
+    "ScreeningRequest": schemas.ScreeningRequestIn,
+    "ScreeningAnswer": schemas.ScreeningAnswerOut,
+    "ScreeningResult": schemas.ScreeningResultOut,
 }
 
 

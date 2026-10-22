@@ -14,6 +14,8 @@ import {
   testAI,
   testEmail,
 } from "@/lib/api";
+import { savedAnswers, withSavedAnswers } from "@/lib/screening";
+import type { ScreeningAnswerSaved } from "@/lib/types";
 import { formToProfile, profileToForm, secretStatus, type ProfileForm, type StoredProfile } from "@/lib/setup";
 import {
   BASE_URL_PROVIDERS,
@@ -52,6 +54,13 @@ export const T = {
   language: "Idioma",
   level: "Nivel",
   addLanguage: "Añadir idioma",
+  // Respuestas de cribado
+  screening: "Respuestas de cribado",
+  screeningHint: "Respuestas que reutiliza «Responder preguntas» y el relleno de formularios. Solo se usan tal cual: nunca se inventan datos.",
+  screeningQuestion: "Pregunta",
+  screeningAnswer: "Respuesta",
+  screeningAdd: "Añadir respuesta",
+  screeningEmpty: "Aún no hay respuestas guardadas.",
   // IA
   ai: "IA",
   aiHint: "La IA propone tu perfil desde el CV, adapta las cartas y prepara entrevistas. La puntuación de ofertas nunca la usa.",
@@ -157,7 +166,8 @@ function ProfileSection({ initial }: { initial: StoredProfile }) {
 
   const save = () =>
     run(async () => {
-      const saved = await saveProfile(formToProfile(stored, form));
+      // Se relee el perfil: otra sección (p. ej. «Respuestas de cribado») pudo guardar mientras tanto.
+      const saved = await saveProfile(formToProfile(await fetchProfile().catch(() => stored), form));
       setStored(saved);
       setForm(profileToForm(saved));
       return { ok: true, message: T.saved };
@@ -196,6 +206,58 @@ function ProfileSection({ initial }: { initial: StoredProfile }) {
       <div className="flex flex-wrap items-center gap-3">
         <button className={ghostBtn} onClick={() => set({ languages: [...form.languages, { language: "", level: "B2" }] })}>
           <Plus className="w-4 h-4" /> {T.addLanguage}
+        </button>
+        <button className={primaryBtn} disabled={busy} onClick={save}>
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {T.save}
+        </button>
+      </div>
+      <FeedbackLine feedback={feedback} />
+    </section>
+  );
+}
+
+// ── Respuestas de cribado ───────────────────────────────────────────────────────────────────────
+
+/** Lista editable de `profile.screening_answers`. Al guardar relee el perfil y solo cambia esa clave, para no
+ *  pisar lo que haya guardado la sección «Perfil» (PUT /api/profile sustituye el perfil entero). */
+function ScreeningSection({ initial }: { initial: StoredProfile }) {
+  const [items, setItems] = useState<ScreeningAnswerSaved[]>(() => savedAnswers(initial));
+  const { busy, feedback, run } = useAction();
+  const edit = (i: number, patch: Partial<ScreeningAnswerSaved>) =>
+    setItems(list => list.map((it, j) => (j === i ? { ...it, ...patch } : it)));
+
+  const save = () =>
+    run(async () => {
+      const saved = await saveProfile(withSavedAnswers(await fetchProfile(), items));
+      setItems(savedAnswers(saved));
+      return { ok: true, message: T.saved };
+    });
+
+  return (
+    <section className={`${card} lg:col-span-2`}>
+      <h3 className="text-base font-semibold text-white">{T.screening}</h3>
+      <p className="text-xs text-gray-500">{T.screeningHint}</p>
+      {items.length === 0 && <p className="text-sm text-gray-400">{T.screeningEmpty}</p>}
+      {items.map((it, i) => (
+        <div key={i} className="grid gap-3 grid-cols-[1fr_auto] items-start">
+          <div className="space-y-2">
+            <div>
+              <label className={label} htmlFor={`sa-q-${i}`}>{T.screeningQuestion}</label>
+              <input id={`sa-q-${i}`} className={input} value={it.question} onChange={e => edit(i, { question: e.target.value })} />
+            </div>
+            <div>
+              <label className={label} htmlFor={`sa-a-${i}`}>{T.screeningAnswer}</label>
+              <textarea id={`sa-a-${i}`} rows={3} className={input} value={it.answer} onChange={e => edit(i, { answer: e.target.value })} />
+            </div>
+          </div>
+          <button className={`${ghostBtn} mt-5`} aria-label={T.remove} onClick={() => setItems(list => list.filter((_, j) => j !== i))}>
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center gap-3">
+        <button className={ghostBtn} onClick={() => setItems(list => [...list, { question: "", answer: "" }])}>
+          <Plus className="w-4 h-4" /> {T.screeningAdd}
         </button>
         <button className={primaryBtn} disabled={busy} onClick={save}>
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {T.save}
@@ -520,6 +582,7 @@ export function ProfileTab({ initial, onRerunWizard }: { initial?: Partial<Profi
   return (
     <div className="grid gap-6 lg:grid-cols-2 animate-fade-in">
       <SlotView slot={slots.profile} onRetry={() => retry("profile")}>{d => <ProfileSection initial={d} />}</SlotView>
+      <SlotView slot={slots.profile} onRetry={() => retry("profile")}>{d => <ScreeningSection initial={d} />}</SlotView>
       <SlotView slot={slots.ai} onRetry={() => retry("ai")}>{d => <AISection initial={d} />}</SlotView>
       <SlotView slot={slots.email} onRetry={() => retry("email")}>{d => <EmailSection initial={d} />}</SlotView>
       <SlotView slot={slots.sources} onRetry={() => retry("sources")}>

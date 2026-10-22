@@ -392,3 +392,34 @@ export interface CompanyResearch {
   age_days: number;
   provider: string;
 }
+
+/** Respuesta guardada en el perfil (`profile.screening_answers`). */
+export interface ScreeningAnswerSaved {
+  question: string;
+  answer: string;
+}
+
+/** Pregunta de cribado de un formulario; `max_chars` = límite de la caja de respuesta. */
+export interface ScreeningQuestion {
+  text: string;
+  max_chars?: number | null;
+}
+
+/** POST /api/applications/{id}/answers: cuerpo. */
+export interface ScreeningRequest {
+  questions: ScreeningQuestion[];
+}
+
+/** Origen de una respuesta de cribado: perfil, IA o falta un dato que debe poner el usuario. */
+export type ScreeningSource = "profile" | "ai" | "needs_input";
+
+export interface ScreeningAnswer {
+  question: string;
+  answer: string;
+  source: ScreeningSource;
+}
+
+/** POST /api/applications/{id}/answers: respuesta. */
+export interface ScreeningResult {
+  answers: ScreeningAnswer[];
+}

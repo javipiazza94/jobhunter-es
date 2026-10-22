@@ -23,6 +23,8 @@ import type {
   SourceSetting,
   SourcesUpdate,
   Track,
+  ScreeningQuestion,
+  ScreeningResult,
 } from "@/lib/types";
 import { errorDetail, type StoredProfile } from "@/lib/setup";
 
@@ -151,6 +153,10 @@ export async function testEmail(): Promise<CheckResult> {
 
 export async function generateInterviewPack(applicationId: string): Promise<InterviewPack> {
   return checked(await sendJson(`${BASE}/api/applications/${encodeURIComponent(applicationId)}/interview-pack`, "POST"));
+}
+
+export async function answerScreeningQuestions(applicationId: string, questions: ScreeningQuestion[]): Promise<ScreeningResult> {
+  return checked(await sendJson(`${BASE}/api/applications/${encodeURIComponent(applicationId)}/answers`, "POST", { questions }));
 }
 
 // ── Evaluación con IA de ofertas (/rank en la app): nunca cambia relevance_score ──

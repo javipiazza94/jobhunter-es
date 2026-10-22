@@ -47,12 +47,12 @@ from schemas import (
     InboxReportOut, InboxStatusOut, JobOut, JobStartedOut, OfferOut, OutcomeIn, PendingApplicationOut,
     QuietApplicationOut, ResolveStaleIn, StatsOut, TrackOut,
     AISettingsIn, AISettingsOut, CheckOut, EmailSettingsIn, EmailSettingsOut, MarketSourceOut, SetupApplyOut,
-    DocumentFileOut, InterviewPackOut, PrepareIn, ProfileIn, SetupProposalOut, SetupStatusOut, SetupTextIn,
+    DocumentFileOut, InterviewPackOut, PrepareIn, ProfileIn, ScreeningRequestIn, ScreeningResultOut, SetupProposalOut, SetupStatusOut, SetupTextIn,
     AIKeyIn, AIKeyOut, SourceSettingOut, SourcesIn, EvaluateBatchIn, CompanyResearchOut,
 )
 from automation.company_research import get_cached_research
 from scraper.jobs import SOURCES as SCRAPER_SOURCES, TRACK_JOB_PREFIX, TRACK_PIPELINE_SOURCES
-from automation import application_documents, company_researcher, cv_reader, email_sender, followup, offer_evaluation, profile_proposal
+from automation import application_documents, company_researcher, cv_reader, email_sender, followup, offer_evaluation, profile_proposal, screening
 from automation.filter_engine import classify_track
 from automation.location import parse_modality
 from automation.experience_classifier import classify_experience, classify_contract
@@ -444,6 +444,17 @@ def interview_pack(app_id: str):
         raise HTTPException(500, "No se pudo guardar el pack de entrevista en disco; revisa permisos y espacio libre") from None
     except ai.AIError as exc:
         raise HTTPException(502, f"La IA no pudo generar el pack ({type(exc).__name__})") from None
+
+
+@app.post("/api/applications/{app_id}/answers", response_model=ScreeningResultOut)
+def answer_screening_questions(app_id: str, body: ScreeningRequestIn):
+    """Respuestas a preguntas de cribado: primero las guardadas en el perfil, luego la IA solo con hechos del
+    perfil; lo que no se pueda responder queda como `needs_input`. No envía nada a ningún formulario."""
+    try:
+        answers = screening.answer_for_application(app_id, [q.model_dump() for q in body.questions])
+    except screening.ApplicationNotFound:
+        raise HTTPException(404, "Candidatura no encontrada") from None
+    return {"answers": answers}
 
 
 # ── Preparar candidatura: CV y carta en PDF archivados (automation/application_documents.py) ──

@@ -100,3 +100,12 @@ test("avisa junto a los «Guardar» que reescriben jobhunter.yaml (IA, email y f
   expect(T.yamlRewriteNote).toContain("jobhunter.yaml");
   expect(h.split(T.yamlRewriteNote).length - 1).toBe(3);
 });
+
+test("sección «Respuestas de cribado»: lista las guardadas y permite añadir", () => {
+  const h = html(data({ profile: { personal: { name: "Ana" }, screening_answers: [{ question: "¿Permiso de trabajo?", answer: "Sí, UE." }] } }));
+  expect(h).toContain(T.screening);
+  expect(h).toContain('value="¿Permiso de trabajo?"');
+  expect(h).toContain(">Sí, UE.</textarea>");
+  expect(h).toContain(T.screeningAdd);
+  expect(html(data())).toContain(T.screeningEmpty);
+});
