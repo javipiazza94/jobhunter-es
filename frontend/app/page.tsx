@@ -24,6 +24,8 @@ import { SetupWizard } from "@/app/components/setup/SetupWizard";
 import { InterviewPackPanel } from "@/app/components/InterviewPackPanel";
 import { CompanyResearchPanel } from "@/app/components/CompanyResearchPanel";
 import { OfferEvaluationPanel, T as EVAL_T, runBatchEvaluation } from "@/app/components/OfferEvaluationPanel";
+import { LanguageSelector } from "@/app/components/LanguageSelector";
+import { useT } from "@/lib/i18n";
 import { setupPrompt, type RunSummary } from "@/lib/setup";
 
 // Matches the `valid` set in backend/main.py::update_application_status
@@ -47,6 +49,7 @@ function StatCard({ icon: Icon, label, value, colorClass, active, onClick }: { i
 }
 
 export default function Dashboard() {
+  const t = useT();
   const [stats, setStats] = useState<Stats | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [offers, setOffers] = useState<JobOffer[]>([]);
@@ -319,8 +322,8 @@ export default function Dashboard() {
               <Briefcase className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white tracking-tight">Job Hunter Spain</h1>
-              <p className="text-xs text-indigo-300/80 font-medium tracking-wide uppercase">v2.0 Premium</p>
+              <h1 className="text-xl font-bold text-white tracking-tight">{t("app.title")}</h1>
+              <p className="text-xs text-indigo-300/80 font-medium tracking-wide uppercase">{t("app.subtitle")}</p>
             </div>
           </div>
           
@@ -344,6 +347,8 @@ export default function Dashboard() {
               ))}
             </div>
             
+            <LanguageSelector />
+
             <button
               onClick={handleApply}
               disabled={loading}
@@ -351,7 +356,7 @@ export default function Dashboard() {
             >
               <div className="absolute inset-0 bg-indigo-500/20 group-hover:bg-indigo-500/30 transition-colors"></div>
               <Play className="w-4 h-4 fill-white relative z-10 text-white group-hover:scale-110 transition-transform" /> 
-              <span className="text-sm font-semibold text-white relative z-10 tracking-wide">Generar Borradores</span>
+              <span className="text-sm font-semibold text-white relative z-10 tracking-wide">{t("header.generateDrafts")}</span>
             </button>
           </div>
         </div>
@@ -396,33 +401,33 @@ export default function Dashboard() {
         <div className="flex items-center gap-2 p-1.5 bg-white/5 backdrop-blur-sm border border-white/5 rounded-2xl w-fit animate-slide-in">
           {(
             [
-              { id: "offers", label: "Ofertas", count: offers.length },
+              { id: "offers", label: t("tabs.offers"), count: offers.length },
               ...trackTabs(tracks, trackOffers),
-              { id: "companies", label: "Empresas", count: companies.length },
-              { id: "contacts", label: "Contactos", count: contacts.length },
-              { id: "applications", label: "Candidaturas", count: applications.length },
-              { id: "pending", label: "Revisión", count: pendingApps.length },
-              { id: "followups", label: "Seguimiento", count: followups.length },
-              { id: "upskill", label: "Upskill" },
-              { id: "profile", label: "Perfil" },
+              { id: "companies", label: t("tabs.companies"), count: companies.length },
+              { id: "contacts", label: t("tabs.contacts"), count: contacts.length },
+              { id: "applications", label: t("tabs.applications"), count: applications.length },
+              { id: "pending", label: t("tabs.pending"), count: pendingApps.length },
+              { id: "followups", label: t("tabs.followups"), count: followups.length },
+              { id: "upskill", label: t("tabs.upskill") },
+              { id: "profile", label: t("tabs.profile") },
             ] as { id: typeof tab; label: string; count?: number }[]
-          ).map(t => (
+          ).map(item => (
             <button
-              key={t.id}
-              onClick={() => { setSelectedIds(new Set()); setTab(t.id); }}
+              key={item.id}
+              onClick={() => { setSelectedIds(new Set()); setTab(item.id); }}
               className={`relative px-5 py-2 text-sm font-medium rounded-xl transition-all duration-300 ${
-                tab === t.id 
+                tab === item.id 
                   ? "text-white bg-white/10 shadow-[0_2px_10px_rgba(0,0,0,0.2)] border border-white/10" 
                   : "text-gray-400 hover:text-gray-200 hover:bg-white/5"
               }`}
             >
-              {t.label} 
-              {t.count !== undefined && (
-                <span className={`ml-2 px-2 py-0.5 rounded-md text-xs ${tab === t.id ? 'bg-white/20' : 'bg-black/20'}`}>
-                  {t.count}
+              {item.label} 
+              {item.count !== undefined && (
+                <span className={`ml-2 px-2 py-0.5 rounded-md text-xs ${tab === item.id ? 'bg-white/20' : 'bg-black/20'}`}>
+                  {item.count}
                 </span>
               )}
-              {t.id === "pending" && !!t.count && (
+              {item.id === "pending" && !!item.count && (
                 <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.6)]" />
               )}
             </button>
