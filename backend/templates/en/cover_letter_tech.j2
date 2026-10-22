@@ -1,0 +1,39 @@
+{% set greetings = [
+  "Dear Hiring Team at " ~ company_name ~ ",",
+  "Dear " ~ company_name ~ " Team,",
+  "To the hiring managers at " ~ company_name ~ ","
+] %}
+{% set extra_closings = [
+  "I would be glad to discuss my background and how I can contribute in an interview.",
+  "I look forward to discussing how my experience can benefit your team.",
+  "I am available at your convenience for an interview or technical assessment."
+] %}
+{{ greetings[variant_index] }}
+
+{{ cover_letter_intro }}
+
+{% if job_title %}
+I noticed your opening for **{{ job_title }}** and believe my background aligns closely with the role requirements.
+{% endif %}
+
+{{ cover_letter_stack }}
+
+Relevant experience:
+
+{% for exp in experience %}
+- **{{ exp.role }} at {{ exp.company }} ({{ exp.duration_months }} months):** {{ exp.description }}
+{% endfor %}
+
+{% if tech_stack %}
+Technologies mentioned in the posting that I have experience with: *{{ tech_stack }}*.
+{% endif %}
+
+{{ extra_closings[variant_index] }}
+
+{{ cover_letter_closing }}
+
+—
+{{ name }}
+{{ email }}{% if phone %} · {{ phone }}{% endif %}
+{% if linkedin %}LinkedIn: {{ linkedin }}{% endif %}
+{% if portfolio %}Portfolio: {{ portfolio }}{% endif %}

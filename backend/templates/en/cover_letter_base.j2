@@ -1,0 +1,20 @@
+Dear Hiring Team at {{ company_name }},
+
+{{ cover_letter_intro }}
+
+{% if job_title %}
+I am writing to express my strong interest in the **{{ job_title }}** position, which aligns well with my technical background and career goals.
+{% else %}
+I am reaching out to explore potential opportunities where my background and skills could add value to your team.
+{% endif %}
+
+{{ cover_letter_stack }}
+
+I am actively looking for new opportunities and available to join immediately. I am open to on-site, hybrid, or remote work arrangements.
+
+{{ cover_letter_closing }}
+
+—
+{{ name }}
+{{ email }}{% if phone %} · {{ phone }}{% endif %}
+{% if linkedin %}LinkedIn: {{ linkedin }}{% endif %}

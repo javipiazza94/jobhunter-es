@@ -93,8 +93,8 @@
 
 **Interfaces:** `available_template_languages() -> set[str]` (directories present); `letter_language(offer, profile) -> str` = offer.language if templates exist for it else profile default else "es"; all generators take `lang`. Backward compat: existing installs keep Spanish output (default "es"), old flat template paths in `JH_HOME/templates/` still honoured as `es`.
 
-- [ ] Tests: German offer + es/en templates → default language; English offer → English letter & LaTeX labels; adding a fake language dir `xx` (fixture files only) is used with no code change (finish-line test).
-- [ ] Commit `feat(i18n): cartas, seguimientos y documentos en el idioma de la oferta`.
+- [x] Tests: German offer + es/en templates → default language; English offer → English letter & LaTeX labels; adding a fake language dir `xx` (fixture files only) is used with no code change (finish-line test).
+- [x] Commit `feat(i18n): cartas, seguimientos y documentos en el idioma de la oferta`.
 
 ### Task 8: Frontend i18n infrastructure + selector
 

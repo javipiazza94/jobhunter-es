@@ -25,6 +25,7 @@ from typing import Any
 from urllib.parse import quote
 
 import jinja2
+import yaml
 
 import config
 from automation import templates_registry
@@ -119,6 +120,34 @@ def _safe_link(value: Any) -> str:
     if re.match(r"^[a-z][a-z0-9+.-]*:", lowered) and not re.match(r"^[^:/]+:\d", lowered):
         return ""
     return "https://" + url
+
+
+def load_latex_labels(lang: str = "es") -> dict:
+    """Carga el diccionario de etiquetas LaTeX (secciones, saludo, cierre, meses, etc.) para el idioma dado.
+    Fallback a 'es' si el idioma solicitado no existe."""
+    for code in (lang, "es"):
+        try:
+            p = resolve_template_path(f"i18n/{code}.yaml")
+            if p.is_file():
+                with open(p, encoding="utf-8") as f:
+                    data = yaml.safe_load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            continue
+    return {}
+
+
+def _format_cover_date(day: date, lang: str = "es", labels: dict | None = None) -> str:
+    """Fecha en la cabecera de la carta de presentación formateada según el idioma."""
+    lbl = labels or load_latex_labels(lang)
+    months = lbl.get("months")
+    if not months or len(months) < 12:
+        months = _SPANISH_MONTHS
+    month_name = months[day.month - 1]
+    if lang == "en":
+        return f"{month_name} {day.day}, {day.year}"
+    return f"{day.day} de {month_name} de {day.year}"
 
 
 def _spanish_date(day: date) -> str:
@@ -302,6 +331,8 @@ def prepare_cv_context(profile: dict, track: str = "general", lang: str = "es") 
     # Certificaciones
     certifications = profile.get("certifications", [])
 
+    labels = load_latex_labels(lang)
+
     return {
         "personal": personal,
         "summary_text": summary_text,
@@ -311,6 +342,8 @@ def prepare_cv_context(profile: dict, track: str = "general", lang: str = "es") 
         "languages": languages,
         "languages_line": languages_line,
         "certifications": certifications,
+        "labels": labels,
+        "lang": lang,
     }
 
 
@@ -325,23 +358,55 @@ def prepare_cover_letter_context(
     company_name: str,
     role_title: str,
     track: str = "general",
+    lang: str = "es",
 ) -> dict:
     """Prepara el contexto determinista para la carta de presentación."""
     personal = dict(profile.get("personal", {}))
     if personal.get("linkedin"):
         personal["linkedin"] = _safe_link(personal["linkedin"])
 
+    labels = load_latex_labels(lang)
+
+    # Textos por defecto según idioma
+    if lang == "en":
+        intro_default = "I am writing to express my interest in the {role_title} position at {company_name}."
+        body_default = (
+            "I bring solid experience in software engineering and data analytics, "
+            "with a commitment to engineering best practices and results-driven delivery."
+        )
+        connection_default = (
+            f"I am genuinely excited by the mission and growth of {company_name}, where I am confident "
+            "my background can contribute immediate value to the team."
+        )
+        closing_default = (
+            "Thank you for your time and consideration. I would welcome the opportunity "
+            "to discuss my background and qualifications in an interview."
+        )
+    else:
+        intro_default = "Me dirijo a ustedes para presentar mi candidatura al puesto de {role_title} en {company_name}."
+        body_default = (
+            "Cuento con sólida experiencia en desarrollo de software y análisis de datos, "
+            "aplicando buenas prácticas de ingeniería y orientación a resultados."
+        )
+        connection_default = (
+            f"Me entusiasma la visión y el crecimiento de {company_name}, donde considero que mis "
+            "conocimientos pueden aportar valor directo al equipo desde el primer día."
+        )
+        closing_default = (
+            "Agradezco de antemano su tiempo y consideración, y quedo a su entera disposición "
+            "para profundizar en mi trayectoria en una entrevista."
+        )
+
     # Párrafo de apertura
-    intro_template = profile.get("cover_letter_intro") or (
-        "Me dirijo a ustedes para presentar mi candidatura al puesto de {role_title} en {company_name}."
-    )
+    intro_template = profile.get(f"cover_letter_intro_{lang}") or (
+        profile.get("cover_letter_intro") if lang == "es" else None
+    ) or intro_default
     opening = _fill_placeholders(intro_template, company_name, role_title)
 
     # Párrafo de cuerpo / stack
-    body_template = profile.get("cover_letter_stack") or (
-        "Cuento con sólida experiencia en desarrollo de software y análisis de datos, "
-        "aplicando buenas prácticas de ingeniería y orientación a resultados."
-    )
+    body_template = profile.get(f"cover_letter_stack_{lang}") or (
+        profile.get("cover_letter_stack") if lang == "es" else None
+    ) or body_default
     body = _fill_placeholders(body_template, company_name, role_title)
 
     # Bullets de logros más relevantes desde experience
@@ -355,28 +420,34 @@ def prepare_cover_letter_context(
                 bullets.append(exp.get("description"))
 
     # Conexión con la empresa
-    connection = (
-        f"Me entusiasma la visión y el crecimiento de {company_name}, donde considero que mis "
-        "conocimientos pueden aportar valor directo al equipo desde el primer día."
-    )
+    connection = connection_default
 
     # Cierre
-    closing_template = profile.get("cover_letter_closing") or (
-        "Agradezco de antemano su tiempo y consideración, y quedo a su entera disposición "
-        "para profundizar en mi trayectoria en una entrevista."
-    )
-    closing = _fill_placeholders(closing_template, company_name, role_title)
+    closing_template = profile.get(f"cover_letter_closing_{lang}") or (
+        profile.get("cover_letter_closing") if lang == "es" else None
+    ) or closing_default
+    closing_para = _fill_placeholders(closing_template, company_name, role_title)
+
+    salutation_template = labels.get("salutation") or "Estimado/a responsable de selección de {company_name},"
+    salutation = _fill_placeholders(salutation_template, company_name, role_title)
+    closing_val = labels.get("closing") or "Atentamente,"
+    page_footer = labels.get("page_footer") or "Página"
 
     return {
         "personal": personal,
         "company_name": company_name,
         "role_title": role_title,
-        "current_date": _spanish_date(date.today()),
+        "current_date": _format_cover_date(date.today(), lang=lang, labels=labels),
+        "salutation": salutation,
+        "closing": closing_val,
+        "page_footer": page_footer,
+        "labels": labels,
+        "lang": lang,
         "opening_paragraph": opening,
         "body_paragraph": body,
         "bullets": bullets,
         "connection_paragraph": connection,
-        "closing_paragraph": closing,
+        "closing_paragraph": closing_para,
     }
 
 
@@ -412,6 +483,7 @@ def render_cover_letter_latex(
     company_name: str,
     role_title: str,
     track: str = "general",
+    lang: str = "es",
 ) -> str:
     """Renderiza el código fuente LaTeX de la carta de presentación determinista."""
     context = prepare_cover_letter_context(
@@ -419,6 +491,7 @@ def render_cover_letter_latex(
         company_name=company_name,
         role_title=role_title,
         track=track,
+        lang=lang,
     )
     return render_cover_letter_from_context(context)
 
@@ -598,6 +671,7 @@ def generate_deterministic_documents(
             company_name=company_name,
             role_title=role_title,
             track=track,
+            lang=lang,
         ),
         personal=profile_data.get("personal", {}) or {},
         output_dir=output_dir,
@@ -632,6 +706,7 @@ def generate_documents_from_context(
     letter_pages: int = 1,
     offer_keywords: list[str] | None = None,
     trim: bool = True,
+    lang: str = "es",
 ) -> dict[str, Any]:
     """
     Igual que `generate_deterministic_documents`, pero a partir de contextos ya preparados (los de la
@@ -643,6 +718,11 @@ def generate_documents_from_context(
       `PageOverflow` con todos los desbordes (el llamador puede pedir a la IA una versión más corta y
       reintentar con trim=True).
     """
+    if "labels" not in cv_context:
+        cv_context["labels"] = load_latex_labels(lang)
+    if "labels" not in letter_context:
+        letter_context["labels"] = load_latex_labels(lang)
+
     return _build_documents(
         trim_base=cv_context,
         render_cv=render_cv_from_context,

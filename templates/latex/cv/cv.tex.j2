@@ -55,7 +55,7 @@
 % ============================================================
 %     CORE COMPETENCIES
 % ============================================================
-\section{Core Competencies}
+\section{((( (labels.sections.competencies if labels and labels.sections else None) or 'Core Competencies' | latex_escape )))}
 \vspace{1pt}
 \begin{itemize}
 ((* for cat_name, skills in competencies *))
@@ -68,7 +68,7 @@
 % ============================================================
 %     PROFESSIONAL EXPERIENCE
 % ============================================================
-\section{Professional Experience}
+\section{((( (labels.sections.experience if labels and labels.sections else None) or 'Professional Experience' | latex_escape )))}
 \vspace{2pt}
 \begin{itemize}
 ((* for exp in experience *))
@@ -94,7 +94,7 @@
 % ============================================================
 %     EDUCATION
 % ============================================================
-\section{Education}
+\section{((( (labels.sections.education if labels and labels.sections else None) or 'Education' | latex_escape )))}
 \vspace{1pt}
 \begin{itemize}
 ((* for edu in education *))
@@ -113,7 +113,7 @@
 % ============================================================
 %     LANGUAGES
 % ============================================================
-\section{Languages}
+\section{((( (labels.sections.languages if labels and labels.sections else None) or 'Languages' | latex_escape )))}
 \vspace{1pt}
 \begin{itemize}
 \item {((( languages_line | latex_escape )))}
@@ -124,7 +124,7 @@
 % ============================================================
 %     CERTIFICATIONS
 % ============================================================
-\section{Certifications}
+\section{((( (labels.sections.certifications if labels and labels.sections else None) or 'Certifications' | latex_escape )))}
 \vspace{1pt}
 \begin{itemize}
 ((* for cert in certifications *))
