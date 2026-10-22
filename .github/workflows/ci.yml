@@ -21,6 +21,13 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
       - run: pip install -r requirements-dev.txt
+      # Los tests de integración compilan el CV y la carta con XeTeX (plantillas con fontspec y
+      # fontawesome5, que viene en texlive-fonts-extra) y verifican el PDF con pdftotext/pdfinfo.
+      - name: Instalar LaTeX y poppler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            texlive-xetex texlive-latex-extra texlive-fonts-recommended texlive-fonts-extra poppler-utils
       - run: ruff check --config ../ruff.toml .
       # Sin backend/profile.json ni .env (datos personales, ignorados por git): los tests usan
       # profile.example.json y bases de datos temporales.
