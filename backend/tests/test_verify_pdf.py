@@ -9,6 +9,7 @@ from automation.verify_pdf import (
     build_parser,
     extract_text_layer,
     find_non_ascii_date_ranges,
+    keyword_coverage,
     normalize_text,
     parse_page_count,
     run_tool,
@@ -333,3 +334,36 @@ class RunToolTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KeywordCoverageTests(unittest.TestCase):
+    """Cobertura de palabras clave de la oferta: sin mayúsculas ni acentos, con límites de palabra."""
+
+    def test_case_and_accent_insensitive(self):
+        present, missing = keyword_coverage("Experiencia en GESTION de proyectos y Python", ["Gestión", "python"])
+        self.assertEqual(present, ["Gestión", "python"])
+        self.assertEqual(missing, [])
+
+    def test_word_boundaries(self):
+        present, missing = keyword_coverage("JavaScript y sapiencia", ["Java", "SAP", "JavaScript"])
+        self.assertEqual(present, ["JavaScript"])
+        self.assertEqual(missing, ["Java", "SAP"])
+
+    def test_symbols_in_keywords(self):
+        text = "Lenguajes: C++, C# y .NET; también Node.js"
+        present, missing = keyword_coverage(text, ["C++", "C#", ".NET", "Node.js", "C"])
+        self.assertEqual(present, ["C++", "C#", ".NET", "Node.js"])
+        self.assertEqual(missing, ["C"])
+
+    def test_multiword_with_typographic_spacing(self):
+        present, _ = keyword_coverage("Machine\u00a0 Learning\nen producción", ["machine learning"])
+        self.assertEqual(present, ["machine learning"])
+
+    def test_ignores_blank_and_duplicate_keywords(self):
+        present, missing = keyword_coverage("Python", ["Python", "python", " ", "", "Go"])
+        self.assertEqual(present, ["Python"])
+        self.assertEqual(missing, ["Go"])
+
+    def test_empty_inputs(self):
+        self.assertEqual(keyword_coverage("", []), ([], []))
+        self.assertEqual(keyword_coverage("", ["SQL"]), ([], ["SQL"]))

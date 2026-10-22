@@ -10,7 +10,7 @@
 \begin{document}
 
 \namesection{}{((( personal.name | latex_escape )))} {
-  \href{mailto:((( personal.email )))}{((( personal.email | latex_escape )))} | ((( personal.phone | latex_escape ))) | \urlstyle{same}(* if personal.linkedin *)\href{((( personal.linkedin )))}{LinkedIn}(* endif *)
+  \href{mailto:((( personal.email | latex_url )))}{((( personal.email | latex_escape )))} | ((( personal.phone | latex_escape )))((* if personal.linkedin *)) | \urlstyle{same}\href{((( personal.linkedin | latex_url )))}{LinkedIn}((* endif *))
 }
 
 \currentdate{((( current_date | latex_escape )))}

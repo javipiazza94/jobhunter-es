@@ -36,7 +36,7 @@
 \email{((( personal.email | latex_escape )))}
 ((* endif *))
 ((* if personal.linkedin or personal.github *))
-\extrainfo{((* if personal.linkedin *))\href{((( personal.linkedin )))}{LinkedIn}((* endif *))((* if personal.linkedin and personal.github *)), ((* endif *))((* if personal.github *))\href{((( personal.github )))}{GitHub}((* endif *))}
+\extrainfo{((* if personal.linkedin *))\href{((( personal.linkedin | latex_url )))}{LinkedIn}((* endif *))((* if personal.linkedin and personal.github *)), ((* endif *))((* if personal.github *))\href{((( personal.github | latex_url )))}{GitHub}((* endif *))}
 ((* endif *))
 
 \begin{document}

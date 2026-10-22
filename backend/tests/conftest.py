@@ -26,6 +26,13 @@ os.environ["JH_PROFILE_PATH"] = str(_BACKEND / "profile.example.json")  # no hay
 import pytest  # noqa: E402
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "integration: compila con un motor LaTeX real (Tectonic puede descargar paquetes la primera vez)",
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _test_search_config():
     """Los tests no usan la configuración genérica de backend/defaults ni ninguna personal: se les da una

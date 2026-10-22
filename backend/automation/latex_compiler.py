@@ -61,6 +61,15 @@ def find_latex_compiler(preferred_engine: str | None = None) -> tuple[str, Path]
     )
 
 
+def engine_available(preferred_engine: str | None = None) -> str | None:
+    """Devuelve el nombre del motor LaTeX disponible (tectonic, xelatex...) o None si no hay ninguno."""
+    try:
+        engine_name, _ = find_latex_compiler(preferred_engine=preferred_engine)
+    except LaTeXCompilationError:
+        return None
+    return engine_name
+
+
 def resolve_template_path(template_rel: str | Path) -> Path:
     """
     Resuelve la ruta a una plantilla o archivo LaTeX.
@@ -91,6 +100,7 @@ def compile_latex(
     output_dir: str | Path | None = None,
     engine: str | None = None,
     timeout: int = 120,
+    passes: int = 2,
 ) -> Path:
     """
     Compila un archivo .tex a .pdf utilizando el compilador detectado o especificado.
@@ -98,7 +108,10 @@ def compile_latex(
     - tex_path: Ruta al archivo .tex fuente.
     - output_dir: Directorio donde dejar el .pdf generado. Por defecto, el mismo que tex_path.
     - engine: Motor específico ('tectonic', 'xelatex', 'lualatex', 'pdflatex').
-    - timeout: Límite de tiempo en segundos (por defecto 120s para permitir descarga de paquetes).
+    - timeout: Límite de tiempo en segundos por pasada (por defecto 120s para permitir descarga de paquetes).
+    - passes: Número de pasadas para motores clásicos (xelatex/lualatex/pdflatex), que necesitan una
+      segunda pasada para resolver referencias y número de páginas. Tectonic repite las pasadas que
+      necesita por sí mismo, así que con él siempre se ejecuta una sola vez.
 
     Retorna la ruta (Path) al archivo .pdf generado.
     Lanza LaTeXCompilationError en caso de fallo de compilación o si el PDF no se genera.
@@ -132,28 +145,30 @@ def compile_latex(
     else:
         cmd = [str(compiler_bin), str(src)]
 
-    try:
-        proc = subprocess.run(
-            cmd,
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise LaTeXCompilationError(
-            f"Compilación LaTeX agotó el tiempo límite ({timeout}s): {exc}"
-        ) from exc
-    except Exception as exc:
-        raise LaTeXCompilationError(f"Error ejecutando compilador LaTeX '{compiler_bin}': {exc}") from exc
+    runs = 1 if engine_name == "tectonic" else max(1, passes)
+    for _ in range(runs):
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=str(cwd),
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise LaTeXCompilationError(
+                f"Compilación LaTeX agotó el tiempo límite ({timeout}s): {exc}"
+            ) from exc
+        except Exception as exc:
+            raise LaTeXCompilationError(f"Error ejecutando compilador LaTeX '{compiler_bin}': {exc}") from exc
 
-    if proc.returncode != 0:
-        err_msg = proc.stderr.strip() or proc.stdout.strip()
-        # Mostrar las últimas 25 líneas para diagnóstico
-        tail = "\n".join(err_msg.splitlines()[-25:])
-        raise LaTeXCompilationError(
-            f"Compilación con {engine_name} falló (código {proc.returncode}):\n{tail}"
-        )
+        if proc.returncode != 0:
+            err_msg = proc.stderr.strip() or proc.stdout.strip()
+            # Mostrar las últimas 25 líneas para diagnóstico
+            tail = "\n".join(err_msg.splitlines()[-25:])
+            raise LaTeXCompilationError(
+                f"Compilación con {engine_name} falló (código {proc.returncode}):\n{tail}"
+            )
 
     if not expected_pdf.is_file():
         raise LaTeXCompilationError(

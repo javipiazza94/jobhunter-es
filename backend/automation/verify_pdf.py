@@ -94,6 +94,31 @@ def normalize_text(text):
     return " ".join(text.split())
 
 
+def _fold_keyword_text(text):
+    """Pliega para buscar palabras clave: normalize_text + sin acentos + sin mayúsculas."""
+    decomposed = unicodedata.normalize("NFKD", normalize_text(text))
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
+
+
+def keyword_coverage(text, keywords):
+    """Comprueba qué palabras clave de la oferta aparecen en el texto del PDF.
+
+    La comparación ignora mayúsculas, acentos y espaciado tipográfico, y respeta los
+    límites de palabra: «Java» no cuenta dentro de «JavaScript» ni «C» dentro de «C++».
+    Devuelve (presentes, ausentes) en el orden recibido, sin vacías ni duplicadas.
+    """
+    folded = _fold_keyword_text(text or "")
+    present, missing, seen = [], [], set()
+    for keyword in keywords or []:
+        key = _fold_keyword_text(keyword or "")
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        pattern = r"(?<![\w+#.])" + re.escape(key) + r"(?![\w+#])"
+        (present if re.search(pattern, folded) else missing).append(keyword)
+    return present, missing
+
+
 # Dash-like code points a year must never be joined to in a date range. U+2013 is
 # what LaTeX makes from `--` and what the documented Workday import dropped; the
 # rest are the other Unicode dashes and the minus sign, which a parser that splits
