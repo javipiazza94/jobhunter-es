@@ -162,10 +162,13 @@ def test_candidatura_desconocida(env, fake_generator):
         application_documents.prepare_application("no-existe")
 
 
-def test_use_ai_explicito_aun_usa_la_via_determinista_con_aviso(env, fake_generator):
+NO_AI_WARNING = "IA no disponible: La IA está desactivada (proveedor «none»)"
+
+
+def test_use_ai_explicito_sin_proveedor_usa_la_via_determinista_con_aviso(env, fake_generator):
     docs = application_documents.prepare_application(env["app_id"], use_ai=True)
     assert docs.source == "deterministic"
-    assert docs.warnings == ["IA: pendiente"]
+    assert docs.warnings == [NO_AI_WARNING]
     docs = application_documents.prepare_application(env["app_id"], use_ai=None)
     assert docs.warnings == []
 
@@ -195,7 +198,7 @@ def test_api_prepare_devuelve_los_documentos(env, fake_generator):
     assert status == 200, body
     data = json.loads(body)
     assert data["source"] == "deterministic" and data["application_id"] == env["app_id"]
-    assert data["warnings"] == ["IA: pendiente"]
+    assert data["warnings"] == [NO_AI_WARNING]
     assert data["cv_pdf"].endswith("cv.pdf")
 
 

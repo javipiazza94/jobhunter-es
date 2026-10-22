@@ -364,13 +364,23 @@ def prepare_cover_letter_context(
     }
 
 
-def render_cv_latex(profile: dict, track: str = "general", lang: str = "es") -> str:
-    """Renderiza el código fuente LaTeX del CV determinista."""
+def render_cv_from_context(context: dict) -> str:
+    """Renderiza el LaTeX del CV a partir de un contexto ya preparado (determinista o de la IA)."""
     tpl_path = resolve_template_path("cv/cv.tex.j2")
     env = _get_jinja_env(tpl_path.parent)
-    template = env.get_template(tpl_path.name)
-    context = prepare_cv_context(profile, track=track, lang=lang)
-    return template.render(**context)
+    return env.get_template(tpl_path.name).render(**context)
+
+
+def render_cover_letter_from_context(context: dict) -> str:
+    """Renderiza el LaTeX de la carta a partir de un contexto ya preparado (determinista o de la IA)."""
+    tpl_path = resolve_template_path("cover_letters/cover.tex.j2")
+    env = _get_jinja_env(tpl_path.parent)
+    return env.get_template(tpl_path.name).render(**context)
+
+
+def render_cv_latex(profile: dict, track: str = "general", lang: str = "es") -> str:
+    """Renderiza el código fuente LaTeX del CV determinista."""
+    return render_cv_from_context(prepare_cv_context(profile, track=track, lang=lang))
 
 
 def render_cover_letter_latex(
@@ -380,16 +390,13 @@ def render_cover_letter_latex(
     track: str = "general",
 ) -> str:
     """Renderiza el código fuente LaTeX de la carta de presentación determinista."""
-    tpl_path = resolve_template_path("cover_letters/cover.tex.j2")
-    env = _get_jinja_env(tpl_path.parent)
-    template = env.get_template(tpl_path.name)
     context = prepare_cover_letter_context(
         profile,
         company_name=company_name,
         role_title=role_title,
         track=track,
     )
-    return template.render(**context)
+    return render_cover_letter_from_context(context)
 
 
 def _experience_bullets(exp: dict) -> list[str]:
@@ -550,7 +557,83 @@ def generate_deterministic_documents(
         with open(p_path, encoding="utf-8") as f:
             profile_data = json.load(f)
 
-    personal = profile_data.get("personal", {}) or {}
+    return _build_documents(
+        trim_base=profile_data,
+        render_cv=lambda data: render_cv_latex(data, track=track, lang=lang),
+        cover_source=render_cover_letter_latex(
+            profile_data,
+            company_name=company_name,
+            role_title=role_title,
+            track=track,
+        ),
+        personal=profile_data.get("personal", {}) or {},
+        output_dir=output_dir,
+        verify=verify,
+        cv_pages=cv_pages,
+        letter_pages=letter_pages,
+        offer_keywords=offer_keywords,
+        trim=True,
+    )
+
+
+class PageOverflow(VerificationError):
+    """Un documento no cabe en su límite de páginas y no se pidió recortarlo (`doc`: "cv" o "cover")."""
+
+    def __init__(self, doc: str, pages: int, limit: int):
+        self.doc, self.pages, self.limit = doc, pages, limit
+        label = "El CV" if doc == "cv" else "La carta"
+        super().__init__(f"{label} ocupa {pages} páginas y el límite es {limit}")
+
+
+def generate_documents_from_context(
+    cv_context: dict,
+    letter_context: dict,
+    output_dir: Path | str | None = None,
+    verify: bool = True,
+    cv_pages: int = 2,
+    letter_pages: int = 1,
+    offer_keywords: list[str] | None = None,
+    trim: bool = True,
+) -> dict[str, Any]:
+    """
+    Igual que `generate_deterministic_documents`, pero a partir de contextos ya preparados (los de la
+    IA, ya validados): mismas plantillas, mismo recorte, misma verificación y mismo resultado.
+
+    - El recorte opera sobre `cv_context["experience"]` (cada empleo con `bullets`, `role`, `company` y
+      opcionalmente `start`/`end` para saber cuál es el más reciente).
+    - trim=False: si el CV pasa de `cv_pages` o la carta de `letter_pages` se lanza `PageOverflow`
+      sin recortar (el llamador puede pedir a la IA una versión más corta y reintentar con trim=True).
+    """
+    return _build_documents(
+        trim_base=cv_context,
+        render_cv=render_cv_from_context,
+        cover_source=render_cover_letter_from_context(letter_context),
+        personal=cv_context.get("personal", {}) or {},
+        output_dir=output_dir,
+        verify=verify,
+        cv_pages=cv_pages,
+        letter_pages=letter_pages,
+        offer_keywords=offer_keywords,
+        trim=trim,
+    )
+
+
+def _build_documents(
+    trim_base: dict,
+    render_cv,
+    cover_source: str,
+    personal: dict,
+    output_dir: Path | str | None,
+    verify: bool,
+    cv_pages: int,
+    letter_pages: int,
+    offer_keywords: list[str] | None,
+    trim: bool,
+) -> dict[str, Any]:
+    """Núcleo común: compila CV (con recorte si hace falta y `trim`) y carta, y los verifica.
+
+    `trim_base` es lo que se recorta (perfil o contexto del CV) y `render_cv(trim_base_recortado)`
+    devuelve el LaTeX del CV; `cover_source` es el LaTeX de la carta ya renderizado."""
     email = str(personal.get("email") or "").strip()
     phone = str(personal.get("phone") or "").strip()
     if verify:
@@ -569,13 +652,13 @@ def generate_deterministic_documents(
     #    y bisecar con pasos gruesos (TRIM_BISECT_STEPS compilaciones como mucho). Cada intento se
     #    guarda en memoria para restaurar el mejor sin recompilar: <= 2 + TRIM_BISECT_STEPS en total.
     keywords = [k for k in (offer_keywords or []) if k and str(k).strip()]
-    ops = plan_trim_operations(profile_data, keywords)
+    ops = plan_trim_operations(trim_base, keywords)
     cv_tex_path = out / "cv.tex"
     cv_pdf_path = out / "cv.pdf"
     attempts: dict[int, tuple[str, bytes, int]] = {}
 
     def build_cv(k: int) -> int:
-        source = render_cv_latex(apply_trim(profile_data, ops[:k]), track=track, lang=lang)
+        source = render_cv(apply_trim(trim_base, ops[:k]))
         cv_tex_path.write_text(source, encoding="utf-8")
         # Una sola pasada: la segunda solo añade los marcadores (outline) de hyperref, que un CV
         # no necesita (pdfpagemode=UseNone); texto, enlaces y maquetación salen idénticos.
@@ -586,6 +669,8 @@ def generate_deterministic_documents(
 
     first_pages = build_cv(0)
     best = 0
+    if first_pages > cv_pages and not trim:
+        raise PageOverflow("cv", first_pages, cv_pages)
     if first_pages > cv_pages:
         if not ops or build_cv(len(ops)) > cv_pages:
             raise VerificationError(
@@ -608,20 +693,16 @@ def generate_deterministic_documents(
     cv_pdf_path.write_bytes(pdf_bytes)
 
     # 2. Carta
-    cover_source = render_cover_letter_latex(
-        profile_data,
-        company_name=company_name,
-        role_title=role_title,
-        track=track,
-    )
     cover_tex_path = out / "cover.tex"
     cover_tex_path.write_text(cover_source, encoding="utf-8")
     cover_pdf_path = compile_latex(cover_tex_path, output_dir=out)
     cover_pages = _page_count(cover_pdf_path)
+    if cover_pages > letter_pages and not trim:
+        raise PageOverflow("cover", cover_pages, letter_pages)
 
     verification: dict[str, Any] = {
         "pages": {"cv": best_pages, "cover": cover_pages},
-        "trimmed": [_describe_op(profile_data, op) for op in ops[:best]],
+        "trimmed": [_describe_op(trim_base, op) for op in ops[:best]],
         "present_keywords": [],
         "missing_keywords": [],
         "layout": "skipped: verificación desactivada",

@@ -55,6 +55,7 @@ SOFTWARE.
 | `.claude/commands/` | `.claude/commands/` | Comandos `/apply`, `/rank`, `/expand`, `/add-template`, `/add-portal` |
 | `.claude/agents/` | `.claude/agents/` | Agentes `posting-fetcher`, `application-reviewer`, `posting-scorer` |
 | `.claude/skills/job-application-assistant/` | `.claude/skills/job-application-assistant/` | Guías de redacción, estilo, evaluación y research |
+| `backend/automation/ai_documents.py` | `.claude/commands/apply.md`, `.claude/agents/application-reviewer.md`, `.claude/skills/job-application-assistant/0[3-6]-*.md` | Prompts del redactor y del revisor (reglas de honestidad, recorte y cobertura de keywords) derivados del flujo `/apply` |
 
 ---
 
