@@ -471,14 +471,16 @@ def _require_application(conn: sqlite3.Connection, app_id: str) -> None:
 def prepare_application_endpoint(app_id: str, body: PrepareIn | None = None):
     """Genera y archiva el CV y la carta en PDF de la candidatura (puede tardar: compila LaTeX)."""
     use_ai = body.use_ai if body else None
+    builtin = body.builtin_templates if body else False
     try:
-        return application_documents.prepare_application(app_id, use_ai=use_ai)
+        return application_documents.prepare_application(app_id, use_ai=use_ai, builtin_templates=builtin)
     except application_documents.ApplicationNotFound:
         raise HTTPException(404, "Candidatura no encontrada") from None
     except application_documents.NoTexEngine as exc:
         raise HTTPException(409, str(exc)) from None
     except application_documents.VerificationFailed as exc:
-        raise HTTPException(422, {"message": "Los PDFs no superan la verificación", "reasons": exc.reasons}) from None
+        raise HTTPException(422, {"message": "Los PDFs no superan la verificación", "reasons": exc.reasons,
+                                  "builtin_fallback": exc.builtin_fallback}) from None
     except OSError:
         raise HTTPException(500, "No se pudieron guardar los documentos en disco; revisa permisos y espacio libre") from None
 
@@ -525,8 +527,9 @@ def list_document_templates():
 @app.post("/api/templates", response_model=templates_registry.TemplateInfo)
 async def register_document_template(request: Request):
     """Registra una plantilla propia (multipart: `file` = .zip o un único .tex.j2/.typ.j2, y `name`, `kind`
-    cv|letter, `engine` latex|typst, `compile_cmd`, `page_limit`, `style_rules`). Compila de prueba antes de
-    aceptarla: si no compila, no se registra (422); sin el motor necesario, 409."""
+    cv|letter, `engine` latex|typst, `compiler` tectonic|xelatex|lualatex|typst, `page_limit`, `style_rules`).
+    No hay comando de compilación libre (un `compile_cmd` se ignora). Compila de prueba antes de aceptarla: si
+    no compila, no se registra (422); sin el motor necesario, 409."""
     length = request.headers.get("content-length")
     if length is None or not length.isdigit():
         raise HTTPException(411, "Falta Content-Length")
@@ -555,7 +558,7 @@ async def register_document_template(request: Request):
                      else {filename or "template": data})
             return templates_registry.register_template(
                 text("name"), text("kind"), files, engine=engine, main_file=text("main_file") or None,
-                compile_cmd=text("compile_cmd") or None, page_limit=int(raw_limit) if raw_limit else None,
+                compiler=text("compiler") or None, page_limit=int(raw_limit) if raw_limit else None,
                 style_rules=text("style_rules"),
             )
 
@@ -563,8 +566,6 @@ async def register_document_template(request: Request):
             return await run_in_threadpool(register)
         except templates_registry.TemplateError as exc:
             raise _template_http_error(exc) from None
-        except ValidationError:
-            raise HTTPException(422, "page_limit debe estar entre 1 y 6") from None
     finally:
         await form.close()
 

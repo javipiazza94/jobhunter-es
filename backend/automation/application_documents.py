@@ -42,8 +42,15 @@ from profile_store import load_profile
 logger = logging.getLogger(__name__)
 
 NO_ENGINE_MESSAGE = (
-    "Instala Tectonic (https://tectonic-typesetting.github.io) o TeX Live con xelatex para generar el CV "
-    "y la carta en PDF. Mientras tanto, aprobar la candidatura sigue adjuntando tus documentos de siempre."
+    "Instala Tectonic (https://tectonic-typesetting.github.io; Linux/macOS: "
+    "curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh, o brew install tectonic; "
+    "Windows: binario de GitHub Releases o conda install -c conda-forge tectonic) o TeX Live con xelatex "
+    "para generar el CV y la carta en PDF. Mientras tanto, aprobar la candidatura sigue adjuntando tus "
+    "documentos de siempre."
+)
+TEMPLATE_FALLBACK_HINT = (
+    "Corrige la plantilla propia o prepara la candidatura con las plantillas integradas "
+    "(también puedes activarlas en Perfil → Plantillas de CV y carta)."
 )
 AI_UNAVAILABLE_PREFIX = "IA no disponible: "
 # Documentos que la API puede servir (lista blanca exacta; nada de rutas).
@@ -70,10 +77,12 @@ class NoTexEngine(DocumentsError):
 
 
 class VerificationFailed(DocumentsError):
-    """Los PDFs no superan la verificación (o no compilan); `reasons` explica por qué."""
+    """Los PDFs no superan la verificación (o no compilan); `reasons` explica por qué.
+    `builtin_fallback`: el fallo viene de una plantilla propia y se puede reintentar con las integradas."""
 
-    def __init__(self, reasons: list[str]):
+    def __init__(self, reasons: list[str], builtin_fallback: bool = False):
         self.reasons = [r for r in reasons if r] or ["La verificación de los PDFs falló"]
+        self.builtin_fallback = builtin_fallback
         super().__init__("; ".join(self.reasons))
 
 
@@ -195,11 +204,26 @@ def _resolve_use_ai(use_ai: bool | None) -> bool:
 
 
 def _page_limits() -> dict[str, int]:
-    """Límites de páginas de `documents:` en jobhunter.yaml (por defecto CV 2, carta 1)."""
+    """Límites de páginas: el `page_limit` de la plantilla propia activa o, si no tiene (o manda la
+    integrada), el de `documents:` en jobhunter.yaml (por defecto CV 2, carta 1)."""
     from search_config import get_config
 
     docs = get_config().documents
-    return {"cv_pages": docs.cv_pages, "letter_pages": docs.letter_pages}
+    cv_tpl, letter_tpl = templates_registry.active_template("cv"), templates_registry.active_template("letter")
+    return {
+        "cv_pages": (cv_tpl.page_limit if cv_tpl and cv_tpl.page_limit else None) or docs.cv_pages,
+        "letter_pages": (letter_tpl.page_limit if letter_tpl and letter_tpl.page_limit else None) or docs.letter_pages,
+    }
+
+
+def _style_rules(limits: dict[str, int]) -> str:
+    """Reglas de estilo de las plantillas propias activas y límites de páginas, para la IA."""
+    parts = [f"Límites de páginas: CV {limits['cv_pages']}, carta {limits['letter_pages']}."]
+    for kind, label in (("cv", "CV"), ("letter", "Carta")):
+        info = templates_registry.active_template(kind)
+        if info is not None and info.style_rules.strip():
+            parts.append(f"{label}: {info.style_rules.strip()}")
+    return "\n".join(parts)
 
 
 def _latex_source(path: Path | str | None) -> Path | str | None:
@@ -230,6 +254,10 @@ def _generate(
             warnings.append(f"{AI_UNAVAILABLE_PREFIX}{exc}")
         except (VerificationError, LaTeXCompilationError) as exc:
             warnings.append(f"La versión con IA no superó la verificación ({exc}); se usa la determinista")
+        except templates_registry.EngineMissing:
+            raise
+        except templates_registry.TemplateError as exc:
+            warnings.append(f"La plantilla propia falló con la versión con IA ({exc}); se usa la determinista")
         except Exception:  # noqa: BLE001 — un fallo inesperado de la vía con IA nunca debe dar un 500
             logger.exception("Fallo inesperado en la vía con IA de la candidatura %s", app.get("id"))
             warnings.append("La vía con IA falló por un error inesperado; se usa la versión determinista")
@@ -269,11 +297,14 @@ def _generate_with_ai(
         "tech_stack": app.get("tech_stack") or "",
         "keywords": keywords,
     }
-    cv_ctx, letter_ctx, warnings = run_ai_flow(profile, offer, provider, track=summary_key, deadline=deadline)
+    limits = _page_limits()
+    style = _style_rules(limits)
+    cv_ctx, letter_ctx, warnings = run_ai_flow(profile, offer, provider, track=summary_key, deadline=deadline,
+                                               style=style)
     try:
         result = generate_documents_from_context(
             cv_ctx, letter_ctx, output_dir=output_dir, verify=True, offer_keywords=keywords, trim=False,
-            **_page_limits(),
+            **limits,
         )
     except PageOverflow as overflow:
         if time.monotonic() >= deadline:
@@ -281,29 +312,53 @@ def _generate_with_ai(
         else:
             try:
                 cv_ctx, letter_ctx, more = shorten_documents(
-                    cv_ctx, letter_ctx, profile, offer, provider, overflow, track=summary_key
+                    cv_ctx, letter_ctx, profile, offer, provider, overflow, track=summary_key, style=style
                 )
                 warnings += [*more, f"{overflow}: se pidió a la IA una versión más corta"]
             except AIError as exc:
                 warnings.append(f"{overflow}: la IA no pudo acortarlo ({exc}), se recorta sin IA")
         result = generate_documents_from_context(
             cv_ctx, letter_ctx, output_dir=output_dir, verify=True, offer_keywords=keywords, trim=True,
-            **_page_limits(),
+            **limits,
         )
     return result, cap_warnings(warnings)
 
 
-def prepare_application(application_id: str, use_ai: bool | None = None) -> PreparedDocs:
+def prepare_application(application_id: str, use_ai: bool | None = None, builtin_templates: bool = False) -> PreparedDocs:
     """Genera CV y carta en PDF para la candidatura y los archiva en JH_HOME/applications/<id>/.
 
-    Lanza ApplicationNotFound, NoTexEngine (sin motor LaTeX) o VerificationFailed (los PDFs no
-    compilan o no pasan la verificación); en esos casos el archivo anterior no se toca."""
+    `builtin_templates`: usa las plantillas integradas aunque haya propias activas (reserva si una propia falla).
+    Lanza ApplicationNotFound, NoTexEngine (falta el motor LaTeX o el de la plantilla propia, p. ej. typst) o
+    VerificationFailed (los PDFs no compilan, no pasan la verificación o la plantilla propia falla, con
+    `builtin_fallback`); en esos casos el archivo anterior no se toca."""
+    if builtin_templates:
+        with templates_registry.builtin_only():
+            return _prepare(application_id, use_ai)
+    return _prepare(application_id, use_ai)
+
+
+def _check_engines() -> None:
+    """Motor de cada plantilla activa instalado: LaTeX para las integradas; el suyo para las propias."""
+    for kind in ("cv", "letter"):
+        info = templates_registry.active_template(kind)
+        if info is None:
+            if engine_available() is None:
+                raise NoTexEngine()
+            continue
+        try:
+            templates_registry.resolve_compiler(info.engine, info.compiler)
+        except templates_registry.EngineMissing as exc:
+            raise NoTexEngine(f"{exc}. {TEMPLATE_FALLBACK_HINT}") from None
+        except templates_registry.TemplateError as exc:
+            raise VerificationFailed([f"Plantilla propia «{info.name}»: {exc}", TEMPLATE_FALLBACK_HINT],
+                                     builtin_fallback=True) from None
+
+
+def _prepare(application_id: str, use_ai: bool | None) -> PreparedDocs:
     from search_config import get_config
 
     app = load_application(application_id)
-    needs_latex = any(templates_registry.active_suffix(kind) == ".tex" for kind in ("cv", "letter"))
-    if needs_latex and engine_available() is None:
-        raise NoTexEngine()
+    _check_engines()
 
     cfg = get_config()
     track_id, summary_key = _resolve_track(app, cfg)
@@ -327,7 +382,16 @@ def prepare_application(application_id: str, use_ai: bool | None = None) -> Prep
             except VerificationError as exc:
                 raise VerificationFailed([str(exc)]) from exc
             except LaTeXCompilationError as exc:
-                raise VerificationFailed([f"La compilación LaTeX falló: {exc}"]) from exc
+                custom = any(templates_registry.active_template(k) for k in ("cv", "letter"))
+                raise VerificationFailed(
+                    [f"La compilación falló: {exc}", *([TEMPLATE_FALLBACK_HINT] if custom else [])],
+                    builtin_fallback=custom,
+                ) from exc
+            except templates_registry.EngineMissing as exc:
+                raise NoTexEngine(f"{exc}. {TEMPLATE_FALLBACK_HINT}") from exc
+            except templates_registry.TemplateError as exc:
+                raise VerificationFailed([f"La plantilla propia falló: {exc}", TEMPLATE_FALLBACK_HINT],
+                                         builtin_fallback=True) from exc
 
             verification = result.get("verification") or {}
             final_dir = application_archive.archive_application(
@@ -404,9 +468,11 @@ def _cli(argv: list[str] | None = None) -> int:
     group = prep.add_mutually_exclusive_group()
     group.add_argument("--ai", dest="use_ai", action="store_true", default=None, help="Redactar con IA (exige proveedor)")
     group.add_argument("--no-ai", dest="use_ai", action="store_false", help="Solo versión determinista")
+    prep.add_argument("--builtin-templates", action="store_true",
+                      help="Usar las plantillas integradas aunque haya propias activas")
     args = parser.parse_args(argv)
     try:
-        docs = prepare_application(args.application_id, use_ai=args.use_ai)
+        docs = prepare_application(args.application_id, use_ai=args.use_ai, builtin_templates=args.builtin_templates)
     except DocumentsError as exc:
         print(f"Error: {exc}")
         return 1

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { FileCheck2, Loader2 } from "lucide-react";
-import { applicationDocumentUrl, fetchAISettings, fetchApplicationDocuments, prepareApplication } from "@/lib/api";
+import { ApiError, applicationDocumentUrl, fetchAISettings, fetchApplicationDocuments, prepareApplication } from "@/lib/api";
 import { summarizeVerification } from "@/lib/documents";
 import type { DocumentFile, PreparedDocs } from "@/lib/types";
 
@@ -22,7 +22,15 @@ export const T = {
   trimmed: (n: number) => `Se recortó contenido menos relevante (${n})`,
   cv: "Abrir CV",
   cover: "Abrir carta",
+  fallback: "Preparar con las plantillas integradas",
 };
+
+/** ¿El error de /prepare viene de una plantilla propia y se puede reintentar con las integradas? */
+export function offersBuiltinFallback(e: unknown): boolean {
+  if (!(e instanceof ApiError) || e.status !== 422) return false;
+  const detail = e.detail as { builtin_fallback?: unknown } | undefined;
+  return Boolean(detail && typeof detail === "object" && detail.builtin_fallback === true);
+}
 
 /** «Preparar candidatura»: llama a /prepare y enseña origen, páginas, huecos de palabras clave y avisos.
  *  Con IA solo si hay proveedor configurado; si falla, la API vuelve a la versión determinista con aviso. */
@@ -40,6 +48,7 @@ export function PrepareDocsPanel({
   const [result, setResult] = useState<PreparedDocs | null>(initialResult);
   const [error, setError] = useState(initialError);
   const [busy, setBusy] = useState(false);
+  const [canFallback, setCanFallback] = useState(false);
   const [aiAvailable, setAiAvailable] = useState(false);
   const [useAi, setUseAi] = useState(true);
 
@@ -55,17 +64,19 @@ export function PrepareDocsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applicationId]);
 
-  const run = async () => {
+  const run = async (builtinTemplates = false) => {
     setBusy(true);
     setError("");
+    setCanFallback(false);
     try {
-      const prepared = await prepareApplication(applicationId, aiAvailable ? useAi : false);
+      const prepared = await prepareApplication(applicationId, aiAvailable ? useAi : false, { builtinTemplates });
       setResult(prepared);
       const list = await fetchApplicationDocuments(applicationId);
       setFiles(list);
       onChange?.(list);
     } catch (e) {
       setError((e as Error).message);
+      setCanFallback(offersBuiltinFallback(e));
     } finally {
       setBusy(false);
     }
@@ -80,7 +91,7 @@ export function PrepareDocsPanel({
       <p className="text-xs text-gray-500">{T.hint}</p>
       <div className="flex flex-wrap items-center gap-3">
         <button
-          onClick={run}
+          onClick={() => run()}
           disabled={busy}
           className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-50"
         >
@@ -100,7 +111,16 @@ export function PrepareDocsPanel({
           </span>
         )}
       </div>
-      {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
+      {error && <p role="alert" className="whitespace-pre-wrap text-sm text-red-300">{error}</p>}
+      {canFallback && (
+        <button
+          onClick={() => run(true)}
+          disabled={busy}
+          className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-gray-200 hover:bg-white/5 disabled:opacity-50"
+        >
+          {T.fallback}
+        </button>
+      )}
       {result && summary && (
         <div className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-1.5 text-xs text-gray-400">
           <p className="text-gray-300">

@@ -142,6 +142,7 @@ def compile_latex(
     elif engine_name in ("xelatex", "lualatex", "pdflatex"):
         cmd = [
             str(compiler_bin),
+            "-no-shell-escape",  # ni siquiera el shell-escape restringido de TeX Live
             "-interaction=nonstopmode",
             f"-output-directory={out_dir}",
             str(src),

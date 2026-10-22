@@ -156,6 +156,12 @@ describe("errores de la API", () => {
     expect(errorDetail({ detail: "Completa primero el asistente" }, 409)).toBe("Completa primero el asistente");
     expect(errorDetail({ detail: [{ msg: "campo obligatorio" }, { msg: "otro" }] }, 422)).toBe("campo obligatorio; otro");
     expect(errorDetail(null, 500)).toBe("Error 500 de la API");
+    // 422 de /prepare: objeto {message, reasons} → mensaje con todos los motivos
+    expect(errorDetail({ detail: { message: "Los PDFs no superan la verificación", reasons: ["Falta el teléfono", "CV de 3 páginas"] } }, 422))
+      .toBe("Los PDFs no superan la verificación: Falta el teléfono; CV de 3 páginas");
+    expect(errorDetail({ detail: { message: "Solo mensaje", reasons: [] } }, 422)).toBe("Solo mensaje");
+    expect(errorDetail({ detail: { reasons: ["solo motivo"] } }, 422)).toBe("solo motivo");
+    expect(errorDetail({ detail: {} }, 422)).toBe("Error 422 de la API");
   });
 });
 

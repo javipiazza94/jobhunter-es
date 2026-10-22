@@ -83,11 +83,10 @@ class TestValidation:
         with pytest.raises(templates_registry.TemplateError, match="principal"):
             templates_registry.register_template("ok", "cv", {"notas.txt": b"x"})
 
-    def test_compile_cmd_only_known_compilers(self, home):
-        with pytest.raises(templates_registry.TemplateError, match="compilador conocido"):
-            templates_registry.register_template("ok", "cv", {"a.tex.j2": b"x"}, compile_cmd="rm -rf /")
-        with pytest.raises(templates_registry.TemplateError, match="compilador conocido"):
-            templates_registry.register_template("ok", "cv", {"a.tex.j2": b"x"}, compile_cmd="/bin/typst compile")
+    @pytest.mark.parametrize("compiler", ["latexmk", "pdflatex", "sh", "/usr/bin/xelatex", "xelatex -shell-escape"])
+    def test_only_known_compilers(self, home, compiler):
+        with pytest.raises(templates_registry.TemplateError, match="compilador"):
+            templates_registry.register_template("ok", "cv", {"a.tex.j2": b"x"}, compiler=compiler)
 
     def test_member_paths_cannot_escape(self, home):
         for bad in ("../evil.tex.j2", "/abs/evil.tex.j2", "a/../../evil.tex.j2", "C:/evil.tex.j2"):
@@ -278,3 +277,195 @@ class TestPipeline:
         assert "CARTA-PROPIA" in out["cover_tex"].read_text(encoding="utf-8")
         assert out["cv_pdf"].is_file() and out["cover_pdf"].is_file()
         assert out["verification"]["pages"] == {"cv": 1, "cover": 1}
+
+
+# ── Seguridad de las plantillas propias (revisión SP3: C1, C2, I5) ─────────────
+
+SSTI = "((( cycler.__init__.__globals__.os.popen('touch {marker}').read() )))"
+
+
+def _install_raw(home: Path, kind: str, name: str, files: dict[str, str], **meta) -> Path:
+    """Instala una plantilla directamente en disco (como si viniera de una versión anterior) y la activa."""
+    target = home / "templates" / kind / name
+    target.mkdir(parents=True)
+    for rel, text in files.items():
+        (target / rel).parent.mkdir(parents=True, exist_ok=True)
+        (target / rel).write_text(text, encoding="utf-8")
+    data = {"name": name, "kind": kind, "engine": "latex", "main_file": next(iter(files))} | meta
+    (target / "template.json").write_text(json.dumps(data), encoding="utf-8")
+    cfg = search_config.get_config()
+    field = "cv_template" if kind == "cv" else "letter_template"
+    docs = cfg.documents.model_copy(update={field: name})
+    search_config.save_config(cfg.model_copy(update={"documents": docs}), search_config.user_config_path())
+    return target
+
+
+class TestSandbox:
+    def test_ssti_payload_rejected_at_registration(self, home, monkeypatch, tmp_path):
+        marker = tmp_path / "pwned"
+        monkeypatch.setattr(templates_registry, "engine_available", lambda *a, **k: "tectonic")
+        payload = SSTI.format(marker=marker).encode()
+        with pytest.raises(templates_registry.TemplateError, match="SecurityError"):
+            templates_registry.register_template("ssti", "cv", {"c.tex.j2": payload})
+        assert not marker.exists()
+        assert not (home / "templates" / "cv" / "ssti").exists()
+
+    def test_ssti_payload_in_installed_template_fails_cleanly_on_render(self, home, tmp_path):
+        marker = tmp_path / "pwned"
+        _install_raw(home, "cv", "vieja", {"c.tex.j2": SSTI.format(marker=marker)})
+        with pytest.raises(templates_registry.TemplateRenderError, match="SecurityError"):
+            document_generator.render_cv_from_context(_cv_ctx())
+        assert not marker.exists()
+
+    def test_sandbox_raises_security_error(self, tmp_path):
+        import jinja2.sandbox
+
+        (tmp_path / "t.tex.j2").write_text("((( cycler.__init__.__globals__ )))", encoding="utf-8")
+        env = templates_registry._custom_jinja_env(tmp_path, "latex")
+        assert isinstance(env, jinja2.sandbox.ImmutableSandboxedEnvironment)
+        with pytest.raises(jinja2.sandbox.SecurityError):
+            env.get_template("t.tex.j2").render()
+
+
+class TestCompilerArgv:
+    def test_fixed_argv_per_compiler(self, tmp_path):
+        src, out = tmp_path / "cv.tex", tmp_path / "out"
+        for engine in ("xelatex", "lualatex"):
+            assert templates_registry.compile_argv(engine, src, out) == [
+                engine, "-no-shell-escape", "-interaction=nonstopmode", "-halt-on-error",
+                f"-output-directory={out}", str(src),
+            ]
+        assert templates_registry.compile_argv("tectonic", src, out, passes=1) == [
+            "tectonic", "--untrusted", "-o", str(out), "--reruns", "0", str(src),
+        ]
+        assert templates_registry.compile_argv("tectonic", src, out, passes=2) == [
+            "tectonic", "--untrusted", "-o", str(out), str(src),
+        ]
+        typ = tmp_path / "cv.typ"
+        assert templates_registry.compile_argv("typst", typ, out) == [
+            "typst", "compile", "--root", str(tmp_path), str(typ), str(out / "cv.pdf"),
+        ]
+
+    @pytest.mark.parametrize("compiler", ["latexmk", "pdflatex", "sh", "xelatex -shell-escape"])
+    def test_unknown_compiler_rejected(self, tmp_path, compiler):
+        with pytest.raises(templates_registry.TemplateError, match="compilador"):
+            templates_registry.compile_argv(compiler, tmp_path / "a.tex", tmp_path)
+
+    def test_custom_latex_runs_fixed_argv_with_paranoid_env(self, tmp_path, monkeypatch):
+        seen = []
+
+        def fake_run(cmd, cwd=None, env=None, **kwargs):
+            seen.append((cmd, env))
+            (tmp_path / "out" / "cv.pdf").write_bytes(b"%PDF")
+            return type("P", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        monkeypatch.setattr(templates_registry, "_resolve_binary", lambda name: f"/opt/bin/{name}")
+        monkeypatch.setattr(templates_registry.subprocess, "run", fake_run)
+        src = tmp_path / "cv.tex"
+        src.write_text("x", encoding="utf-8")
+        pdf = templates_registry._compile(src, tmp_path / "out", 2, "latex", "xelatex")
+        assert pdf == tmp_path / "out" / "cv.pdf"
+        assert len(seen) == 2  # dos pasadas
+        cmd, env = seen[0]
+        assert cmd[0] == "/opt/bin/xelatex" and "-no-shell-escape" in cmd
+        assert env["openin_any"] == "p" and env["openout_any"] == "p" and env["shell_escape"] == "f"
+        assert all("latexmk" not in c for c, _ in seen for c in c)
+
+    def test_latexmkrc_and_texmf_are_stripped(self, home, monkeypatch):
+        monkeypatch.setattr(templates_registry, "_test_compile", lambda *a, **k: None)
+        templates_registry.register_template("rc", "cv", {
+            "c.tex.j2": b"x", "latexmkrc": b"system('id')", "sub/.latexmkrc": b"y", "texmf.cnf": b"z",
+            "LATEXMKRC": b"w",
+        })
+        stored = {p.name for p in (home / "templates" / "cv" / "rc").rglob("*")}
+        assert stored.isdisjoint({"latexmkrc", ".latexmkrc", "texmf.cnf", "LATEXMKRC"})
+
+    def test_api_ignores_free_compile_cmd_and_rejects_bad_compiler(self, home, monkeypatch):
+        monkeypatch.setattr(templates_registry, "_test_compile", lambda *a, **k: None)
+        api = TestAPI()
+        status, text = api._post({"name": "mia", "kind": "cv", "compile_cmd": "latexmk -e 'system(1)' {input}"},
+                                 "c.tex.j2", CV_TEMPLATE.encode())
+        assert status == 200 and json.loads(text)["compiler"] is None
+        stored = json.loads((home / "templates" / "cv" / "mia" / "template.json").read_text(encoding="utf-8"))
+        assert "compile_cmd" not in stored
+        status, text = api._post({"name": "otra", "kind": "cv", "compiler": "latexmk"}, "c.tex.j2", CV_TEMPLATE.encode())
+        assert status == 422 and "compilador" in text
+
+
+class TestLegacyCompileCmd:
+    @pytest.mark.parametrize("cmd,compiler", [
+        ("xelatex -shell-escape {input}", "xelatex"),
+        ("xelatex -output-directory=/home {input}", "xelatex"),
+        ("typst compile --root / {input} {output}", "typst"),
+        ("tectonic {input}", "tectonic"),
+    ])
+    def test_known_engine_is_mapped_and_flags_dropped(self, home, cmd, compiler):
+        _install_raw(home, "cv", "vieja", {"c.tex.j2": "x"}, compile_cmd=cmd)
+        info = templates_registry.active_template("cv")
+        assert info is not None and info.compiler == compiler and info.invalid_reason is None
+
+    @pytest.mark.parametrize("cmd", ["latexmk -e '$pdflatex=q/sh -c id/' -pdf {input}", "pdflatex {input}", "sh -c id", "'"])
+    def test_unknown_command_marks_template_invalid(self, home, cmd):
+        _install_raw(home, "cv", "vieja", {"c.tex.j2": "x"}, compile_cmd=cmd)
+        listing = {t.name: t for t in templates_registry.list_templates() if t.kind == "cv"}
+        assert listing["vieja"].invalid_reason
+        assert not listing["vieja"].active and listing["moderncv-banking"].active
+        assert templates_registry.active_template("cv") is None
+        with pytest.raises(templates_registry.TemplateError, match="no es válida"):
+            templates_registry.activate_template("cv", "vieja")
+
+
+class TestEscapingAndLint:
+    def test_custom_latex_escapes_every_output_by_default(self, tmp_path):
+        (tmp_path / "t.tex.j2").write_text(
+            "A:((( v ))) B:((( v | latex_escape ))) C:((( raw | safe_raw ))) U:((( url | latex_url ))) N:((( n )))",
+            encoding="utf-8",
+        )
+        env = templates_registry._custom_jinja_env(tmp_path, "latex")
+        out = env.get_template("t.tex.j2").render(v="R&D_50% {x}", raw="\\textbf{ok}", url="https://e.org/a%b", n=3)
+        assert "A:R\\&D\\_50\\% \\{x\\}" in out
+        assert "B:R\\&D\\_50\\% \\{x\\}" in out  # sin doble escape
+        assert "C:\\textbf{ok}" in out
+        assert "U:https://e.org/a\\%b" in out
+        assert "N:3" in out
+
+    def test_profile_injection_is_neutralised_in_custom_template(self, home):
+        _install_raw(home, "cv", "propia", {"c.tex.j2": "NOMBRE ((( personal.name )))"})
+        ctx = _cv_ctx()
+        ctx["personal"] = {**ctx["personal"], "name": "\\input{/etc/passwd}"}
+        rendered = document_generator.render_cv_from_context(ctx)
+        assert "\\input{" not in rendered and "\\textbackslash{}input\\{/etc/passwd\\}" in rendered
+
+    def test_custom_typst_escapes_by_default(self, tmp_path):
+        (tmp_path / "t.typ.j2").write_text("= ((( v )))", encoding="utf-8")
+        env = templates_registry._custom_jinja_env(tmp_path, "typst")
+        assert env.get_template("t.typ.j2").render(v="#read(\"/etc/passwd\")") == "= \\#read(\"/etc/passwd\")"
+
+    @pytest.mark.parametrize("src", [
+        "\\input{/etc/passwd}", "\\input /etc/passwd", "\\include{../../secreto}", "\\openin5=/home/u/.ssh/id_rsa",
+        "\\InputIfFileExists{~/x}{}{}", "\\includegraphics[width=1cm]{C:/x.png}", "\\input{a/../../b}",
+    ])
+    def test_lint_rejects_absolute_or_parent_paths(self, home, monkeypatch, src):
+        monkeypatch.setattr(templates_registry, "engine_available", lambda *a, **k: "tectonic")
+        with pytest.raises(templates_registry.TemplateError, match="fuera de su carpeta"):
+            templates_registry.register_template("lint", "cv", {"c.tex.j2": src.encode()})
+
+    def test_lint_checks_support_files_and_allows_relative(self, home, monkeypatch):
+        monkeypatch.setattr(templates_registry, "_test_compile", lambda *a, **k: None)
+        with pytest.raises(templates_registry.TemplateError, match="fuera de su carpeta"):
+            templates_registry.register_template("lint", "cv", {"c.tex.j2": b"x", "mi.sty": b"\\input{/etc/hostname}"})
+        templates_registry.register_template("ok", "cv", {"c.tex.j2": b"\\input{secciones/a}", "secciones/a.tex": b"y"})
+
+
+def test_assets_are_refreshed_when_the_template_changes(home, monkeypatch, tmp_path):
+    """Revisión SP3 M7: volver a preparar tras actualizar la plantilla copia los ficheros de apoyo nuevos."""
+    monkeypatch.setattr(templates_registry, "_test_compile", lambda *a, **k: None)
+    templates_registry.register_template("conclase", "letter", {"c.tex.j2": b"x", "mi.cls": b"v1", "latexmkrc": b"y"})
+    templates_registry.activate_template("letter", "conclase")
+    out = tmp_path / "out"
+    out.mkdir()
+    templates_registry.copy_assets("letter", out)
+    templates_registry.register_template("conclase", "letter", {"c.tex.j2": b"x", "mi.cls": b"v2"})
+    templates_registry.copy_assets("letter", out)
+    assert (out / "mi.cls").read_bytes() == b"v2"
+    assert not (out / "latexmkrc").exists()

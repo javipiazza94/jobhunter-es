@@ -289,6 +289,15 @@ export interface InterviewPack {
 /** POST /api/applications/{id}/prepare: cuerpo opcional (use_ai ausente = IA si hay proveedor). */
 export interface PrepareRequest {
   use_ai?: boolean | null;
+  /** Usar las plantillas integradas aunque haya propias activas (reserva si una propia falla). */
+  builtin_templates?: boolean;
+}
+
+/** 422 de /prepare: `detail` con el motivo de cada fallo; `builtin_fallback` = reintentar con las integradas. */
+export interface PrepareFailure {
+  message: string;
+  reasons: string[];
+  builtin_fallback?: boolean;
 }
 
 /** POST /api/applications/{id}/prepare: CV y carta en PDF archivados en JH_HOME/applications/<id>/. */
@@ -308,18 +317,23 @@ export interface DocumentFile {
   modified_at: string;
 }
 
-/** GET /api/templates: plantilla de CV o carta (integrada o propia); `active` marca la que se usa. */
+/** GET /api/templates: plantilla de CV o carta (integrada o propia); `active` marca la que se usa.
+ *  `compiler` sale de una lista cerrada (null = typst en Typst o el primer motor LaTeX instalado);
+ *  `invalid_reason` != null: plantilla antigua con un comando de compilación que ya no se admite. */
 export type TemplateKind = "cv" | "letter";
+export type TemplateEngine = "latex" | "typst";
+export type TemplateCompiler = "tectonic" | "xelatex" | "lualatex" | "typst";
 export interface TemplateInfo {
   name: string;
   kind: TemplateKind;
-  engine: "latex" | "typst";
+  engine: TemplateEngine;
   builtin: boolean;
   active: boolean;
   main_file: string;
-  compile_cmd: string | null;
+  compiler: TemplateCompiler | null;
   page_limit: number | null;
   style_rules: string;
+  invalid_reason: string | null;
 }
 
 /** GET/PUT /api/settings/sources: una fuente de ofertas y su estado en jobhunter.yaml. */

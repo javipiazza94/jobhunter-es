@@ -2,20 +2,29 @@
 templates_registry.py — Plantillas propias de CV y carta (`add-template`).
 
 Viven en `JH_HOME/templates/<kind>/<name>/` con un `template.json` (nombre, tipo cv|letter, motor
-latex|typst, comando de compilación opcional, límite de páginas y reglas de estilo). Las integradas
+latex|typst, compilador de una lista cerrada, límite de páginas y reglas de estilo). Las integradas
 (`moderncv-banking` para el CV y `cover-cls` para la carta) aparecen siempre y no se pueden borrar.
 
 - Registrar una plantilla exige una compilación de prueba con `profile.example.json`: si no compila o
   no cabe en su límite de páginas, no se registra y el error vuelve al usuario.
 - La plantilla activa se guarda en `jobhunter.yaml` (`documents:`); si la activa desaparece, se usa la
   integrada. Typst exige `typst` en el PATH (si no, `EngineMissing`, que la API traduce en 409).
-- Seguridad: ningún nombre de archivo escapa de la carpeta de la plantilla (zip con `..`, rutas
-  absolutas, enlaces simbólicos) y el comando de compilación solo puede ser un compilador conocido,
-  sin shell.
+- Seguridad (una plantilla es código: instala solo las de confianza):
+  · Ningún nombre de archivo escapa de la carpeta de la plantilla (zip con `..`, rutas absolutas, enlaces
+    simbólicos); `latexmkrc`, `.latexmkrc` y `texmf.cnf` se descartan.
+  · Las plantillas propias se renderizan en un entorno Jinja aislado (`ImmutableSandboxedEnvironment`):
+    nada de atributos internos de Python (`__globals__`...) → `SecurityError`.
+  · Toda salida `((( x )))` se escapa por defecto (`latex_escape` o `typst_escape` según el motor);
+    `|safe_raw` la deja tal cual a propósito.
+  · No hay comando de compilación libre: el compilador sale de una lista cerrada (tectonic, xelatex,
+    lualatex, typst) y la línea de órdenes se construye en el código con opciones seguras (sin
+    shell-escape; Typst con `--root` en la carpeta de trabajo). Nunca se ejecuta latexmk.
+  · Se rechaza al registrar cualquier `\\input`, `\\include`, `\\openin`... con ruta absoluta o con `..`.
 """
 
 from __future__ import annotations
 
+import contextlib
 import io
 import json
 import logging
@@ -27,24 +36,36 @@ import stat
 import subprocess
 import tempfile
 import zipfile
+from contextvars import ContextVar
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+import jinja2
+import jinja2.sandbox
+from pydantic import BaseModel, Field, ValidationError
 
 import config
-from automation.latex_compiler import LaTeXCompilationError, compile_latex, engine_available
+from automation.latex_compiler import (
+    DEFAULT_ENGINES,
+    LaTeXCompilationError,
+    engine_available,
+    find_latex_compiler,
+)
 
 logger = logging.getLogger(__name__)
 
 Kind = Literal["cv", "letter"]
 Engine = Literal["latex", "typst"]
+Compiler = Literal["tectonic", "xelatex", "lualatex", "typst"]
 
 BUILTIN_TEMPLATES: dict[str, str] = {"cv": "moderncv-banking", "letter": "cover-cls"}
 KINDS = tuple(BUILTIN_TEMPLATES)
 META_FILE = "template.json"
 TEMPLATE_SUFFIXES = {"latex": ".tex.j2", "typst": ".typ.j2"}
-ALLOWED_COMPILERS = {"typst", "tectonic", "xelatex", "lualatex", "pdflatex", "latexmk"}
+COMPILERS: tuple[str, ...] = ("tectonic", "xelatex", "lualatex", "typst")
+LATEX_COMPILERS = DEFAULT_ENGINES  # tectonic, xelatex, lualatex
+# Ficheros de configuración que un compilador o latexmk leerían de la carpeta de trabajo: se descartan.
+IGNORED_MEMBERS = {"latexmkrc", ".latexmkrc", "texmf.cnf"}
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
 MAX_ZIP_BYTES = 5 * 1024 * 1024
 MAX_ZIP_FILES = 200
@@ -64,6 +85,11 @@ class TemplateNotFound(TemplateError, LookupError):
     """La plantilla no existe."""
 
 
+class TemplateRenderError(TemplateError):
+    """La plantilla propia activa no se pudo renderizar (sintaxis, variable inexistente, acceso bloqueado
+    por el entorno aislado...)."""
+
+
 class TemplateInfo(BaseModel):
     name: str
     kind: Kind
@@ -71,21 +97,23 @@ class TemplateInfo(BaseModel):
     builtin: bool = False
     active: bool = False
     main_file: str = ""
-    compile_cmd: str | None = None
+    compiler: Compiler | None = None
     page_limit: int | None = None
     style_rules: str = ""
+    invalid_reason: str | None = None
 
 
 class TemplateMeta(BaseModel):
-    """Contenido de `template.json`."""
+    """Contenido de `template.json`. `compiler` None = el primero disponible (LaTeX) o typst (Typst)."""
 
     name: str
     kind: Kind
     engine: Engine = "latex"
     main_file: str
-    compile_cmd: str | None = None
+    compiler: Compiler | None = None
     page_limit: int | None = Field(None, ge=1, le=6)
     style_rules: str = Field("", max_length=2000)
+    invalid_reason: str | None = None
 
 
 # ── Rutas ──────────────────────────────────────────────────────────────────────
@@ -113,9 +141,31 @@ def _check_kind(kind: str) -> str:
 
 # ── Lectura ────────────────────────────────────────────────────────────────────
 
+def _legacy_compiler(cmd: Any) -> tuple[str | None, str | None]:
+    """`compile_cmd` libre de versiones anteriores → (compilador, motivo de invalidez). Si nombra un
+    compilador conocido se usa ese compilador con las opciones seguras (las del comando se ignoran); si no
+    (latexmk, pdflatex, un shell...), la plantilla queda inválida."""
+    try:
+        first = shlex.split(str(cmd or ""))[:1]
+    except ValueError:
+        first = []
+    name = first[0] if first else ""
+    if name in COMPILERS:
+        return name, None
+    return None, (
+        f"Su comando de compilación ({name or 'vacío'}) ya no se admite: vuelve a registrarla eligiendo "
+        f"compilador ({', '.join(COMPILERS)})"
+    )
+
+
 def _read_meta(path: Path) -> TemplateMeta | None:
     try:
-        return TemplateMeta.model_validate(json.loads((path / META_FILE).read_text(encoding="utf-8")))
+        data = json.loads((path / META_FILE).read_text(encoding="utf-8"))
+        if isinstance(data, dict) and "compile_cmd" in data:
+            legacy = data.pop("compile_cmd")
+            if legacy and not data.get("compiler"):
+                data["compiler"], data["invalid_reason"] = _legacy_compiler(legacy)
+        return TemplateMeta.model_validate(data)
     except (OSError, ValueError):
         return None
 
@@ -146,11 +196,12 @@ def list_templates() -> list[TemplateInfo]:
                 continue
             found[kind].append(TemplateInfo(
                 name=meta.name, kind=kind, engine=meta.engine, main_file=meta.main_file,
-                compile_cmd=meta.compile_cmd, page_limit=meta.page_limit, style_rules=meta.style_rules,
+                compiler=meta.compiler, page_limit=meta.page_limit, style_rules=meta.style_rules,
+                invalid_reason=meta.invalid_reason,
             ))
     out: list[TemplateInfo] = []
     for kind in KINDS:
-        names = {t.name for t in found[kind]}
+        names = {t.name for t in found[kind] if not t.invalid_reason}
         current = active[kind] if active[kind] in names else BUILTIN_TEMPLATES[kind]
         for info in found[kind]:
             info.active = info.name == current
@@ -158,8 +209,24 @@ def list_templates() -> list[TemplateInfo]:
     return out
 
 
+_BUILTIN_ONLY: ContextVar[bool] = ContextVar("jh_builtin_templates_only", default=False)
+
+
+@contextlib.contextmanager
+def builtin_only():
+    """Dentro del bloque se usan las plantillas integradas aunque haya propias activas (reserva cuando una
+    plantilla propia falla: «Preparar con las plantillas integradas»)."""
+    token = _BUILTIN_ONLY.set(True)
+    try:
+        yield
+    finally:
+        _BUILTIN_ONLY.reset(token)
+
+
 def active_template(kind: str) -> TemplateInfo | None:
-    """Plantilla propia activa de ese tipo; None si manda la integrada."""
+    """Plantilla propia activa de ese tipo; None si manda la integrada (o dentro de `builtin_only()`)."""
+    if _BUILTIN_ONLY.get():
+        return None
     for info in list_templates():
         if info.kind == kind and info.active and not info.builtin:
             return info
@@ -185,61 +252,148 @@ def typst_escape(value: Any) -> str:
     return _TYPST_SPECIAL.sub(lambda m: "\\" + m.group(0), text)
 
 
-def _jinja_env(directory: Path):
-    from automation.document_generator import _get_jinja_env
+class _Escaped(str):
+    """Texto ya escapado (o crudo a propósito con `safe_raw`): `finalize` no lo vuelve a escapar."""
 
-    env = _get_jinja_env(directory)
-    env.filters["typst_escape"] = typst_escape
+
+def _custom_jinja_env(directory: Path, engine: str) -> jinja2.sandbox.ImmutableSandboxedEnvironment:
+    """Entorno de las plantillas PROPIAS: aislado (sin acceso a atributos internos de Python ni a métodos
+    que muten datos), mismos delimitadores que las integradas y escape por defecto de toda salida según el
+    motor. Los filtros de escape devuelven texto marcado para no escaparlo dos veces."""
+    from automation.document_generator import latex_escape, latex_url
+
+    escape = typst_escape if engine == "typst" else latex_escape
+
+    def finalize(value: Any) -> str:
+        if isinstance(value, _Escaped):
+            return value
+        if value is None or isinstance(value, jinja2.Undefined):
+            return ""
+        return escape(value)
+
+    env = jinja2.sandbox.ImmutableSandboxedEnvironment(
+        block_start_string="((*",
+        block_end_string="*))",
+        variable_start_string="(((",
+        variable_end_string=")))",
+        comment_start_string="((=",
+        comment_end_string="=))",
+        loader=jinja2.FileSystemLoader(str(directory)),
+        trim_blocks=True,
+        lstrip_blocks=True,
+        autoescape=False,
+        finalize=finalize,
+    )
+    env.filters["latex_escape"] = lambda v: _Escaped(latex_escape(v))
+    env.filters["latex_url"] = lambda v: _Escaped(latex_url(v))
+    env.filters["typst_escape"] = lambda v: _Escaped(typst_escape(v))
+    env.filters["safe_raw"] = lambda v: _Escaped("" if v is None else str(v))
     return env
 
 
+def _render(directory: Path, engine: str, main_file: str, context: dict) -> str:
+    """Renderiza una plantilla propia en el entorno aislado. Cualquier fallo (sintaxis, variable que no
+    existe, acceso bloqueado → SecurityError) se convierte en TemplateRenderError con el motivo."""
+    try:
+        source = _custom_jinja_env(directory, engine).get_template(main_file).render(**context)
+    except Exception as exc:  # noqa: BLE001 — jinja2.TemplateError, SecurityError, TypeError de la plantilla...
+        raise TemplateRenderError(f"La plantilla no se puede renderizar: {type(exc).__name__}: {exc}") from None
+    if engine == "latex":
+        lint_latex(source, main_file)
+    return source
+
+
 def _render_file(info: TemplateInfo, context: dict) -> str:
-    directory = template_dir(info.kind, info.name)
-    return _jinja_env(directory).get_template(info.main_file).render(**context)
+    return _render(template_dir(info.kind, info.name), info.engine, info.main_file, context)
 
 
 def render_active(kind: str, context: dict) -> str | None:
-    """Fuente de la plantilla propia activa renderizada con `context`; None si manda la integrada."""
+    """Fuente de la plantilla propia activa renderizada con `context`; None si manda la integrada.
+    Lanza TemplateRenderError si la plantilla falla."""
     info = active_template(kind)
     return None if info is None else _render_file(info, context)
 
 
 def copy_assets(kind: str, out_dir: Path) -> bool:
     """Copia los ficheros de apoyo de la plantilla propia activa (clases, fuentes, imágenes) junto al
-    fuente. Devuelve False si manda la integrada."""
+    fuente, sobrescribiendo los de una preparación anterior. Devuelve False si manda la integrada."""
     info = active_template(kind)
     if info is None:
         return False
-    src = template_dir(kind, info.name)
-    for path in src.rglob("*"):
-        rel = path.relative_to(src)
-        if not path.is_file() or path.is_symlink() or rel.name == META_FILE or path.name.endswith(".j2"):
-            continue
-        dest = Path(out_dir) / rel
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        if not dest.exists():
-            shutil.copy2(path, dest)
+    _copy_support_files(template_dir(kind, info.name), Path(out_dir))
     return True
 
 
-def _split_cmd(cmd: str, source: Path, out_dir: Path, pdf: Path) -> list[str]:
-    try:
-        parts = shlex.split(cmd)
-    except ValueError as exc:
-        raise TemplateError(f"Comando de compilación inválido: {exc}") from None
-    if not parts or Path(parts[0]).name not in ALLOWED_COMPILERS or parts[0] != Path(parts[0]).name:
-        raise TemplateError(
-            f"El comando de compilación debe empezar por un compilador conocido ({', '.join(sorted(ALLOWED_COMPILERS))})"
-        )
-    subs = {"{input}": str(source), "{output}": str(pdf), "{outdir}": str(out_dir)}
-    return [subs.get(p, p) for p in parts]
+def _copy_support_files(src: Path, dest_root: Path) -> None:
+    for path in src.rglob("*"):
+        rel = path.relative_to(src)
+        if (not path.is_file() or path.is_symlink() or rel.name == META_FILE or path.name.endswith(".j2")
+                or path.name.lower() in IGNORED_MEMBERS):
+            continue
+        dest = dest_root / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, dest)
 
 
-def _run(cmd: list[str], cwd: Path) -> None:
-    if shutil.which(cmd[0]) is None:
-        raise EngineMissing(f"No se encuentra '{cmd[0]}' en el PATH")
+def _check_compiler(compiler: Any) -> str:
+    if compiler not in COMPILERS:
+        raise TemplateError(f"El compilador debe ser uno de: {', '.join(COMPILERS)}")
+    return compiler
+
+
+def compile_argv(compiler: str, source: Path, out_dir: Path, passes: int = 1) -> list[str]:
+    """Línea de órdenes fija y segura de cada compilador (sin shell ni opciones de la plantilla):
+    - tectonic: `--untrusted` (desactiva shell-escape y demás funciones inseguras).
+    - xelatex / lualatex: `-no-shell-escape -interaction=nonstopmode -halt-on-error -output-directory=<out>`.
+    - typst: `compile --root <carpeta del fuente>` (no puede leer fuera de la carpeta de trabajo).
+    Nunca latexmk (ejecutaría el Perl de un latexmkrc)."""
+    compiler = _check_compiler(compiler)
+    src, out = str(source), str(out_dir)
+    if compiler == "tectonic":
+        return ["tectonic", "--untrusted", "-o", out, *(["--reruns", "0"] if passes <= 1 else []), src]
+    if compiler == "typst":
+        return ["typst", "compile", "--root", str(Path(source).parent), src, str(Path(out_dir) / f"{Path(source).stem}.pdf")]
+    return [compiler, "-no-shell-escape", "-interaction=nonstopmode", "-halt-on-error", f"-output-directory={out}", src]
+
+
+def _resolve_binary(name: str) -> str | None:
     try:
-        proc = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, timeout=COMPILE_TIMEOUT)
+        return str(find_latex_compiler(preferred_engine=name)[1])
+    except LaTeXCompilationError:
+        return None
+
+
+def _missing_hint(compiler: str) -> str:
+    if compiler == "typst":
+        return "Esta plantilla usa Typst: instala `typst` (https://typst.app) y vuelve a intentarlo"
+    return f"Esta plantilla necesita `{compiler}`: instálalo (o elige otro compilador) y vuelve a intentarlo"
+
+
+def resolve_compiler(engine: str, compiler: str | None) -> str:
+    """Compilador que se usará: el elegido o, si no hay, typst (Typst) o el primer motor LaTeX disponible.
+    Lanza EngineMissing si no está instalado."""
+    if compiler:
+        chosen = _check_compiler(compiler)
+    elif engine == "typst":
+        chosen = "typst"
+    else:
+        chosen = engine_available() or ""
+        if not chosen:
+            raise EngineMissing("Instala Tectonic o TeX Live (xelatex) para usar plantillas LaTeX")
+    if (engine == "typst") != (chosen == "typst"):
+        raise TemplateError(f"El compilador {chosen} no sirve para plantillas {engine}")
+    if _resolve_binary(chosen) is None:
+        raise EngineMissing(_missing_hint(chosen))
+    return chosen
+
+
+def _run(cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> None:
+    binary = _resolve_binary(cmd[0])
+    if binary is None:
+        raise EngineMissing(_missing_hint(cmd[0]))
+    try:
+        proc = subprocess.run([binary, *cmd[1:]], cwd=str(cwd), env=env, capture_output=True, text=True,
+                              timeout=COMPILE_TIMEOUT)
     except subprocess.TimeoutExpired:
         raise LaTeXCompilationError(f"La compilación agotó el tiempo límite ({COMPILE_TIMEOUT}s)") from None
     except OSError as exc:
@@ -249,27 +403,69 @@ def _run(cmd: list[str], cwd: Path) -> None:
         raise LaTeXCompilationError(f"Compilación con {cmd[0]} falló (código {proc.returncode}):\n{tail}")
 
 
+def _paranoid_env() -> dict[str, str]:
+    """kpathsea en modo paranoico: sin leer/escribir rutas absolutas ni con `..`, y sin shell-escape."""
+    return {**os.environ, "openin_any": "p", "openout_any": "p", "shell_escape": "f"}
+
+
 def compile_source(source: Path | str, out_dir: Path | str, passes: int = 2, kind: str | None = None) -> Path:
-    """Compila un fuente a PDF: `.typ` con Typst, el resto como LaTeX. Si la plantilla propia activa
-    define `compile_cmd` (solo compiladores conocidos), se usa en su lugar."""
+    """Compila el fuente de la plantilla propia activa de `kind` con su compilador y opciones seguras."""
     src, out = Path(source).resolve(), Path(out_dir).resolve()
     info = active_template(kind) if kind else None
-    custom_cmd = info.compile_cmd if info is not None else None
-    return _compile(src, out, passes, custom_cmd)
+    engine = info.engine if info is not None else ("typst" if src.suffix == ".typ" else "latex")
+    return _compile(src, out, passes, engine, info.compiler if info is not None else None)
 
 
-def _compile(src: Path, out: Path, passes: int, custom_cmd: str | None) -> Path:
+def _compile(src: Path, out: Path, passes: int, engine: str, compiler: str | None) -> Path:
     out.mkdir(parents=True, exist_ok=True)
+    chosen = resolve_compiler(engine, compiler)
+    argv = compile_argv(chosen, src, out, passes)
+    runs = 1 if chosen in ("tectonic", "typst") else max(1, passes)
+    env = None if chosen == "typst" else _paranoid_env()
+    for _ in range(runs):
+        _run(argv, src.parent, env)
     pdf = out / f"{src.stem}.pdf"
-    if custom_cmd:
-        _run(_split_cmd(custom_cmd, src, out, pdf), src.parent)
-    elif src.suffix == ".typ":
-        _run(["typst", "compile", str(src), str(pdf)], src.parent)
-    else:
-        return compile_latex(src, output_dir=out, passes=passes)
     if not pdf.is_file():
         raise LaTeXCompilationError(f"El compilador terminó con éxito pero no se generó '{pdf}'")
     return pdf
+
+
+# ── Lint: lecturas de ficheros fuera de la carpeta de la plantilla ─────────────
+
+_FILE_COMMANDS = (
+    "input", "include", "openin", "InputIfFileExists", "IfFileExists", "includegraphics", "includepdf",
+    "lstinputlisting", "verbatiminput", "VerbatimInput", "import", "subimport", "subfile", "includeonly",
+    "usepackage", "RequirePackage", "documentclass", "LoadClass", "addbibresource", "bibliography",
+    "setmainfont", "setsansfont", "setmonofont", "fontspec", "newfontfamily", "read",
+)
+_FILE_ARG = re.compile(
+    r"\\(" + "|".join(_FILE_COMMANDS) + r")(?![A-Za-z@])\d*\s*(?:=\s*)?(?:\[[^\]]*\]\s*)*(?:\{([^}]*)\}|([^\s{}\\%]+))"
+)
+_TEXT_SUFFIXES = (".j2", ".tex", ".sty", ".cls", ".def", ".cfg", ".clo", ".ltx", ".bib", ".typ")
+
+
+def _bad_path(path: str) -> bool:
+    p = path.strip().replace("\\", "/")
+    return bool(p) and (p.startswith(("/", "~")) or re.match(r"^[A-Za-z]:", p) is not None
+                        or ".." in PurePosixPath(p).parts or "../" in p)
+
+
+def lint_latex(text: str, filename: str) -> None:
+    """Rechaza `\\input{/…}`, `\\include{../…}`, `\\openin5=/…` y similares: una plantilla solo puede leer
+    ficheros de su propia carpeta (y paquetes de la distribución TeX por nombre)."""
+    for m in _FILE_ARG.finditer(text):
+        for arg in (m.group(2) or m.group(3) or "").split(","):
+            if _bad_path(arg):
+                raise TemplateError(
+                    f"La plantilla lee un fichero fuera de su carpeta (\\{m.group(1)} {arg.strip()} en {filename}): "
+                    "no se permiten rutas absolutas, con ~ ni con '..'"
+                )
+
+
+def _lint_files(files: dict[str, bytes]) -> None:
+    for name, data in files.items():
+        if name.lower().endswith(_TEXT_SUFFIXES):
+            lint_latex(data.decode("utf-8", errors="replace"), name)
 
 
 # ── Registro ───────────────────────────────────────────────────────────────────
@@ -331,26 +527,17 @@ def _test_compile(directory: Path, meta: TemplateMeta) -> None:
     """Compilación de prueba obligatoria: renderiza con `profile.example.json`, compila y cuenta páginas."""
     from automation.document_generator import _page_count
 
-    if meta.engine == "typst" and shutil.which("typst") is None and not meta.compile_cmd:
-        raise EngineMissing("Esta plantilla usa Typst: instala `typst` (https://typst.app) y vuelve a intentarlo")
-    if meta.engine == "latex" and not meta.compile_cmd and engine_available() is None:
-        raise EngineMissing("Instala Tectonic o TeX Live (xelatex) para registrar plantillas LaTeX")
-    try:
-        source = _jinja_env(directory).get_template(meta.main_file).render(**_test_context(meta.kind))
-    except Exception as exc:  # noqa: BLE001 — sintaxis Jinja o variables que no existen
-        raise TemplateError(f"La plantilla no se puede renderizar: {type(exc).__name__}: {exc}") from None
+    resolve_compiler(meta.engine, meta.compiler)  # EngineMissing antes de nada si falta el motor
+    # Mismo entorno aislado y con escape por defecto que en cada «Preparar candidatura»
+    source = _render(directory, meta.engine, meta.main_file, _test_context(meta.kind))
     with tempfile.TemporaryDirectory(prefix="jh-template-test-") as tmp:
         work = Path(tmp)
-        for path in directory.rglob("*"):
-            rel = path.relative_to(directory)
-            if path.is_file() and not path.is_symlink() and rel.name != META_FILE and not path.name.endswith(".j2"):
-                (work / rel).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(path, work / rel)
+        _copy_support_files(directory, work)
         stem = "cv" if meta.kind == "cv" else "cover"
         src = work / (stem + (".typ" if meta.engine == "typst" else ".tex"))
         src.write_text(source, encoding="utf-8")
         try:
-            pdf = _compile(src, work, 1, meta.compile_cmd)
+            pdf = _compile(src, work, 1, meta.engine, meta.compiler)
         except (LaTeXCompilationError, TemplateError) as exc:
             if isinstance(exc, EngineMissing):
                 raise
@@ -370,7 +557,7 @@ def register_template(
     files: dict[str, bytes],
     engine: str = "latex",
     main_file: str | None = None,
-    compile_cmd: str | None = None,
+    compiler: str | None = None,
     page_limit: int | None = None,
     style_rules: str = "",
 ) -> TemplateInfo:
@@ -385,14 +572,25 @@ def register_template(
         raise TemplateError("La plantilla no tiene ficheros")
     if sum(len(v) for v in files.values()) > MAX_ZIP_BYTES:
         raise TemplateError("La plantilla es demasiado grande (máx. 5 MB)")
-    clean = {str(_clean_member(n)): data for n, data in files.items() if PurePosixPath(n).name != META_FILE}
-    cmd = (compile_cmd or "").strip() or None
-    if cmd:
-        _split_cmd(cmd, Path("in"), Path("out"), Path("out.pdf"))  # valida el compilador permitido
-    meta = TemplateMeta(
-        name=name, kind=kind, engine=engine, main_file=_find_main(clean, engine, main_file),
-        compile_cmd=cmd, page_limit=page_limit, style_rules=(style_rules or "").strip(),
-    )
+    clean = {
+        str(_clean_member(n)): data for n, data in files.items()
+        if PurePosixPath(n.replace("\\", "/")).name != META_FILE
+        and PurePosixPath(n.replace("\\", "/")).name.lower() not in IGNORED_MEMBERS
+    }
+    if page_limit is not None and not 1 <= page_limit <= 6:
+        raise TemplateError("page_limit debe estar entre 1 y 6")
+    compiler = (compiler or "").strip() or None
+    if compiler is not None:
+        _check_compiler(compiler)
+    if engine == "latex":
+        _lint_files(clean)
+    try:
+        meta = TemplateMeta(
+            name=name, kind=kind, engine=engine, main_file=_find_main(clean, engine, main_file),
+            compiler=compiler, page_limit=page_limit, style_rules=(style_rules or "").strip(),
+        )
+    except ValidationError as exc:
+        raise TemplateError(f"Datos de la plantilla no válidos: {exc.errors()[0].get('msg', exc)}") from None
     target = template_dir(kind, name)
     target.parent.mkdir(parents=True, exist_ok=True)
     staging = target.with_name(f"{name}.tmp")
@@ -429,8 +627,10 @@ def activate_template(kind: str, name: str) -> TemplateInfo:
     from search_config import get_config, save_config, user_config_path
 
     info = _find(kind, name)
-    if info.engine == "typst" and shutil.which("typst") is None and not info.compile_cmd:
-        raise EngineMissing("Esta plantilla usa Typst: instala `typst` para poder activarla")
+    if info.invalid_reason:
+        raise TemplateError(f"La plantilla {kind}/{name} no es válida: {info.invalid_reason}")
+    if not info.builtin:
+        resolve_compiler(info.engine, info.compiler)  # EngineMissing si falta su motor
     current = get_config()
     field = "cv_template" if kind == "cv" else "letter_template"
     docs = current.documents.model_copy(update={field: name})
@@ -462,7 +662,8 @@ def _cli(argv: list[str] | None = None) -> int:
     add.add_argument("--name", required=True)
     add.add_argument("--kind", choices=KINDS, required=True)
     add.add_argument("--engine", choices=list(TEMPLATE_SUFFIXES), default=None)
-    add.add_argument("--compile-cmd", default=None)
+    add.add_argument("--compiler", choices=COMPILERS, default=None,
+                     help="Compilador (por defecto: typst en Typst; en LaTeX el primero instalado)")
     add.add_argument("--page-limit", type=int, default=None)
     add.add_argument("--style-rules", default="")
     act = sub.add_parser("activate")
@@ -475,12 +676,13 @@ def _cli(argv: list[str] | None = None) -> int:
     try:
         if args.cmd == "list":
             for t in list_templates():
-                print(f"{'*' if t.active else ' '} {t.kind:6} {t.name:24} {t.engine}{' (integrada)' if t.builtin else ''}")
+                flag = " (integrada)" if t.builtin else (f" (NO VÁLIDA: {t.invalid_reason})" if t.invalid_reason else "")
+                print(f"{'*' if t.active else ' '} {t.kind:6} {t.name:24} {t.engine}{flag}")
         elif args.cmd == "add":
             path = Path(args.path)
             engine = args.engine or ("typst" if path.name.endswith(".typ.j2") else "latex")
             files = files_from_zip(path.read_bytes()) if path.suffix == ".zip" else {path.name: path.read_bytes()}
-            info = register_template(args.name, args.kind, files, engine=engine, compile_cmd=args.compile_cmd,
+            info = register_template(args.name, args.kind, files, engine=engine, compiler=args.compiler,
                                      page_limit=args.page_limit, style_rules=args.style_rules)
             print(f"Registrada {info.kind}/{info.name} ({info.engine}); actívala con: activate {info.kind} {info.name}")
         elif args.cmd == "activate":

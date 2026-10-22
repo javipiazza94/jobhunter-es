@@ -106,6 +106,11 @@ class TestCompilePasses(unittest.TestCase):
     def test_single_pass_requested(self):
         self.assertEqual(self._run("lualatex", 1), 1)
 
+    def test_classic_engines_never_enable_shell_escape(self):
+        for engine in ("xelatex", "lualatex", "pdflatex"):
+            self._run(engine, 1)
+            self.assertIn("-no-shell-escape", self.last_cmd)
+
 
 class TestTemplateResolution(unittest.TestCase):
     def test_resolves_default_templates(self):

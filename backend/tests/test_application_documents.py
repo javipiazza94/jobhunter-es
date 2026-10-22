@@ -406,3 +406,123 @@ def test_api_descarga_en_linea_y_nosniff(env, fake_generator):
     assert headers["x-content-type-options"] == "nosniff"
     status, headers, _ = call("GET", base + "job_posting.md", headers=[CLIENT], query="inline=1")
     assert headers["content-disposition"].startswith("attachment")  # en línea solo PDFs
+
+
+# ── Plantillas propias activas: motores, errores sin 500, reserva integrada y límites (revisión SP3 I2/I3) ──
+
+@pytest.fixture
+def custom_tpl(env, tmp_path, monkeypatch):
+    """JH_HOME temporal; `install(kind, name, **meta)` deja una plantilla propia activa en disco."""
+    import search_config
+    from automation import templates_registry
+
+    original = search_config.get_config()
+    monkeypatch.setattr(config, "JH_HOME", tmp_path / "home")
+    search_config.save_config(original, search_config.user_config_path())
+
+    def install(kind: str, name: str, engine: str = "latex", **meta) -> None:
+        target = templates_registry.template_dir(kind, name)
+        target.mkdir(parents=True)
+        main = "c.typ.j2" if engine == "typst" else "c.tex.j2"
+        (target / main).write_text("x", encoding="utf-8")
+        data = {"name": name, "kind": kind, "engine": engine, "main_file": main} | meta
+        (target / "template.json").write_text(json.dumps(data), encoding="utf-8")
+        cfg = search_config.get_config()
+        field = "cv_template" if kind == "cv" else "letter_template"
+        docs = cfg.documents.model_copy(update={field: name})
+        search_config.save_config(cfg.model_copy(update={"documents": docs}), search_config.user_config_path())
+
+    yield install
+    search_config.set_config(original)
+
+
+def test_plantilla_typst_sin_typst_da_409_con_pista(env, fake_generator, custom_tpl, monkeypatch):
+    from automation import templates_registry
+
+    custom_tpl("cv", "typ", engine="typst")
+    monkeypatch.setattr(templates_registry, "_resolve_binary", lambda name: None)
+    status, _, body = call("POST", f"/api/applications/{env['app_id']}/prepare", headers=[CLIENT])
+    assert status == 409
+    detail = json.loads(body)["detail"]
+    assert "typst" in detail and "integradas" in detail
+    calls, _ = fake_generator
+    assert calls == []
+
+
+def test_fallo_de_plantilla_propia_da_422_con_reserva_y_la_reserva_funciona(env, fake_generator, custom_tpl, monkeypatch):
+    from automation import templates_registry
+
+    custom_tpl("cv", "rota")
+    monkeypatch.setattr(templates_registry, "_resolve_binary", lambda name: f"/usr/bin/{name}")
+    calls, state = fake_generator
+    state["fail"] = templates_registry.TemplateRenderError(
+        "La plantilla no se puede renderizar: UndefinedError: 'dict object' has no attribute 'foto'"
+    )
+    status, _, body = call("POST", f"/api/applications/{env['app_id']}/prepare", headers=[CLIENT])
+    assert status == 422, body
+    detail = json.loads(body)["detail"]
+    assert detail["builtin_fallback"] is True
+    assert any("UndefinedError" in r for r in detail["reasons"])
+    assert any("plantillas integradas" in r for r in detail["reasons"])
+
+    seen = []
+    state["fail"] = None
+    original = application_documents.generate_deterministic_documents
+
+    def spy(**kwargs):
+        seen.append(templates_registry.active_template("cv"))
+        return original(**kwargs)
+
+    monkeypatch.setattr(application_documents, "generate_deterministic_documents", spy)
+    payload = json.dumps({"builtin_templates": True}).encode()
+    status, _, body = call("POST", f"/api/applications/{env['app_id']}/prepare", body=payload,
+                           headers=[CLIENT, ("content-type", "application/json"), ("content-length", str(len(payload)))])
+    assert status == 200, body
+    assert seen == [None]  # dentro de la reserva manda la integrada
+    assert templates_registry.active_template("cv").name == "rota"  # fuera, la propia sigue activa
+
+
+def test_compilacion_de_plantilla_propia_fallida_ofrece_reserva(env, fake_generator, custom_tpl, monkeypatch):
+    from automation import templates_registry
+    from automation.latex_compiler import LaTeXCompilationError
+
+    custom_tpl("letter", "mala")
+    monkeypatch.setattr(templates_registry, "_resolve_binary", lambda name: f"/usr/bin/{name}")
+    _, state = fake_generator
+    state["fail"] = LaTeXCompilationError("Undefined control sequence")
+    with pytest.raises(application_documents.VerificationFailed) as exc:
+        application_documents.prepare_application(env["app_id"])
+    assert exc.value.builtin_fallback is True
+
+
+def test_limite_de_paginas_de_la_plantilla_activa_manda(env, fake_generator, custom_tpl, monkeypatch):
+    from automation import templates_registry
+
+    custom_tpl("cv", "corta", page_limit=1)
+    monkeypatch.setattr(templates_registry, "_resolve_binary", lambda name: f"/usr/bin/{name}")
+    calls, _ = fake_generator
+    application_documents.prepare_application(env["app_id"], use_ai=False)
+    assert calls[-1]["cv_pages"] == 1 and calls[-1]["letter_pages"] == 1
+    application_documents.prepare_application(env["app_id"], use_ai=False, builtin_templates=True)
+    assert calls[-1]["cv_pages"] == 2
+
+
+def test_reglas_de_estilo_de_la_plantilla_llegan_a_la_ia(env, fake_generator, custom_tpl, monkeypatch):
+    import ai
+    from automation import templates_registry
+
+    custom_tpl("cv", "estilo", page_limit=1, style_rules="Resumen de una sola frase")
+    custom_tpl("letter", "carta", style_rules="Tono formal, sin viñetas")
+    monkeypatch.setattr(templates_registry, "_resolve_binary", lambda name: f"/usr/bin/{name}")
+    seen = {}
+
+    def fake_flow(profile, offer, provider, **kwargs):
+        seen.update(kwargs)
+        raise ai.AIError("sin red en los tests")
+
+    monkeypatch.setattr(application_documents, "get_provider", lambda: object())
+    monkeypatch.setattr(application_documents, "run_ai_flow", fake_flow)
+    docs = application_documents.prepare_application(env["app_id"], use_ai=True)
+    assert docs.source == "deterministic"
+    assert "Resumen de una sola frase" in seen["style"] and "Tono formal, sin viñetas" in seen["style"]
+    assert "CV 1, carta 1" in seen["style"]

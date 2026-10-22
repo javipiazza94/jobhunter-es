@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { T, TemplatesPanel } from "./TemplatesPanel";
 
 const t = (name: string, kind: "cv" | "letter", builtin: boolean, active: boolean) => ({
-  name, kind, engine: "latex" as const, builtin, active, main_file: "x", compile_cmd: null, page_limit: null, style_rules: "",
+  name, kind, engine: "latex" as const, builtin, active, main_file: "x", compiler: null, page_limit: null, style_rules: "", invalid_reason: null,
 });
 
 test("marca la activa y solo ofrece borrar las propias", () => {

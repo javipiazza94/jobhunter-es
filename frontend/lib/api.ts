@@ -27,6 +27,9 @@ import type {
   SetupStatus,
   SourceSetting,
   SourcesUpdate,
+  PrepareRequest,
+  TemplateCompiler,
+  TemplateEngine,
   TemplateInfo,
   TemplateKind,
   Track,
@@ -49,9 +52,9 @@ function request(url: string, init: RequestInit = {}): Promise<Response> {
   return fetch(url, { ...init, headers: { ...CLIENT_HEADER, ...(init.headers as Record<string, string> | undefined) } });
 }
 
-/** Error de la API con su código HTTP (el mensaje es el `detail`). */
+/** Error de la API con su código HTTP (el mensaje es el `detail` legible; `detail` lo trae tal cual). */
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(message: string, readonly status: number, readonly detail: unknown = undefined) {
     super(message);
     this.name = "ApiError";
   }
@@ -60,7 +63,10 @@ export class ApiError extends Error {
 /** Respuesta JSON o `ApiError(detail)` si la API respondió con error (las funciones nuevas siempre lo comprueban). */
 async function checked<T>(res: Response): Promise<T> {
   const body: unknown = await res.json().catch(() => null);
-  if (!res.ok) throw new ApiError(errorDetail(body, res.status), res.status);
+  if (!res.ok) {
+    const detail = body && typeof body === "object" ? (body as { detail?: unknown }).detail : undefined;
+    throw new ApiError(errorDetail(body, res.status), res.status, detail);
+  }
   return body as T;
 }
 
@@ -176,8 +182,11 @@ export async function answerScreeningQuestions(applicationId: string, questions:
 // ── Candidatura: CV y carta en PDF archivados (JH_HOME/applications/<id>/) ──
 
 /** Genera CV y carta (puede tardar: compila LaTeX). `useAi` ausente = IA si hay proveedor configurado. */
-export async function prepareApplication(applicationId: string, useAi?: boolean): Promise<PreparedDocs> {
-  const body = useAi === undefined ? {} : { use_ai: useAi };
+export async function prepareApplication(
+  applicationId: string, useAi?: boolean, opts: { builtinTemplates?: boolean } = {},
+): Promise<PreparedDocs> {
+  const body: PrepareRequest = useAi === undefined ? {} : { use_ai: useAi };
+  if (opts.builtinTemplates) body.builtin_templates = true;
   return checked(await sendJson(`${BASE}/api/applications/${encodeURIComponent(applicationId)}/prepare`, "POST", body));
 }
 
@@ -201,12 +210,16 @@ export async function fetchTemplates(): Promise<TemplateInfo[]> {
 export async function uploadTemplate(
   file: Blob,
   filename: string,
-  meta: { name: string; kind: TemplateKind; engine?: "latex" | "typst"; page_limit?: number; style_rules?: string },
+  meta: {
+    name: string; kind: TemplateKind; engine?: TemplateEngine; compiler?: TemplateCompiler | null;
+    page_limit?: number; style_rules?: string;
+  },
 ): Promise<TemplateInfo> {
   const form = new FormData();
   form.append("name", meta.name);
   form.append("kind", meta.kind);
   if (meta.engine) form.append("engine", meta.engine);
+  if (meta.compiler) form.append("compiler", meta.compiler);
   if (meta.page_limit) form.append("page_limit", String(meta.page_limit));
   if (meta.style_rules) form.append("style_rules", meta.style_rules);
   form.append("file", file, filename);

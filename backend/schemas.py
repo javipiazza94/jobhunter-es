@@ -375,8 +375,10 @@ class CheckOut(_Out):
 
 
 class PrepareIn(BaseModel):
-    """POST /api/applications/{id}/prepare: `use_ai` None = IA si hay proveedor configurado."""
+    """POST /api/applications/{id}/prepare: `use_ai` None = IA si hay proveedor configurado;
+    `builtin_templates` usa las plantillas integradas aunque haya propias activas (reserva si una falla)."""
     use_ai: bool | None = None
+    builtin_templates: bool = False
 
 
 class ScreeningQuestionIn(BaseModel):

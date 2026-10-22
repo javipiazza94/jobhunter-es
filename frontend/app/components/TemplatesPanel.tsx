@@ -3,25 +3,48 @@
 import { useCallback, useEffect, useState } from "react";
 import { FileUp, Loader2, Trash2 } from "lucide-react";
 import { activateTemplate, deleteTemplate, fetchTemplates, uploadTemplate } from "@/lib/api";
-import type { TemplateInfo, TemplateKind } from "@/lib/types";
+import type { TemplateCompiler, TemplateEngine, TemplateInfo, TemplateKind } from "@/lib/types";
+
+/** Compiladores admitidos por motor (lista cerrada, igual que en el backend). */
+export const COMPILERS: Record<TemplateEngine, TemplateCompiler[]> = {
+  latex: ["tectonic", "xelatex", "lualatex"],
+  typst: ["typst"],
+};
 
 // Textos de la interfaz en un solo sitio (la traducción llega en SP4).
 export const T = {
   title: "Plantillas de CV y carta",
   hint: "Las integradas siempre están. Una plantilla propia (LaTeX o Typst, .zip o un único .tex.j2/.typ.j2) se compila de prueba antes de aceptarla.",
+  trust: "Una plantilla es código: añade solo plantillas de fuentes de confianza.",
   kinds: { cv: "CV", letter: "Carta" } as Record<TemplateKind, string>,
+  engines: { latex: "LaTeX", typst: "Typst" } as Record<TemplateEngine, string>,
   builtin: "integrada",
   active: "activa",
+  invalid: "no válida",
   activate: "Activar",
   remove: "Borrar",
   upload: "Añadir plantilla",
   uploading: "Compilando prueba…",
   name: "Nombre (minúsculas, - o _)",
+  kind: "Tipo",
+  engine: "Motor",
+  compiler: "Compilador",
+  compilerAuto: "automático",
   pageLimit: "Páginas máx.",
+  styleRules: "Reglas de estilo para la IA (opcional)",
+  file: "Archivo de plantilla",
   noFile: "Elige un archivo de plantilla.",
   noName: "Escribe un nombre.",
   loading: "Cargando plantillas…",
 };
+
+/** Motor que sugiere el nombre del archivo (`.typ.j2` → Typst); null si no lo dice (p. ej. un .zip). */
+export function engineFromFilename(filename: string): TemplateEngine | null {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".typ.j2")) return "typst";
+  if (lower.endsWith(".tex.j2")) return "latex";
+  return null;
+}
 
 /** Plantillas de CV y carta: elegir la activa, añadir propias (con compilación de prueba) y borrarlas. */
 export function TemplatesPanel({ initial = [], initialError = "", autoLoad = true }: {
@@ -36,7 +59,10 @@ export function TemplatesPanel({ initial = [], initialError = "", autoLoad = tru
   const [loaded, setLoaded] = useState(!autoLoad || initial.length > 0);
   const [name, setName] = useState("");
   const [kind, setKind] = useState<TemplateKind>("cv");
+  const [engine, setEngine] = useState<TemplateEngine>("latex");
+  const [compiler, setCompiler] = useState<TemplateCompiler | "">("");
   const [pageLimit, setPageLimit] = useState("");
+  const [styleRules, setStyleRules] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
   const reload = useCallback(async () => {
@@ -72,21 +98,38 @@ export function TemplatesPanel({ initial = [], initialError = "", autoLoad = tru
     }
   };
 
+  const chooseEngine = (value: TemplateEngine) => {
+    setEngine(value);
+    if (compiler && !COMPILERS[value].includes(compiler)) setCompiler("");
+  };
+
+  const chooseFile = (picked: File | null) => {
+    setFile(picked);
+    const guessed = picked ? engineFromFilename(picked.name) : null;
+    if (guessed) chooseEngine(guessed);
+  };
+
   const submit = async () => {
     if (!name.trim()) { setError(T.noName); return; }
     if (!file) { setError(T.noFile); return; }
     await act(async () => {
       await uploadTemplate(file, file.name, {
-        name: name.trim(), kind, ...(pageLimit ? { page_limit: Number(pageLimit) } : {}),
+        name: name.trim(), kind, engine,
+        ...(compiler ? { compiler } : {}),
+        ...(pageLimit ? { page_limit: Number(pageLimit) } : {}),
+        ...(styleRules.trim() ? { style_rules: styleRules.trim() } : {}),
       });
-      setName(""); setFile(null); setPageLimit("");
+      setName(""); setFile(null); setPageLimit(""); setStyleRules(""); setCompiler("");
     });
   };
+
+  const field = "text-xs text-gray-300 border border-white/10 rounded-lg px-3 py-2 bg-[#16161f]";
 
   return (
     <div className="space-y-4">
       <h3 className="text-base font-semibold text-gray-200">{T.title}</h3>
       <p className="text-xs text-gray-500">{T.hint}</p>
+      <p className="text-xs text-amber-300/80">{T.trust}</p>
       {!loaded && <p className="text-xs text-gray-500">{T.loading}</p>}
       {(["cv", "letter"] as TemplateKind[]).map(k => (
         <div key={k} className="space-y-1.5">
@@ -96,11 +139,17 @@ export function TemplatesPanel({ initial = [], initialError = "", autoLoad = tru
               <li key={t.name} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                 <div className="text-sm text-gray-300">
                   <span className="font-mono">{t.name}</span>
-                  <span className="ml-2 text-xs text-gray-500">{t.engine}{t.builtin ? ` · ${T.builtin}` : ""}</span>
+                  <span className="ml-2 text-xs text-gray-500">
+                    {t.engine}{t.compiler ? ` · ${t.compiler}` : ""}{t.page_limit ? ` · ${t.page_limit} pág.` : ""}{t.builtin ? ` · ${T.builtin}` : ""}
+                  </span>
                   {t.active && <span className="ml-2 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md font-bold border bg-emerald-500/15 text-emerald-300 border-emerald-500/30">{T.active}</span>}
+                  {t.invalid_reason && (
+                    <span title={t.invalid_reason} className="ml-2 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md font-bold border bg-red-500/15 text-red-300 border-red-500/30">{T.invalid}</span>
+                  )}
+                  {t.invalid_reason && <p className="mt-1 text-xs text-red-300">{t.invalid_reason}</p>}
                 </div>
                 <div className="flex items-center gap-3 text-xs">
-                  {!t.active && (
+                  {!t.active && !t.invalid_reason && (
                     <button disabled={busy} className="text-indigo-300 hover:text-indigo-200 disabled:opacity-40" onClick={() => act(() => activateTemplate(t.kind, t.name))}>
                       {T.activate}
                     </button>
@@ -117,16 +166,18 @@ export function TemplatesPanel({ initial = [], initialError = "", autoLoad = tru
         </div>
       ))}
       <div className="flex flex-wrap items-end gap-2">
-        <input
-          aria-label={T.name}
-          placeholder={T.name}
-          value={name}
-          onChange={e => setName(e.target.value)}
-          className="text-xs text-gray-300 border border-white/10 rounded-lg px-3 py-2 bg-[#16161f]"
-        />
-        <select aria-label="Tipo" value={kind} onChange={e => setKind(e.target.value as TemplateKind)} className="text-xs text-gray-300 border border-white/10 rounded-lg px-3 py-2 bg-[#16161f]">
+        <input aria-label={T.name} placeholder={T.name} value={name} onChange={e => setName(e.target.value)} className={field} />
+        <select aria-label={T.kind} value={kind} onChange={e => setKind(e.target.value as TemplateKind)} className={field}>
           <option value="cv">{T.kinds.cv}</option>
           <option value="letter">{T.kinds.letter}</option>
+        </select>
+        <select aria-label={T.engine} value={engine} onChange={e => chooseEngine(e.target.value as TemplateEngine)} className={field}>
+          <option value="latex">{T.engines.latex}</option>
+          <option value="typst">{T.engines.typst}</option>
+        </select>
+        <select aria-label={T.compiler} value={compiler} onChange={e => setCompiler(e.target.value as TemplateCompiler | "")} className={field}>
+          <option value="">{T.compilerAuto}</option>
+          {COMPILERS[engine].map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         <input
           aria-label={T.pageLimit}
@@ -134,14 +185,23 @@ export function TemplatesPanel({ initial = [], initialError = "", autoLoad = tru
           inputMode="numeric"
           value={pageLimit}
           onChange={e => setPageLimit(e.target.value.replace(/\D/g, ""))}
-          className="w-28 text-xs text-gray-300 border border-white/10 rounded-lg px-3 py-2 bg-[#16161f]"
+          className={`w-28 ${field}`}
         />
         <input
           type="file"
-          aria-label="Archivo de plantilla"
+          aria-label={T.file}
           accept=".zip,.j2"
-          onChange={e => setFile(e.target.files?.[0] ?? null)}
+          onChange={e => chooseFile(e.target.files?.[0] ?? null)}
           className="text-xs text-gray-400"
+        />
+        <textarea
+          aria-label={T.styleRules}
+          placeholder={T.styleRules}
+          value={styleRules}
+          maxLength={2000}
+          rows={2}
+          onChange={e => setStyleRules(e.target.value)}
+          className={`basis-full ${field}`}
         />
         <button
           onClick={submit}

@@ -224,13 +224,21 @@ export function secretStatus(has: boolean, source: SecretSource): string {
   return source === "env" ? "configurada (variable de entorno)" : "guardada en el llavero";
 }
 
-/** Mensaje legible del cuerpo de error de FastAPI (`detail` texto o lista de errores de validación). */
+/** Mensaje legible del cuerpo de error de FastAPI: `detail` texto, lista de errores de validación u objeto
+ *  `{message, reasons}` (p. ej. el 422 de /prepare: «Los PDFs no superan la verificación: motivo 1; motivo 2»). */
 export function errorDetail(body: unknown, status: number): string {
   const detail = body && typeof body === "object" ? (body as { detail?: unknown }).detail : undefined;
   if (typeof detail === "string" && detail) return detail;
   if (Array.isArray(detail)) {
     const msgs = detail.map(d => (d && typeof d === "object" ? String((d as { msg?: unknown }).msg ?? "") : String(d))).filter(Boolean);
     if (msgs.length) return msgs.join("; ");
+  }
+  if (detail && typeof detail === "object") {
+    const { message, reasons } = detail as { message?: unknown; reasons?: unknown };
+    const list = Array.isArray(reasons) ? reasons.map(r => String(r ?? "").trim()).filter(Boolean) : [];
+    const head = typeof message === "string" ? message.trim() : "";
+    if (head && list.length) return `${head}: ${list.join("; ")}`;
+    if (head || list.length) return head || list.join("; ");
   }
   return `Error ${status} de la API`;
 }
