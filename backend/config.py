@@ -3,11 +3,14 @@ config.py — Centralised settings for Job Hunter Spain.
 All tunable parameters live here; never hardcode in other modules.
 """
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).parent        # backend/ (código)
-REPO_ROOT = BASE_DIR.parent
+# Congelado con PyInstaller (app de escritorio) código y datos de serie conviven en una sola carpeta
+# (ver backend/desktop_freeze.spec): ahí no hay un «repo» por encima.
+REPO_ROOT = BASE_DIR if getattr(sys, "frozen", False) else BASE_DIR.parent
 load_dotenv(BASE_DIR / ".env")          # backend/.env
 load_dotenv(REPO_ROOT / ".env")         # project root .env (fallback)
 

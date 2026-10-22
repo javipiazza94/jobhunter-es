@@ -66,9 +66,9 @@ Tauri 2 (desktop/src-tauri, Rust)
 - `desktop_main.main(argv)`: sin argumentos arranca la API; `-m <módulo> [args]` se comporta como `python -m` (para que `job_manager` funcione congelado); anuncia `JH_READY port=N`; hilo que vigila stdin y para uvicorn al EOF.
 - `config.py`: si `sys.frozen`, `REPO_ROOT = BASE_DIR` (los datos se empaquetan con la misma disposición relativa).
 
-- [ ] Tests primero: `prepare_environment` (valores por defecto, no pisa, `PATH`), listener solo en loopback y con puerto asignado, `-m` ejecuta un módulo con sus argumentos, EOF de stdin dispara la parada, la línea `JH_READY` se imprime una vez, y el resultado de `config` con `sys.frozen` simulado.
-- [ ] Test de protecciones sobre la app real con puerto dinámico y orígenes de Tauri: `Host` ajeno → 400; `Origin` ajeno sin cabecera CORS; POST sin `X-JH-Client` → 403; preflight desde `tauri://localhost` permitido.
-- [ ] Commit `feat(desktop): arranque del backend en puerto libre con las protecciones de la API`.
+- [x] Tests primero: `prepare_environment` (valores por defecto, no pisa, `PATH`), listener solo en loopback y con puerto asignado, `-m` ejecuta un módulo con sus argumentos, EOF de stdin dispara la parada, la línea `JH_READY` se imprime una vez, y el resultado de `config` con `sys.frozen` simulado.
+- [x] Test de protecciones sobre la app real con puerto dinámico y orígenes de Tauri: `Host` ajeno → 400; `Origin` ajeno sin cabecera CORS; POST sin `X-JH-Client` → 403; preflight desde `tauri://localhost` permitido.
+- [x] Commit `feat(desktop): arranque del backend en puerto libre con las protecciones de la API`.
 
 ### Tarea 3: Chromium de Playwright bajo demanda
 

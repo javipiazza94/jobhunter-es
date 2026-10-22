@@ -13,3 +13,4 @@ keyring==25.7.0
 pypdf==6.19.0
 python-docx==1.2.0
 python-multipart==0.0.32
+platformdirs==4.13.5
