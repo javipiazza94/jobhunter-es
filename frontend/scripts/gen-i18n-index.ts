@@ -4,15 +4,17 @@ import { readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const ident = (c: string) => `dict_${c.replace(/-/g, "_")}`;
+
 export function renderIndex(codes: string[]): string {
   const sorted = [...codes].sort((a, b) => (a === "es" ? -1 : b === "es" ? 1 : a.localeCompare(b)));
-  const imports = sorted.map(c => `import dict_${c} from "./${c}.json";`).join("\n");
-  const entries = sorted.map(c => `  ${c}: dict_${c},`).join("\n");
+  const imports = sorted.map(c => `import ${ident(c)} from "./${c}.json";`).join("\n");
+  const entries = sorted.map(c => `  ${JSON.stringify(c)}: ${ident(c)},`).join("\n");
   return `// GENERADO por scripts/gen-i18n-index.ts: no editar a mano.\n${imports}\n\nexport const DICTIONARIES: Record<string, Record<string, string>> = {\n${entries}\n};\n\nexport const SUPPORTED: string[] = ${JSON.stringify(sorted)};\n`;
 }
 
 export function listLanguages(dir: string): string[] {
-  return readdirSync(dir).filter(f => /^[a-z]{2,3}\.json$/.test(f)).map(f => f.replace(/\.json$/, ""));
+  return readdirSync(dir).filter(f => /^[a-z]{2,3}(-[A-Z]{2})?\.json$/.test(f)).map(f => f.replace(/\.json$/, ""));
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

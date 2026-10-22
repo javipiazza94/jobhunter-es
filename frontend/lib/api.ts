@@ -54,10 +54,18 @@ function request(url: string, init: RequestInit = {}): Promise<Response> {
 
 /** Error de la API con su código HTTP (el mensaje es el `detail` legible; `detail` lo trae tal cual). */
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number, readonly detail: unknown = undefined) {
+  constructor(message: string, readonly status: number, readonly detail: unknown = undefined, readonly code: string | undefined = undefined) {
     super(message);
     this.name = "ApiError";
   }
+}
+
+/** Código estable de error: `{detail, code}` o `{detail: {code}}`. */
+function errorCode(body: unknown, detail: unknown): string | undefined {
+  const top = body && typeof body === "object" ? (body as { code?: unknown }).code : undefined;
+  const nested = detail && typeof detail === "object" ? (detail as { code?: unknown }).code : undefined;
+  const code = typeof top === "string" ? top : nested;
+  return typeof code === "string" && code ? code : undefined;
 }
 
 /** Respuesta JSON o `ApiError(detail)` si la API respondió con error (las funciones nuevas siempre lo comprueban). */
@@ -65,7 +73,7 @@ async function checked<T>(res: Response): Promise<T> {
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
     const detail = body && typeof body === "object" ? (body as { detail?: unknown }).detail : undefined;
-    throw new ApiError(errorDetail(body, res.status), res.status, detail);
+    throw new ApiError(errorDetail(body, res.status), res.status, detail, errorCode(body, detail));
   }
   return body as T;
 }

@@ -27,16 +27,19 @@ export function getLocale(): string {
   return current;
 }
 
-/** Cambia el idioma activo (no soportados se ignoran), lo recuerda en localStorage y avisa a los componentes. */
-export function setLocale(locale: string): void {
+/** Cambia el idioma activo (no soportados se ignoran) y avisa a los componentes. Solo la elección del usuario
+ *  (`remember`, por defecto) se guarda en localStorage; el idioma deducido del navegador o del perfil, no. */
+export function setLocale(locale: string, opts: { remember?: boolean } = {}): void {
   if (!isSupported(locale)) return;
   if (locale !== current) {
     current = locale;
     listeners.forEach(l => l());
   }
-  try {
-    globalThis.localStorage?.setItem(STORAGE_KEY, locale);
-  } catch { /* almacenamiento bloqueado: el idioma vale solo para esta sesión */ }
+  if (opts.remember ?? true) {
+    try {
+      globalThis.localStorage?.setItem(STORAGE_KEY, locale);
+    } catch { /* almacenamiento bloqueado: el idioma vale solo para esta sesión */ }
+  }
   if (typeof document !== "undefined" && document.documentElement) document.documentElement.lang = locale;
 }
 
@@ -44,10 +47,19 @@ export function t(key: string, vars?: Vars): string {
   return translate(current, key, vars);
 }
 
+/** Soportado por código exacto (`pt-BR`) o por su idioma base (`pt`). */
+function matchSupported(code: unknown): string | undefined {
+  if (typeof code !== "string") return undefined;
+  const lower = code.toLowerCase();
+  return SUPPORTED.find(c => c.toLowerCase() === lower) ?? SUPPORTED.find(c => c.toLowerCase() === lower.split("-")[0]);
+}
+
 /** Orden de preferencia: perfil guardado, localStorage, idioma del navegador y por último es. */
 export function resolveInitialLocale(src: { profile?: unknown; stored?: unknown; nav?: unknown }): string {
-  const fromNav = typeof src.nav === "string" ? src.nav.toLowerCase().split("-")[0] : undefined;
-  for (const c of [src.profile, src.stored, fromNav]) if (isSupported(c)) return c;
+  for (const c of [src.profile, src.stored, src.nav]) {
+    const found = matchSupported(c);
+    if (found) return found;
+  }
   return DEFAULT_LOCALE;
 }
 
@@ -58,11 +70,16 @@ export function formatDate(value: string | number | Date, options?: Intl.DateTim
   return new Intl.DateTimeFormat(current, { timeZone: "UTC", ...options }).format(d);
 }
 
-/** Mensaje de un error de la API: traduce `errors.<code>` si existe; si no, el `detail` tal cual. */
-export function errorMessage(code: string | undefined, detail: string | undefined): string {
+/** Mensaje de un error de la API: traduce `errors.<code>` (de `err.code` o `err.detail.code`) si existe; si no,
+ *  su `message`/`detail` tal cual. */
+export function errorMessage(err: unknown): string {
+  const e = (err && typeof err === "object" ? err : {}) as { code?: unknown; detail?: unknown; message?: unknown };
+  const nested = e.detail && typeof e.detail === "object" ? (e.detail as { code?: unknown; message?: unknown }) : undefined;
+  const code = [e.code, nested?.code].find((c): c is string => typeof c === "string" && c !== "");
   const key = code ? `errors.${code}` : "";
-  if (key && (key in DICTIONARIES[current] || key in DICTIONARIES[DEFAULT_LOCALE])) return t(key);
-  return detail?.trim() ? detail : t("errors.unknown");
+  if (key && (key in (DICTIONARIES[current] ?? {}) || key in (DICTIONARIES[DEFAULT_LOCALE] ?? {}))) return t(key);
+  const text = [e.message, e.detail, nested?.message].find((m): m is string => typeof m === "string" && m.trim() !== "");
+  return text ?? t("errors.unknown");
 }
 
 function subscribe(cb: () => void): () => void {
@@ -70,7 +87,7 @@ function subscribe(cb: () => void): () => void {
   return () => { listeners.delete(cb); };
 }
 
-const LocaleContext = createContext<{ locale: string; setLocale: (l: string) => void }>({ locale: DEFAULT_LOCALE, setLocale });
+const LocaleContext = createContext<{ setLocale: (l: string) => void }>({ setLocale });
 
 /** Idioma activo (se vuelve a pintar al cambiarlo) y su setter, que además lo guarda en el perfil si hay `persist`. */
 export function useLocale() {
@@ -94,12 +111,18 @@ type ProviderProps = {
   persist?: (locale: string) => Promise<unknown>;
 };
 
+let userChose = false;
+
 export function LocaleProvider({ children, profileLocale, loadProfileLocale, persist }: ProviderProps) {
+  // Si el usuario elige idioma antes de que llegue el perfil, la carga tardía no debe pisarlo.
   useEffect(() => {
+    userChose = false;
     let stored: string | null = null;
     try { stored = globalThis.localStorage?.getItem(STORAGE_KEY) ?? null; } catch { /* ignorar */ }
-    const apply = (profile: unknown) =>
-      setLocale(resolveInitialLocale({ profile, stored, nav: globalThis.navigator?.language }));
+    const apply = (profile: unknown) => {
+      if (userChose) return;
+      setLocale(resolveInitialLocale({ profile, stored, nav: globalThis.navigator?.language }), { remember: false });
+    };
     apply(profileLocale);
     if (profileLocale === undefined && loadProfileLocale) {
       let cancelled = false;
@@ -110,9 +133,12 @@ export function LocaleProvider({ children, profileLocale, loadProfileLocale, per
   }, [profileLocale]);
 
   const choose = useCallback((locale: string) => {
+    userChose = true;
     setLocale(locale);
-    persist?.(locale).catch(() => { /* el idioma ya quedó en localStorage */ });
+    try {
+      Promise.resolve(persist?.(locale)).catch(() => { /* el idioma ya quedó en localStorage */ });
+    } catch { /* persist síncrono que lanza: idem */ }
   }, [persist]);
 
-  return createElement(LocaleContext.Provider, { value: { locale: current, setLocale: choose } }, children);
+  return createElement(LocaleContext.Provider, { value: { setLocale: choose } }, children);
 }

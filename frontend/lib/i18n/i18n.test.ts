@@ -89,9 +89,42 @@ test("formatDate usa el idioma activo", () => {
   expect(formatDate("no es fecha")).toBe("");
 });
 
-test("errorMessage traduce códigos conocidos y cae al detail si no", () => {
+test("errorMessage traduce por err.code o err.detail.code y cae a message/detail", () => {
   setLocale("en");
-  expect(errorMessage("offer_not_found", "Oferta no encontrada")).toBe("Offer not found");
-  expect(errorMessage("codigo_raro", "Mensaje del servidor")).toBe("Mensaje del servidor");
-  expect(errorMessage(undefined, "")).toBe("Something went wrong. Please try again.");
+  expect(errorMessage({ code: "offer_not_found", message: "Oferta no encontrada" })).toBe("Offer not found");
+  expect(errorMessage({ detail: { code: "unknown_track" }, message: "x" })).toBe("Unknown track");
+  expect(errorMessage({ code: "codigo_raro", message: "Mensaje del servidor" })).toBe("Mensaje del servidor");
+  expect(errorMessage({ detail: "Solo detail" })).toBe("Solo detail");
+  expect(errorMessage(new Error("boom"))).toBe("boom");
+  expect(errorMessage(undefined)).toBe("Something went wrong. Please try again.");
+});
+
+test("setLocale con remember:false no escribe jh.locale", () => {
+  const store = new Map<string, string>();
+  (globalThis as { localStorage?: unknown }).localStorage = {
+    getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k),
+  };
+  localStorage.removeItem("jh.locale");
+  setLocale("en", { remember: false });
+  expect(localStorage.getItem("jh.locale")).toBeNull();
+  setLocale("es");
+  expect(localStorage.getItem("jh.locale")).toBe("es");
+  delete (globalThis as { localStorage?: unknown }).localStorage;
+});
+
+test("resolveInitialLocale acepta códigos con región si hay fichero", () => {
+  DICTIONARIES["pt-BR"] = {};
+  SUPPORTED.push("pt-BR");
+  try {
+    expect(resolveInitialLocale({ nav: "pt-br" })).toBe("pt-BR");
+  } finally {
+    delete DICTIONARIES["pt-BR"];
+    SUPPORTED.pop();
+  }
+});
+
+test("el generador acepta xx y xx-YY", () => {
+  const out = renderIndex(["es", "pt-BR", "en"]);
+  expect(out).toContain('"pt-BR": dict_pt_BR');
+  expect(out).toContain('SUPPORTED: string[] = ["es","en","pt-BR"]');
 });

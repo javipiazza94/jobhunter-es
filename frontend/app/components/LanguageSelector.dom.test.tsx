@@ -68,3 +68,70 @@ test("el proveedor aplica el idioma del perfil por encima de localStorage", asyn
   await act(async () => root.unmount());
   setLocale("es");
 });
+
+test("el idioma del perfil o navegador no escribe jh.locale", async () => {
+  const { createRoot } = await import("react-dom/client");
+  const { act } = await import("react");
+  const { LocaleProvider, getLocale, setLocale } = await import("@/lib/i18n");
+  setLocale("es");
+  localStorage.removeItem("jh.locale");
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(<LocaleProvider profileLocale="en"><span /></LocaleProvider>);
+  });
+  expect(getLocale()).toBe("en");
+  expect(localStorage.getItem("jh.locale")).toBeNull();
+  await act(async () => root.unmount());
+  setLocale("es");
+});
+
+test("un perfil que llega tarde no pisa lo que el usuario ya eligió", async () => {
+  const { createRoot } = await import("react-dom/client");
+  const { act } = await import("react");
+  const { LocaleProvider, getLocale, setLocale } = await import("@/lib/i18n");
+  const { LanguageSelector } = await import("./LanguageSelector");
+  setLocale("es");
+  let release: (v: unknown) => void = () => {};
+  const late = new Promise(r => { release = r; });
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(<LocaleProvider loadProfileLocale={() => late}><LanguageSelector /></LocaleProvider>);
+  });
+  const select = host.querySelector("select") as HTMLSelectElement;
+  await act(async () => {
+    select.value = "en";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => { release("es"); await late; });
+  expect(getLocale()).toBe("en");
+  await act(async () => root.unmount());
+  setLocale("es");
+});
+
+test("un persist que rechaza o lanza no rompe el cambio de idioma", async () => {
+  const { createRoot } = await import("react-dom/client");
+  const { act } = await import("react");
+  const { LocaleProvider, getLocale, setLocale } = await import("@/lib/i18n");
+  const { LanguageSelector } = await import("./LanguageSelector");
+  for (const persist of [async () => { throw new Error("red"); }, () => { throw new Error("sync"); }]) {
+    setLocale("es");
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(<LocaleProvider profileLocale={null} persist={persist as () => Promise<unknown>}><LanguageSelector /></LocaleProvider>);
+    });
+    const select = host.querySelector("select") as HTMLSelectElement;
+    await act(async () => {
+      select.value = "en";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(getLocale()).toBe("en");
+    await act(async () => root.unmount());
+  }
+  setLocale("es");
+});
