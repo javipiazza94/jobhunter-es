@@ -1,4 +1,27 @@
-import type { InboxReport, InboxStatus, QuietApplication, Track } from "@/lib/types";
+import type {
+  AIKeyResult,
+  AIKeyUpdate,
+  AISettings,
+  AISettingsUpdate,
+  AISettingsView,
+  CheckResult,
+  EmailSettingsUpdate,
+  EmailSettingsView,
+  InboxReport,
+  InboxStatus,
+  InterviewPack,
+  JobStarted,
+  MarketSource,
+  QuietApplication,
+  SetupAnswers,
+  SetupApplyResult,
+  SetupProposal,
+  SetupStatus,
+  SourceSetting,
+  SourcesUpdate,
+  Track,
+} from "@/lib/types";
+import { errorDetail, type StoredProfile } from "@/lib/setup";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8020";
 
@@ -10,6 +33,121 @@ const CLIENT_HEADER = { "X-JH-Client": "dashboard" };
 function request(url: string, init: RequestInit = {}): Promise<Response> {
   if ((init.method ?? "GET").toUpperCase() === "GET") return fetch(url, init);
   return fetch(url, { ...init, headers: { ...CLIENT_HEADER, ...(init.headers as Record<string, string> | undefined) } });
+}
+
+/** Error de la API con su código HTTP (el mensaje es el `detail`). */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+/** Respuesta JSON o `ApiError(detail)` si la API respondió con error (las funciones nuevas siempre lo comprueban). */
+async function checked<T>(res: Response): Promise<T> {
+  const body: unknown = await res.json().catch(() => null);
+  if (!res.ok) throw new ApiError(errorDetail(body, res.status), res.status);
+  return body as T;
+}
+
+function sendJson(url: string, method: "POST" | "PUT", body?: unknown): Promise<Response> {
+  return request(url, {
+    method,
+    ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  });
+}
+
+// ── Asistente de primer arranque, perfil y ajustes ──────────────────────────────────────────────
+// Los secretos (clave de API, contraseña SMTP) solo viajan del navegador a la API, nunca de vuelta.
+
+export async function fetchSetupStatus(): Promise<SetupStatus> {
+  return checked(await request(`${BASE}/api/setup/status`));
+}
+
+export async function fetchMarkets(): Promise<Record<string, MarketSource[]>> {
+  return checked(await request(`${BASE}/api/setup/markets`));
+}
+
+/** Sube el CV (PDF/DOCX) en el campo `file`; fetch pone el Content-Type multipart y el Content-Length.
+ *  `ai`: proveedor elegido en el asistente, solo para esta llamada (no se guarda). */
+export async function uploadCv(file: Blob, filename?: string, ai?: AISettings): Promise<SetupProposal> {
+  const form = new FormData();
+  if (ai) form.append("ai", JSON.stringify(ai));
+  if (filename) form.append("file", file, filename);
+  else form.append("file", file);
+  return checked(await request(`${BASE}/api/setup/cv`, { method: "POST", body: form }));
+}
+
+export async function proposeProfile(text: string, ai?: AISettings): Promise<SetupProposal> {
+  return checked(await sendJson(`${BASE}/api/setup/propose`, "POST", ai ? { text, ai } : { text }));
+}
+
+/** Respuestas equivalentes a la configuración actual (para volver a ejecutar el asistente). */
+export async function fetchSetupCurrent(): Promise<SetupAnswers> {
+  return checked(await request(`${BASE}/api/setup/current`));
+}
+
+export async function fetchSourceSettings(): Promise<SourceSetting[]> {
+  return checked(await request(`${BASE}/api/settings/sources`));
+}
+
+export async function saveSourceSettings(update: SourcesUpdate): Promise<SourceSetting[]> {
+  return checked(await sendJson(`${BASE}/api/settings/sources`, "PUT", update));
+}
+
+/** Guarda la clave de API en el llavero (vale antes de completar el asistente); nunca se devuelve. */
+export async function saveAIKey(update: AIKeyUpdate): Promise<AIKeyResult> {
+  return checked(await sendJson(`${BASE}/api/settings/ai/key`, "POST", update));
+}
+
+/** Lanza una búsqueda: una fuente o el pipeline de un track. Lanza ApiError si no arranca (ya en marcha...). */
+/** `tracks`: varios tracks en un solo trabajo que los recorre uno detrás de otro (sin navegadores en paralelo). */
+export async function startScraperRun(run: { source: string } | { track: string } | { tracks: string[] }): Promise<JobStarted> {
+  const qs =
+    "tracks" in run ? `tracks=${encodeURIComponent(run.tracks.join(","))}`
+    : "track" in run ? `track=${encodeURIComponent(run.track)}`
+    : `source=${encodeURIComponent(run.source)}`;
+  return checked(await request(`${BASE}/api/scraper/run?${qs}`, { method: "POST" }));
+}
+
+export async function applySetup(answers: SetupAnswers): Promise<SetupApplyResult> {
+  return checked(await sendJson(`${BASE}/api/setup/apply`, "POST", answers));
+}
+
+export async function fetchProfile(): Promise<StoredProfile> {
+  return checked(await request(`${BASE}/api/profile`));
+}
+
+export async function saveProfile(profile: StoredProfile): Promise<StoredProfile> {
+  return checked(await sendJson(`${BASE}/api/profile`, "PUT", profile));
+}
+
+export async function fetchAISettings(): Promise<AISettingsView> {
+  return checked(await request(`${BASE}/api/settings/ai`));
+}
+
+export async function saveAISettings(update: AISettingsUpdate): Promise<AISettingsView> {
+  return checked(await sendJson(`${BASE}/api/settings/ai`, "PUT", update));
+}
+
+export async function testAI(): Promise<CheckResult> {
+  return checked(await sendJson(`${BASE}/api/settings/ai/test`, "POST"));
+}
+
+export async function fetchEmailSettings(): Promise<EmailSettingsView> {
+  return checked(await request(`${BASE}/api/settings/email`));
+}
+
+export async function saveEmailSettings(update: EmailSettingsUpdate): Promise<EmailSettingsView> {
+  return checked(await sendJson(`${BASE}/api/settings/email`, "PUT", update));
+}
+
+export async function testEmail(): Promise<CheckResult> {
+  return checked(await sendJson(`${BASE}/api/settings/email/test`, "POST"));
+}
+
+export async function generateInterviewPack(applicationId: string): Promise<InterviewPack> {
+  return checked(await sendJson(`${BASE}/api/applications/${encodeURIComponent(applicationId)}/interview-pack`, "POST"));
 }
 
 export async function fetchStats() {

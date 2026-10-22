@@ -57,6 +57,14 @@ bun run lint
 4. Register the scraper in `backend/scraper/runner.py`.
 5. Add unit and integration tests under `backend/tests/test_<source>.py`.
 
+### Adding an AI Provider
+AI providers live in `backend/ai/` behind one interface (`Provider` in `backend/ai/base.py`: `generate_text`, `generate_json`, `check`).
+1. Implement the provider in `backend/ai/` (subclass `BaseProvider` and implement `_complete` and `check`). HTTP providers use `requests`, CLI providers use `subprocess` with the prompt on stdin; no vendor SDKs. Errors must raise `AIError` and never include keys or response bodies.
+2. Register it in `_PROVIDERS` inside `get_provider()` in `backend/ai/__init__.py`.
+3. Add its name to the `provider` `Literal` of `AISettings` in `backend/search_config.py` (and to the TypeScript types in `frontend/lib/types.ts` and the provider selector in the frontend; `backend/tests/test_api_contract.py` guards the mirror).
+4. If it needs a secret, add it to `ENV_FALLBACK` in `backend/secrets_store.py`; secrets go to the keychain, never to `jobhunter.yaml`.
+5. Test it with doubles only: mock `requests` / `subprocess.run` / `shutil.which` as in `backend/tests/test_ai_providers.py`, and add the provider to the parametrized `backend/tests/test_first_run_e2e.py`. Tests must never hit the network or a real CLI.
+
 ### Adding a Language
 
 JobHunter targets the Spanish job market, but cover letters can be written in other languages:

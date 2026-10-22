@@ -7,6 +7,7 @@ misma fuente, espera entre ejecuciones) con el registro de los últimos trabajos
 el proceso de la API: se pierde al reiniciarla (un subproceso en marcha seguiría su curso).
 """
 import itertools
+import re
 import subprocess
 import sys
 import threading
@@ -37,6 +38,7 @@ class Job:
     finished_at: str | None = None
     returncode: int | None = None
     log_path: str = ""
+    also: tuple[str, ...] = ()       # fuentes compartidas reservadas en el RunGate
     done: threading.Event = field(default_factory=threading.Event, repr=False)
 
     def as_dict(self) -> dict:
@@ -55,18 +57,20 @@ class JobManager:
         self._lock = threading.Lock()
         self._seq = itertools.count(1)
 
-    def start(self, source: str) -> Job:
-        """Lanza el trabajo o lanza GateRejected (409 ya en marcha / 429 ejecutado hace poco)."""
-        self._gate.acquire(source)
+    def start(self, source: str, also: tuple[str, ...] = ()) -> Job:
+        """Lanza el trabajo o lanza GateRejected (409 ya en marcha / 429 ejecutado hace poco). `also`: portales
+        que el trabajo usa y que nadie más puede usar mientras corre (ver RunGate)."""
+        self._gate.acquire(source, also)
         try:
             self._log_dir.mkdir(parents=True, exist_ok=True)
-            job = Job(id=f"{int(time.time())}-{next(self._seq)}", source=source,
+            job = Job(id=f"{int(time.time())}-{next(self._seq)}", source=source, also=tuple(also),
                       started_at=datetime.now().isoformat(timespec="seconds"))
-            job.log_path = str(self._log_dir / f"{job.id}-{source}.log")
+            safe = re.sub(r"[^A-Za-z0-9_-]+", "-", source)
+            job.log_path = str(self._log_dir / f"{job.id}-{safe}.log")
             with open(job.log_path, "wb") as log:
                 proc = self._launcher(source, log)
         except BaseException:
-            self._gate.cancel(source)  # no llegó a arrancar: no hay que esperar para reintentar
+            self._gate.cancel(source, also)  # no llegó a arrancar: no hay que esperar para reintentar
             raise
         with self._lock:
             self._jobs[job.id] = job
@@ -90,7 +94,7 @@ class JobManager:
             raise
         finally:
             job.finished_at = datetime.now().isoformat(timespec="seconds")
-            self._gate.release(job.source)
+            self._gate.release(job.source, job.also)
             job.done.set()
 
     def get(self, job_id: str) -> Job | None:

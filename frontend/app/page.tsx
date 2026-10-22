@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { Building2, Briefcase, Send, Users, Play, Check, ChevronRight, Trash2 } from "lucide-react";
-import { fetchStats, fetchCompanies, fetchOffers, fetchTracks, fetchContacts, fetchApplications, triggerScraper, fetchPendingApplications, createDrafts, markOfferSent, unmarkOfferSent, updateApplicationStatus, discardOffer, fetchFollowups, fetchStaleApplications, type PendingApplication } from "@/lib/api";
+import { fetchStats, fetchCompanies, fetchOffers, fetchTracks, fetchContacts, fetchApplications, triggerScraper, fetchPendingApplications, createDrafts, markOfferSent, unmarkOfferSent, updateApplicationStatus, discardOffer, fetchFollowups, fetchStaleApplications, fetchSetupStatus, ApiError, type PendingApplication } from "@/lib/api";
 import type { Application, Company, Contact, JobOffer, QuietApplication, Stats, Track } from "@/lib/types";
 import { failureMessage, isObject, settle, type Failures } from "@/lib/safeLoad";
 import { MODALITY_BADGE, SOURCE_COLORS, STATUS_COLORS, parseReviewFlags, trackBadge, trackTabs } from "@/lib/ui";
 import { useInboxSync } from "@/app/hooks/useInboxSync";
 import { InboxBanner } from "@/app/components/InboxBanner";
+import { SetupBanner } from "@/app/components/SetupBanner";
 import { useOfferFilters } from "@/app/hooks/useOfferFilters";
 import { useApplicationFilters } from "@/app/hooks/useApplicationFilters";
 import { OffersTab } from "@/app/components/tabs/OffersTab";
@@ -17,6 +18,10 @@ import { CompaniesTab } from "@/app/components/tabs/CompaniesTab";
 import { ContactsTab } from "@/app/components/tabs/ContactsTab";
 import { ApplicationsTab } from "@/app/components/tabs/ApplicationsTab";
 import { FollowupsTab } from "@/app/components/tabs/FollowupsTab";
+import { ProfileTab } from "@/app/components/tabs/ProfileTab";
+import { SetupWizard } from "@/app/components/setup/SetupWizard";
+import { InterviewPackPanel } from "@/app/components/InterviewPackPanel";
+import { setupPrompt, type RunSummary } from "@/lib/setup";
 
 // Matches the `valid` set in backend/main.py::update_application_status
 const APPLICATION_STATUSES = ["sent", "replied", "interview", "offer", "rejected", "withdrawn", "expired", "no_response"];
@@ -49,7 +54,12 @@ export default function Dashboard() {
   const [trackOffers, setTrackOffers] = useState<Record<string, JobOffer[]>>({});
   const [followups, setFollowups] = useState<QuietApplication[]>([]);
   const [staleApps, setStaleApps] = useState<QuietApplication[]>([]);
-  const [tab, setTab] = useState<"offers" | "companies" | "contacts" | "applications" | "pending" | "followups" | `track:${string}`>("offers");
+  const [tab, setTab] = useState<"offers" | "companies" | "contacts" | "applications" | "pending" | "followups" | "profile" | `track:${string}`>("offers");
+  // Asistente: a pantalla completa en el primer arranque (no se puede cerrar) o reabierto desde Perfil.
+  const [wizard, setWizard] = useState<"closed" | "first-run" | "rerun">("closed");
+  // Instalación con perfil pero sin jobhunter.yaml propio: aviso descartable que abre el asistente cancelable.
+  const [setupBanner, setSetupBanner] = useState(false);
+  const [profileVersion, setProfileVersion] = useState(0);
   const [selectedOffer, setSelectedOffer] = useState<JobOffer | null>(null);
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
@@ -113,8 +123,33 @@ export default function Dashboard() {
   });
 
   // Carga inicial: se obtiene y se aplica en el .then (no hay setState síncrono dentro del efecto).
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchAll().then(applyAll); }, []);
+  useEffect(() => {
+    fetchAll().then(applyAll);
+    // Un backend antiguo sin /api/setup/status simplemente no abre el asistente.
+    fetchSetupStatus()
+      .then(s => {
+        const prompt = setupPrompt(s);
+        if (prompt === "wizard") setWizard("first-run");
+        setSetupBanner(prompt === "banner");
+      })
+      .catch(e => {
+        // Un backend antiguo sin la ruta (404) simplemente no abre el asistente; cualquier otro fallo se avisa.
+        if (!(e instanceof ApiError && e.status === 404)) console.warn("No se pudo comprobar el asistente:", e);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSetupDone = async ({ started, failed }: RunSummary) => {
+    setWizard("closed");
+    setSetupBanner(false);
+    setProfileVersion(v => v + 1);
+    const parts = [`Configuración guardada. Búsquedas lanzadas: ${started.join(", ") || "ninguna"}`];
+    if (failed.length) parts.push(`No arrancaron: ${failed.map(f => `${f.name} (${f.message})`).join("; ")}`);
+    setActionMsg(parts.join(". "));
+    await load();
+    // Los scrapers corren en segundo plano: se vuelve a cargar al rato para ver las primeras ofertas.
+    setTimeout(() => { load(); setActionMsg(""); }, failed.length ? 30000 : 15000);
+  };
 
   const handleScrape = async (source: string) => {
     setLoading(true);
@@ -247,8 +282,15 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#0f0f14] text-gray-300 font-sans selection:bg-indigo-500/30">
+      {wizard !== "closed" && (
+        <SetupWizard
+          prefill={wizard === "rerun"}
+          onDone={handleSetupDone}
+          onCancel={wizard === "rerun" ? () => setWizard("closed") : undefined}
+        />
+      )}
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-[#0f0f14]/80 backdrop-blur-xl border-b border-white/5 px-6 py-4">
+      <header inert={wizard !== "closed"} className="sticky top-0 z-30 bg-[#0f0f14]/80 backdrop-blur-xl border-b border-white/5 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between animate-fade-in">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-[0_0_20px_rgba(99,102,241,0.3)]">
@@ -293,7 +335,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+      <main inert={wizard !== "closed"} className="max-w-7xl mx-auto px-6 py-8 space-y-8">
         {/* Analytics row */}
         {stats && (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
@@ -325,6 +367,7 @@ export default function Dashboard() {
           </div>
         )}
 
+        {setupBanner && <SetupBanner onOpen={() => setWizard("rerun")} onDismiss={() => setSetupBanner(false)} />}
         <InboxBanner status={inbox.status} syncing={inbox.syncing} onSync={inbox.sync} />
 
         {/* Navigation Tabs */}
@@ -338,7 +381,8 @@ export default function Dashboard() {
               { id: "applications", label: "Candidaturas", count: applications.length },
               { id: "pending", label: "Revisión", count: pendingApps.length },
               { id: "followups", label: "Seguimiento", count: followups.length },
-            ] as { id: typeof tab; label: string; count: number }[]
+              { id: "profile", label: "Perfil" },
+            ] as { id: typeof tab; label: string; count?: number }[]
           ).map(t => (
             <button
               key={t.id}
@@ -350,10 +394,12 @@ export default function Dashboard() {
               }`}
             >
               {t.label} 
-              <span className={`ml-2 px-2 py-0.5 rounded-md text-xs ${tab === t.id ? 'bg-white/20' : 'bg-black/20'}`}>
-                {t.count}
-              </span>
-              {t.id === "pending" && t.count > 0 && (
+              {t.count !== undefined && (
+                <span className={`ml-2 px-2 py-0.5 rounded-md text-xs ${tab === t.id ? 'bg-white/20' : 'bg-black/20'}`}>
+                  {t.count}
+                </span>
+              )}
+              {t.id === "pending" && !!t.count && (
                 <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.6)]" />
               )}
             </button>
@@ -377,6 +423,8 @@ export default function Dashboard() {
         {tab === "pending" && <PendingTab pendingApps={pendingApps} tracks={tracks} onAction={load} />}
 
         {tab === "followups" && <FollowupsTab followups={followups} stale={staleApps} onAction={load} />}
+
+        {tab === "profile" && <ProfileTab key={profileVersion} onRerunWizard={() => setWizard("rerun")} />}
         
         {tracks.filter(t => tab === `track:${t.id}`).map(t => (
           <TrackTab
@@ -597,7 +645,7 @@ export default function Dashboard() {
       {selectedApplication && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-fade-in">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedApplication(null)} />
-          <div className="relative w-full max-w-lg bg-[#16161f] border border-white/10 rounded-2xl shadow-[0_0_40px_rgba(0,0,0,0.5)] overflow-hidden">
+          <div className="relative w-full max-w-lg bg-[#16161f] border border-white/10 rounded-2xl shadow-[0_0_40px_rgba(0,0,0,0.5)] max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-white/5 bg-white/5 flex items-start justify-between">
               <div>
                 <h2 className="text-lg font-bold text-white mb-1">{selectedApplication.job_title || "Candidatura espontánea"}</h2>
@@ -643,6 +691,7 @@ export default function Dashboard() {
                   <div className="text-gray-300 capitalize">{selectedApplication.method}</div>
                 </div>
               </div>
+              <InterviewPackPanel key={selectedApplication.id} applicationId={selectedApplication.id} />
             </div>
             <div className="p-5 border-t border-white/5 bg-black/20 flex justify-between gap-3">
               {selectedApplication.job_offer_id && (

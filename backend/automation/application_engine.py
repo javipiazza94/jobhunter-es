@@ -11,7 +11,9 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from automation.cv_selector import cover_letter_docx_for, cover_template_for, default_track_id, select_cv
-from config import MAX_EMAILS_PER_DAY, PROFILE_PATH, RECONTACT_COOLDOWN_DAYS
+from ai import get_provider
+from config import MAX_EMAILS_PER_DAY, RECONTACT_COOLDOWN_DAYS
+from profile_store import load_profile
 from database import (
     get_conn,
     get_pending_offers,
@@ -19,6 +21,7 @@ from database import (
     record_history,
 )
 from automation.application_archive import get_application_attachments
+from automation.ai_writing import AIBudget, adapt_cover_letter
 from automation.cover_letter import generate as generate_letter
 from automation.email_sender import send_email
 from automation.filter_engine import classify_track
@@ -32,11 +35,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-import json as _json
 
 
 def _load_profile() -> dict:
-    return _json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+    """Perfil del usuario; `{}` si aún no existe."""
+    return load_profile()
 
 
 def _get_best_contact(conn, company_id: str) -> dict | None:
@@ -69,6 +72,15 @@ def _is_recently_contacted(conn, company_id: str, contact_value: str) -> bool:
     return row is not None
 
 
+def _letter_provider():
+    """Proveedor de IA para adaptar cartas; `None` con `none` o config inválida (cartas con plantilla)."""
+    try:
+        provider = get_provider()
+    except Exception:  # noqa: BLE001 — sin IA válida se sigue con plantillas
+        return None
+    return None if getattr(provider, "name", "none") == "none" else provider
+
+
 def create_drafts(limit: int | None = None) -> dict:
     """
     Generate pending_approval application drafts without sending any email.
@@ -84,6 +96,9 @@ def create_drafts(limit: int | None = None) -> dict:
 def _create_drafts(conn, limit: int | None = None) -> dict:
     """Cuerpo de create_drafts() sobre una conexión ya abierta (la cierra el llamador)."""
     pending = get_pending_offers(conn)
+    ai_provider = _letter_provider()
+    ai_budget = AIBudget()
+    profile = _load_profile() if ai_provider is not None else {}
     results = {
         "drafts_created": 0,
         "skipped_manual_review": 0,
@@ -127,6 +142,9 @@ def _create_drafts(conn, limit: int | None = None) -> dict:
             template=template,
             variant_seed=offer["company_name"] + (offer.get("title") or ""),
         )
+        if ai_provider is not None and ai_budget.before_call():
+            cover_letter, source = adapt_cover_letter(cover_letter, offer, profile, ai_provider)
+            ai_budget.record(source)
 
         # record_application commits internally
         record_application(conn, {

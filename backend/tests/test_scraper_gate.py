@@ -216,3 +216,140 @@ def test_si_el_proceso_falla_queda_registrado_y_libera_el_turno(clock, monkeypat
     clock.now += 300
     assert lanzar("manfred")[0] == 200  # no se queda en 409
     terminar(json.loads(call("GET", "/api/jobs")[2])[0]["id"])
+
+
+# ── Track desde la API (asistente) ───────────────────────────────────────────────────────
+
+def test_lanzar_un_track_arranca_su_pipeline_como_trabajo_propio(api):
+    from search_config import get_config
+
+    track = get_config().standard_tracks()[0].id
+    status, _, body = call("POST", "/api/scraper/run", headers=[CLIENT], query=f"track={track}")
+    datos = json.loads(body)
+    assert status == 200, datos
+    assert api == [f"track:{track}"]
+    terminar(datos["job_id"])
+    assert ":" not in Path(main._jobs.get(datos["job_id"]).log_path).name  # nombre de log seguro
+
+
+def test_track_desconocido_da_404_y_no_lanza_nada(api):
+    status, _, _ = call("POST", "/api/scraper/run", headers=[CLIENT], query="track=no_existe")
+    assert status == 404
+    assert api == []
+
+
+# ── Trabajos que usan varios portales: no se solapan con los mismos portales ─────────────────────
+
+
+def test_las_fuentes_compartidas_se_reservan_con_el_trabajo(clock):
+    gate = RunGate(300, clock)
+    gate.acquire("track:a", also=("tecnoempleo", "linkedin"))
+    with pytest.raises(GateRejected) as e:
+        gate.acquire("track:b", also=("linkedin",))
+    assert e.value.status == 409 and "linkedin" in e.value.detail
+    with pytest.raises(GateRejected) as e2:
+        gate.acquire("tecnoempleo")
+    assert e2.value.status == 409
+    gate.acquire("manfred")  # otro portal: sí
+    gate.release("track:a", also=("tecnoempleo", "linkedin"))
+    gate.acquire("track:b", also=("linkedin",))  # el siguiente track no espera el cooldown de sus portales
+
+
+def test_un_rechazo_no_deja_reservada_ninguna_fuente(clock):
+    gate = RunGate(300, clock)
+    gate.acquire("linkedin")
+    with pytest.raises(GateRejected):
+        gate.acquire("track:a", also=("tecnoempleo", "linkedin"))
+    gate.acquire("tecnoempleo")  # no quedó reservada a medias
+
+
+def test_tras_un_track_la_fuente_suelta_respeta_la_espera(clock):
+    gate = RunGate(300, clock)
+    gate.acquire("track:a", also=("tecnoempleo",))
+    gate.release("track:a", also=("tecnoempleo",))
+    with pytest.raises(GateRejected) as e:
+        gate.acquire("tecnoempleo")
+    assert e.value.status == 429
+
+
+def test_cancelar_libera_tambien_las_fuentes_compartidas(clock):
+    gate = RunGate(300, clock)
+    gate.acquire("track:a", also=("tecnoempleo",))
+    gate.cancel("track:a", also=("tecnoempleo",))
+    gate.acquire("tecnoempleo")
+
+
+@pytest.fixture
+def two_tracks():
+    import search_config
+    saved = (search_config._cache, search_config._pinned, search_config._loaded_from)
+    cfg = search_config.load_config(search_config.DEFAULT_CONFIG_PATH)
+    first = cfg.standard_tracks()[0]
+    second = first.model_copy(update={"id": "segundo", "label": {"es": "Segundo", "en": "Second"}})
+    cfg = cfg.model_copy(update={"tracks": [*cfg.tracks, second],
+                                 "sources": {**cfg.sources, "linkedin": {"searches": []}}})
+    search_config.set_config(cfg)
+    yield first.id, second.id
+    search_config._cache, search_config._pinned, search_config._loaded_from = saved
+
+
+def _bloquear(api, monkeypatch, tmp_path):
+    """Lanzador cuyos procesos no terminan hasta que se suelta el evento (simula un scraping largo)."""
+    soltar = threading.Event()
+    gate = main._scraper_gate
+
+    class Proc:
+        def wait(self, timeout=None):
+            soltar.wait(10)
+            return 0
+
+    def lanzar_(source, log):
+        api.append(source)
+        return Proc()
+
+    monkeypatch.setattr(main, "_jobs", JobManager(gate, launcher=lanzar_, log_dir=tmp_path))
+    return soltar
+
+
+def test_dos_tracks_no_scrapean_a_la_vez(api, two_tracks, monkeypatch, tmp_path):
+    soltar = _bloquear(api, monkeypatch, tmp_path)
+    a, b = two_tracks
+    status, _, body = call("POST", "/api/scraper/run", headers=[CLIENT], query=f"track={a}")
+    assert status == 200
+    status_b, _, body_b = call("POST", "/api/scraper/run", headers=[CLIENT], query=f"track={b}")
+    assert status_b == 409, body_b
+    assert lanzar("linkedin")[0] == 409  # el portal del track en marcha tampoco va suelto
+    assert lanzar("manfred")[0] == 200  # fuera del pipeline de tracks: sí
+    soltar.set()
+    terminar(json.loads(body)["job_id"])
+    assert call("POST", "/api/scraper/run", headers=[CLIENT], query=f"track={b}")[0] == 200
+    assert api == [f"track:{a}", "manfred", f"track:{b}"]
+
+
+def test_varios_tracks_en_un_solo_trabajo_secuencial(api, two_tracks):
+    a, b = two_tracks
+    status, _, body = call("POST", "/api/scraper/run", headers=[CLIENT], query=f"tracks={a},{b},{a}")
+    datos = json.loads(body)
+    assert status == 200, datos
+    assert api == [f"track:{a},{b}"] and datos["source"] == f"track:{a},{b}"
+    terminar(datos["job_id"])
+
+
+def test_tracks_con_uno_desconocido_da_404_y_no_lanza_nada(api, two_tracks):
+    assert call("POST", "/api/scraper/run", headers=[CLIENT], query=f"tracks={two_tracks[0]},no_existe")[0] == 404
+    assert api == []
+
+
+def test_el_trabajo_de_varios_tracks_los_recorre_en_orden(monkeypatch):
+    from scraper import jobs, runner
+    import database
+    vistos = []
+
+    async def fake_run_track_source(track_id, dry_run, max_pages, only_sources=None):
+        vistos.append(track_id)
+
+    monkeypatch.setattr(runner, "run_track_source", fake_run_track_source)
+    monkeypatch.setattr(database, "get_conn", lambda: type("C", (), {"close": lambda self: None})())
+    monkeypatch.setattr(database, "init_db", lambda conn: None)
+    jobs.run("track:uno,dos")
+    assert vistos == ["uno", "dos"]

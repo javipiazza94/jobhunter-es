@@ -6,18 +6,32 @@ Run: uvicorn main:app --reload --port 8020
 """
 import csv
 import io
+import os
 import re
 import sqlite3
+import unicodedata
+import uuid
 from contextlib import asynccontextmanager
 # pyrefly: ignore [missing-import]
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
+from fastapi import Body, FastAPI, HTTPException, BackgroundTasks, Depends, Request
 # pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
 # pyrefly: ignore [missing-import]
 from fastapi.responses import JSONResponse, StreamingResponse
 # pyrefly: ignore [missing-import]
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+# pyrefly: ignore [missing-import]
+from starlette.concurrency import run_in_threadpool
+# pyrefly: ignore [missing-import]
+from starlette.datastructures import UploadFile
 import logging
+from pathlib import Path
+
+import ai
+import config
+import profile_store
+import secrets_store
+import setup_builder
 
 from config import (
     ALLOWED_HOSTS, API_CLIENT_HEADER, API_CLIENT_VALUE, API_PORT, CORS_ORIGINS, DB_PATH, INBOX_DIR, INBOX_POLL_SECONDS,
@@ -26,14 +40,18 @@ from config import (
 from inbox_watcher import InboxWatcher
 from job_manager import JobManager
 from rate_gate import GateRejected, RunGate
-from search_config import get_config
+from pydantic import ValidationError
+from search_config import AISettings, ConfigError, EmailSettings, get_config, save_config, user_config_path
 from schemas import (
     ApplicationOut, CompanyOut, ContactOut, CoverLetterIn, DashboardStatsOut, HistoryEntryOut, JobDetailOut,
     InboxReportOut, InboxStatusOut, JobOut, JobStartedOut, OfferOut, OutcomeIn, PendingApplicationOut,
     QuietApplicationOut, ResolveStaleIn, StatsOut, TrackOut,
+    AISettingsIn, AISettingsOut, CheckOut, EmailSettingsIn, EmailSettingsOut, MarketSourceOut, SetupApplyOut,
+    InterviewPackOut, ProfileIn, SetupProposalOut, SetupStatusOut, SetupTextIn,
+    AIKeyIn, AIKeyOut, SourceSettingOut, SourcesIn,
 )
-from scraper.jobs import SOURCES as SCRAPER_SOURCES
-from automation import followup
+from scraper.jobs import SOURCES as SCRAPER_SOURCES, TRACK_JOB_PREFIX, TRACK_PIPELINE_SOURCES
+from automation import cv_reader, email_sender, followup, profile_proposal
 from automation.filter_engine import classify_track
 from automation.location import parse_modality
 from automation.experience_classifier import classify_experience, classify_contract
@@ -277,11 +295,27 @@ _jobs = JobManager(_scraper_gate, timeout=JOB_TIMEOUT_SECONDS)
 
 
 @app.post("/api/scraper/run", response_model=JobStartedOut)
-def trigger_scraper(source: str = "seed"):
-    if source not in SCRAPER_SOURCES:
+def trigger_scraper(source: str = "seed", track: str | None = None, tracks: str | None = None):
+    """Lanza una fuente (`source`), el pipeline multi-portal de un track estándar (`track`, que respeta las
+    fuentes activadas en jobhunter.yaml) o el de varios tracks uno detrás de otro en un solo trabajo (`tracks`,
+    ids separados por comas). Un trabajo de tracks reserva además los portales que recorre: ni otro track ni esa
+    fuente suelta corren a la vez (409), así nunca hay dos navegadores/sesiones del mismo portal."""
+    also: tuple[str, ...] = ()
+    if track is not None or tracks is not None:
+        cfg = get_config()
+        ids = list(dict.fromkeys(i.strip() for i in (tracks if tracks is not None else track).split(",") if i.strip()))
+        if not ids:
+            raise HTTPException(400, "Indica al menos un track")
+        for track_id in ids:
+            cfg_track = cfg.track(track_id)
+            if cfg_track is None or cfg_track.kind != "standard":
+                raise HTTPException(404, f"Track desconocido: {track_id}")
+        source = f"{TRACK_JOB_PREFIX}{','.join(ids)}"
+        also = tuple(s for s in TRACK_PIPELINE_SOURCES if s in cfg.sources)
+    elif source not in SCRAPER_SOURCES:
         raise HTTPException(400, f"Unknown source: {source}")
     try:
-        job = _jobs.start(source)
+        job = _jobs.start(source, also)
     except GateRejected as e:
         headers = {"Retry-After": str(e.retry_after)} if e.retry_after else None
         raise HTTPException(e.status, e.detail, headers=headers)
@@ -329,6 +363,24 @@ def get_pending_applications_endpoint(conn: sqlite3.Connection = Depends(get_db)
         d["cv_file"] = cv.name if cv else None
         out.append(d)
     return out
+
+
+@app.post("/api/applications/{app_id}/interview-pack", response_model=InterviewPackOut)
+def interview_pack(app_id: str):
+    """Genera con IA el pack de entrevista (Markdown en la carpeta de la candidatura)."""
+    from automation import ai_writing
+
+    try:
+        path = ai_writing.generate_interview_pack(app_id)
+        return {"path": str(path), "markdown": path.read_text(encoding="utf-8")}
+    except LookupError:
+        raise HTTPException(404, "Candidatura no encontrada") from None
+    except ai.AIUnavailable as exc:
+        raise HTTPException(409, f"IA no disponible: {exc}. Configura un proveedor en Perfil.") from None
+    except OSError:
+        raise HTTPException(500, "No se pudo guardar el pack de entrevista en disco; revisa permisos y espacio libre") from None
+    except ai.AIError as exc:
+        raise HTTPException(502, f"La IA no pudo generar el pack ({type(exc).__name__})") from None
 
 
 @app.post("/api/applications/{app_id}/approve")
@@ -469,6 +521,325 @@ def export_history(format: str = "json", conn: sqlite3.Connection = Depends(get_
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
     return rows
+
+# ── Asistente de primer arranque, perfil y ajustes de IA / email ──────────────────────────────
+# Las rutas (JH_HOME, cv/, profile.json) se leen de `config` en cada llamada. Los secretos van al
+# llavero y nunca vuelven en una respuesta: solo `has_*` y de dónde salen (`env` / `keychain`).
+
+CV_EXTENSIONS = (".pdf", ".docx")
+_UPLOAD_CHUNK = 1024 * 1024
+_MULTIPART_OVERHEAD = 64 * 1024  # cabeceras multipart sobre el tamaño del propio archivo
+_CV_TOO_BIG = "El archivo supera el tamaño máximo de 10 MB"
+_API_KEY_SECRETS = {"anthropic": "anthropic_api_key", "openai": "openai_api_key"}
+_SMTP_SECRET = "smtp_password"
+_BASE_URL_PROVIDERS = ("ollama", "openai")
+MAX_PROFILE_BYTES = 1024 * 1024
+
+
+def _require_user_config() -> None:
+    """Los ajustes se guardan sobre el jobhunter.yaml del usuario: sin él, primero el asistente."""
+    if not user_config_path().is_file():
+        raise HTTPException(409, "Completa primero el asistente")
+
+
+def _secret_source(name: str) -> str | None:
+    """'env' si manda la variable de entorno, 'keychain' si solo la tiene el llavero, None si no hay."""
+    if os.environ.get(secrets_store.ENV_FALLBACK[name]):
+        return "env"
+    return "keychain" if secrets_store.has_secret(name) else None
+
+
+def _keychain_unavailable(name: str) -> HTTPException:
+    env = secrets_store.ENV_FALLBACK[name]
+    return HTTPException(503, f"El llavero del sistema no está disponible: usa la variable de entorno {env}")
+
+
+def _store_secret(name: str, value: str) -> None:
+    try:
+        secrets_store.set_secret(name, value)
+    except secrets_store.SecretStoreUnavailable:
+        raise _keychain_unavailable(name) from None
+
+
+@app.exception_handler(secrets_store.SecretStoreUnavailable)
+async def _secret_store_unavailable(request, exc):
+    return JSONResponse(
+        {"detail": "El llavero del sistema no está disponible: usa la variable de entorno correspondiente"},
+        status_code=503,
+    )
+
+
+def _safe_cv_filename(filename: str | None) -> str:
+    """Nombre seguro para guardar en cv/: sin rutas, ASCII `[A-Za-z0-9_-]` y extensión .pdf/.docx (si no, 400)."""
+    name = re.split(r"[\\/]", filename or "")[-1]
+    stem, dot, ext = name.rpartition(".")
+    ext = "." + ext.lower() if dot else ""
+    if ext not in CV_EXTENSIONS:
+        raise HTTPException(400, "Tipo de archivo no soportado: sube el CV en PDF o DOCX")
+    ascii_stem = unicodedata.normalize("NFKD", stem).encode("ascii", "ignore").decode()
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "_", ascii_stem).strip("_-")[:80] or "cv"
+    return safe + ext
+
+
+def _free_cv_name(cv_dir: Path, name: str) -> str:
+    """`name` si está libre en cv/; si no, `<base>-2.<ext>`, `<base>-3.<ext>`… (nunca sobrescribe un CV)."""
+    stem, suffix = Path(name).stem, Path(name).suffix
+    candidate, n = name, 1
+    while (cv_dir / candidate).exists():
+        n += 1
+        candidate = f"{stem}-{n}{suffix}"
+    return candidate
+
+
+def _check_base_url(settings: AISettings | None) -> None:
+    """`base_url` solo vale para ollama/openai (422): con otro proveedor, su clave de API iría a una URL arbitraria."""
+    if settings is not None and settings.base_url and settings.provider not in _BASE_URL_PROVIDERS:
+        raise HTTPException(422, f"base_url solo vale para {' u '.join(_BASE_URL_PROVIDERS)}")
+
+
+def _proposal(text: str, cv_path: str | None, ai_settings: AISettings | None = None) -> dict:
+    """`ai_settings`: proveedor elegido en el asistente, solo para esta llamada (no se guarda)."""
+    _check_base_url(ai_settings)
+    provider = ai.get_provider(ai_settings) if ai_settings is not None else None
+    draft, source = profile_proposal.propose_profile(text, provider=provider)
+    return {"draft": draft, "source": source, "text_chars": len(text), "cv_path": cv_path}
+
+
+def _form_ai_settings(raw) -> AISettings | None:
+    """Campo multipart `ai` (JSON de AISettings) o None; 422 si no es válido."""
+    if raw is None or raw == "":
+        return None
+    if not isinstance(raw, str):
+        raise HTTPException(422, "El campo 'ai' debe ser JSON")
+    try:
+        settings = AISettings.model_validate_json(raw)
+    except ValidationError as exc:
+        raise HTTPException(422, exc.errors(include_url=False, include_context=False, include_input=False)) from None
+    _check_base_url(settings)
+    return settings
+
+
+@app.get("/api/setup/status", response_model=SetupStatusOut)
+def setup_status():
+    """`needs_setup` (asistente obligatorio) solo si falta el perfil. Una instalación antigua con profile.json
+    pero sin jobhunter.yaml propio sigue con los valores por defecto: el dashboard le sugiere el asistente
+    (`has_config` false) sin forzarlo."""
+    has_config = user_config_path().is_file()
+    has_profile = profile_store.profile_exists()
+    return {"needs_setup": not has_profile, "has_profile": has_profile, "has_config": has_config}
+
+
+@app.get("/api/setup/markets", response_model=dict[str, list[MarketSourceOut]])
+def setup_markets():
+    return setup_builder.load_markets()
+
+
+@app.post("/api/setup/cv", response_model=SetupProposalOut)
+async def setup_upload_cv(request: Request):
+    """Sube el CV (multipart, campo `file`), lo guarda en JH_HOME/cv con nombre saneado y propone un borrador.
+
+    Exige Content-Length (411) y rechaza más de 10 MB (413) antes de leer el cuerpo; además se lee por trozos y se corta al pasar de 10 MB (413) sin dejar nada en disco; un archivo que no se
+    puede leer (cifrado, vacío, corrupto) da 400 con el motivo y tampoco se guarda."""
+    length = request.headers.get("content-length", "")
+    if not length.isdigit():
+        raise HTTPException(411, "Falta la cabecera Content-Length")
+    if int(length) > cv_reader.MAX_FILE_BYTES + _MULTIPART_OVERHEAD:
+        raise HTTPException(413, _CV_TOO_BIG)
+    form = await request.form(max_files=1, max_fields=5)
+    try:
+        ai_settings = _form_ai_settings(form.get("ai"))
+        upload = form.get("file")
+        if not isinstance(upload, UploadFile):
+            raise HTTPException(400, "Falta el archivo del CV (campo 'file')")
+        name = _safe_cv_filename(upload.filename)
+        cv_dir = Path(config.CV_DIR)
+        cv_dir.mkdir(parents=True, exist_ok=True)
+        tmp = cv_dir / f".upload-{uuid.uuid4().hex}{Path(name).suffix}"
+        try:
+            size = 0
+            with tmp.open("wb") as fh:
+                while chunk := await upload.read(_UPLOAD_CHUNK):
+                    size += len(chunk)
+                    if size > cv_reader.MAX_FILE_BYTES:
+                        raise HTTPException(413, _CV_TOO_BIG)
+                    fh.write(chunk)
+            try:
+                text = await run_in_threadpool(cv_reader.extract_text, tmp)
+            except cv_reader.CVReadError as exc:
+                raise HTTPException(400, str(exc)) from None
+            except Exception as exc:  # noqa: BLE001 — un archivo raro nunca debe dar 500
+                logging.getLogger(__name__).info("CV ilegible: %s", type(exc).__name__)
+                raise HTTPException(400, "No se pudo leer el CV; prueba con otro archivo o rellena el perfil a mano")
+            name = _free_cv_name(cv_dir, name)
+            os.replace(tmp, cv_dir / name)
+        finally:
+            tmp.unlink(missing_ok=True)
+    finally:
+        await form.close()
+    return await run_in_threadpool(_proposal, text, f"cv/{name}", ai_settings)
+
+
+@app.post("/api/setup/propose", response_model=SetupProposalOut)
+def setup_propose(body: SetupTextIn):
+    """Igual que subir el CV pero con el texto pegado a mano."""
+    return _proposal(body.text, None, body.ai)
+
+
+@app.post("/api/setup/apply", response_model=SetupApplyOut)
+def setup_apply(answers: setup_builder.SetupAnswers):
+    """Escribe profile.json y jobhunter.yaml a partir de las respuestas del asistente."""
+    _check_base_url(answers.ai)
+    try:
+        return setup_builder.apply_setup(answers)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+
+
+@app.get("/api/setup/current", response_model=setup_builder.SetupAnswers)
+def setup_current():
+    """Respuestas equivalentes a la configuración actual, para volver a ejecutar el asistente sin empezar de cero."""
+    return setup_builder.current_answers()
+
+
+@app.get("/api/profile")
+def get_profile():
+    return profile_store.load_profile()
+
+
+async def _limit_profile_size(request: Request) -> None:
+    length = request.headers.get("content-length", "")
+    if length.isdigit() and int(length) > MAX_PROFILE_BYTES:
+        raise HTTPException(413, "El perfil supera el tamaño máximo de 1 MB")
+
+
+@app.put("/api/profile", dependencies=[Depends(_limit_profile_size)])
+def put_profile(profile: ProfileIn = Body(...)):
+    """Sustituye el perfil completo y devuelve lo guardado. Validación laxa (`ProfileIn`): las secciones
+    conocidas deben tener su forma (si no, 422); las claves desconocidas se guardan tal cual. Los campos
+    derivados (código de país, permiso de trabajo, nombre canónico de idioma) se recalculan como en el asistente."""
+    profile_store.save_profile(setup_builder.normalize_profile(profile.model_dump(exclude_unset=True)))
+    return profile_store.load_profile()
+
+
+def _merge_settings(model, current, updates: dict):
+    """Sección actual + campos enviados, revalidada (422 si el resultado no vale)."""
+    try:
+        return model.model_validate({**current.model_dump(), **updates})
+    except ValidationError as exc:
+        raise HTTPException(422, exc.errors(include_url=False, include_context=False)) from None
+
+
+def _save_section(current, section: str, settings) -> None:
+    try:
+        save_config(current.model_copy(update={section: settings}), user_config_path())
+    except ConfigError as exc:
+        raise HTTPException(422, str(exc)) from None
+
+
+def _ai_settings_out() -> dict:
+    sources = {provider: _secret_source(name) for provider, name in _API_KEY_SECRETS.items()}
+    return {
+        **get_config().ai.model_dump(),
+        "has_key": {provider: src is not None for provider, src in sources.items()},
+        "key_source": sources,
+    }
+
+
+@app.get("/api/settings/ai", response_model=AISettingsOut)
+def get_ai_settings():
+    return _ai_settings_out()
+
+
+@app.put("/api/settings/ai", response_model=AISettingsOut)
+def put_ai_settings(body: AISettingsIn):
+    """Actualiza la sección `ai:` de jobhunter.yaml: solo cambian los campos enviados. La clave de API
+    (anthropic/openai) va al llavero. `base_url` solo vale para ollama/openai: con openai, la clave de API se
+    envía a esa URL, así que debe ser un servidor de confianza."""
+    _require_user_config()
+    current = get_config()
+    settings = _merge_settings(AISettings, current.ai, body.model_dump(exclude_unset=True, exclude={"api_key"}))
+    _check_base_url(settings)
+    api_key = (body.api_key or "").strip()
+    if api_key:
+        name = _API_KEY_SECRETS.get(settings.provider)
+        if name is None:
+            raise HTTPException(400, f"El proveedor {settings.provider} no usa clave de API")
+        _store_secret(name, api_key)
+    _save_section(current, "ai", settings)
+    return _ai_settings_out()
+
+
+@app.post("/api/settings/ai/key", response_model=AIKeyOut)
+def put_ai_key(body: AIKeyIn):
+    """Guarda la clave de API en el llavero (vale antes de completar el asistente). Nunca la devuelve."""
+    api_key = body.api_key.strip()
+    if not api_key:
+        raise HTTPException(422, "La clave de API está vacía")
+    name = _API_KEY_SECRETS[body.provider]
+    _store_secret(name, api_key)
+    source = _secret_source(name)
+    return {"provider": body.provider, "has_key": source is not None, "key_source": source}
+
+
+@app.post("/api/settings/ai/test", response_model=CheckOut)
+def check_ai_settings():
+    """Comprueba el proveedor configurado (clave válida, CLI instalada y con sesión...)."""
+    try:
+        ok, message = ai.get_provider().check()
+    except Exception as exc:  # noqa: BLE001 — se informa solo el tipo, nunca el detalle
+        ok, message = False, f"No se pudo comprobar la IA ({type(exc).__name__})."
+    return {"ok": ok, "message": message}
+
+
+def _email_settings_out() -> dict:
+    source = _secret_source(_SMTP_SECRET)
+    return {**get_config().email.model_dump(), "has_password": source is not None, "password_source": source}
+
+
+@app.get("/api/settings/email", response_model=EmailSettingsOut)
+def get_email_settings():
+    return _email_settings_out()
+
+
+@app.put("/api/settings/email", response_model=EmailSettingsOut)
+def put_email_settings(body: EmailSettingsIn):
+    """Actualiza la sección `email:` de jobhunter.yaml (solo los campos enviados); la contraseña SMTP va al llavero."""
+    _require_user_config()
+    current = get_config()
+    settings = _merge_settings(EmailSettings, current.email, body.model_dump(exclude_unset=True, exclude={"password"}))
+    password = body.password or ""
+    if password:
+        _store_secret(_SMTP_SECRET, password)
+    _save_section(current, "email", settings)
+    return _email_settings_out()
+
+
+@app.post("/api/settings/email/test", response_model=CheckOut)
+def check_email_settings():
+    """Conecta y se autentica con el servidor SMTP, sin enviar nada."""
+    ok, message = email_sender.check_smtp_connection()
+    return {"ok": ok, "message": message}
+
+
+@app.get("/api/settings/sources", response_model=list[SourceSettingOut])
+def get_sources_settings():
+    return setup_builder.sources_view()
+
+
+@app.put("/api/settings/sources", response_model=list[SourceSettingOut])
+def put_sources_settings(body: SourcesIn):
+    """Reescribe la sección `sources:` de jobhunter.yaml. Una fuente `requires_ack` solo se activa si viene en
+    `acknowledged` (si no, 422); las que siguen activas conservan sus ajustes."""
+    _require_user_config()
+    try:
+        cfg = setup_builder.update_sources(body.enabled, body.acknowledged, get_config())
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    try:
+        save_config(cfg, user_config_path())
+    except ConfigError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return setup_builder.sources_view()
 
 
 if __name__ == "__main__":

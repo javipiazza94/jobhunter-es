@@ -110,6 +110,12 @@ def _canonical(name: str) -> str | None:
     return None
 
 
+def canonical_language(name: str) -> str | None:
+    """Nombre canónico (en español, minúsculas) de un idioma escrito en es/en («English» → «inglés»); None si
+    no se reconoce."""
+    return _canonical(name)
+
+
 @lru_cache(maxsize=1)
 def candidate_languages() -> dict[str, int]:
     """{idioma canónico: nivel} según profile.json; español nativo por defecto."""

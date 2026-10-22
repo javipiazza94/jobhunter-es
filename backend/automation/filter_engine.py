@@ -32,13 +32,16 @@ def _location_score(location: str, cfg: JobHunterConfig | None = None) -> float:
     return rule.other_score
 
 
-def _kw_hit(kw: str, text: str) -> bool:
+def keyword_hit(kw: str, text: str) -> bool:
     """Substring match; keywords cortos de una palabra (rag, llm, git, sql...) exigen
     límites de palabra para no acertar dentro de 'storage', 'digital', etc."""
     kw = kw.lower()
     if len(kw) <= 4 and kw.isalnum():
         return re.search(rf"(?<![a-z0-9]){re.escape(kw)}(?![a-z0-9])", text) is not None
     return kw in text
+
+
+_kw_hit = keyword_hit  # nombre histórico
 
 
 def _experience_score(title: str, description: str, cfg: JobHunterConfig | None = None) -> float:
@@ -87,7 +90,7 @@ def score_offer(offer: dict, cfg: JobHunterConfig | None = None) -> float:
 
     score = 0.0
     for group in scoring.keyword_groups:
-        hits = sum(1 for kw in group.keywords if _kw_hit(kw, full_text))
+        hits = sum(1 for kw in group.keywords if keyword_hit(kw, full_text))
         score += group.weight * (min(hits, 5) / 5)
 
     score += (

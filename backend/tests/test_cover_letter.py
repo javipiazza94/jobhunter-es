@@ -39,3 +39,20 @@ def test_generate_sap_template():
     result = generate("Capgemini", job_title="Consultor SAP PS", template="sap")
     assert isinstance(result, str)
     assert "Capgemini" in result
+
+
+def test_intro_con_llaves_no_lanza(monkeypatch):
+    from automation import cover_letter
+    monkeypatch.setattr(cover_letter, "_load_profile", lambda: {"cover_letter_intro": "Hola {x} y {company_name} {0}"})
+    result = cover_letter.generate("Acme Robotics", job_title="Dev", template="tech")
+    assert isinstance(result, str)
+
+
+def test_intro_con_llaves_dobles_como_format(monkeypatch):
+    """`{{`/`}}` siguen siendo llaves literales (como con el antiguo .format): «{{company_name}}» no se sustituye."""
+    from automation import cover_letter
+    monkeypatch.setattr(cover_letter, "_load_profile", lambda: {
+        "cover_letter_intro": "En {company_name} {{sin tocar}} y {{company_name}}"})
+    text = cover_letter.generate("Acme Robotics")
+    assert "En Acme Robotics {sin tocar} y {company_name}" in text
+    assert "{{" not in text

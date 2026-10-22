@@ -9,6 +9,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import schemas  # noqa: E402
+import setup_builder  # noqa: E402
+from automation import profile_proposal  # noqa: E402
+from search_config import AISettings  # noqa: E402
 
 FRONTEND_LIB = Path(__file__).parent.parent.parent / "frontend" / "lib"
 
@@ -28,6 +31,28 @@ PAIRS = {
     "InboxStatus": schemas.InboxStatusOut,
     "QuietApplication": schemas.QuietApplicationOut,
     "Track": schemas.TrackOut,
+    "SetupStatus": schemas.SetupStatusOut,
+    "MarketSource": schemas.MarketSourceOut,
+    "TargetDraft": profile_proposal.TargetDraft,
+    "ExperienceDraft": profile_proposal.ExperienceDraft,
+    "LanguageDraft": profile_proposal.LanguageDraft,
+    "EligibilityDraft": profile_proposal.EligibilityDraft,
+    "ProfileDraft": profile_proposal.ProfileDraft,
+    "SetupProposal": schemas.SetupProposalOut,
+    "AISettings": AISettings,
+    "SetupAnswers": setup_builder.SetupAnswers,
+    "SetupApplyResult": schemas.SetupApplyOut,
+    "AISettingsView": schemas.AISettingsOut,
+    "AISettingsUpdate": schemas.AISettingsIn,
+    "EmailSettingsView": schemas.EmailSettingsOut,
+    "EmailSettingsUpdate": schemas.EmailSettingsIn,
+    "CheckResult": schemas.CheckOut,
+    "InterviewPack": schemas.InterviewPackOut,
+    "SourceSetting": schemas.SourceSettingOut,
+    "SourcesUpdate": schemas.SourcesIn,
+    "AIKeyUpdate": schemas.AIKeyIn,
+    "AIKeyResult": schemas.AIKeyOut,
+    "JobStarted": schemas.JobStartedOut,
 }
 
 

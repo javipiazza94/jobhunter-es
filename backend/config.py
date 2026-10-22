@@ -76,12 +76,6 @@ FOLLOWUP_MIN_DAYS = 10   # días sin respuesta para proponer un recordatorio
 FOLLOWUP_MAX = 2         # recordatorios como máximo por candidatura
 STALE_DAYS = 60          # días sin respuesta para proponer cerrarla como 'no_response'
 
-# ── Email ─────────────────────────────────────────────────────────────────────
-GMAIL_USER = os.getenv("GMAIL_USER", "")
-GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
-SMTP_HOST = "smtp.gmail.com"
-SMTP_PORT = 587
-
 # ── API ───────────────────────────────────────────────────────────────────────
 API_PORT = int(os.getenv("API_PORT", "8020"))
 def _with_loopback_twins(origins: list[str]) -> list[str]:

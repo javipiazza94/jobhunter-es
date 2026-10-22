@@ -93,8 +93,12 @@ async def _isolated(label: str, step) -> None:
         logger.error("%s failed: %s", label, e)
 
 
-async def run_track_source(track_id: str, dry_run: bool, max_pages: int):
-    """Pipeline multi-portal de un track: sus `search_keywords` y las búsquedas de LinkedIn de ese track."""
+async def run_track_source(track_id: str, dry_run: bool, max_pages: int, only_sources: set[str] | None = None):
+    """Pipeline multi-portal de un track: sus `search_keywords` y las búsquedas de LinkedIn de ese track.
+
+    `only_sources` (lanzado desde la API): solo los portales activados en `sources:` de jobhunter.yaml; así una
+    fuente con aviso (InfoJobs, LinkedIn) no se usa sin haberla aceptado. La web de empresas seguidas va siempre.
+    Sin él (CLI `--track`), todos los portales como hasta ahora."""
     from scraper.tecnoempleo import TecnoempleoScraper
     from scraper.infojobs import run_infojobs
     from scraper.computrabajo import run_computrabajo
@@ -141,13 +145,16 @@ async def run_track_source(track_id: str, dry_run: bool, max_pages: int):
     async def linkedin():
         save(await run_linkedin_jobs(track=track_id), "LinkedIn")
 
-    for label, step in (
-        (f"Tecnoempleo {track_id}", tecnoempleo),
-        ("InfoJobs", infojobs),
-        ("Computrabajo", computrabajo),
-        ("Company direct", company_direct),
-        ("LinkedIn", linkedin),
+    for label, source_id, step in (
+        (f"Tecnoempleo {track_id}", "tecnoempleo", tecnoempleo),
+        ("InfoJobs", "infojobs", infojobs),
+        ("Computrabajo", "computrabajo", computrabajo),
+        ("Company direct", None, company_direct),
+        ("LinkedIn", "linkedin", linkedin),
     ):
+        if only_sources is not None and source_id is not None and source_id not in only_sources:
+            logger.info("%s: fuente no activada en jobhunter.yaml; se omite", label)
+            continue
         await _isolated(label, step)
 
 

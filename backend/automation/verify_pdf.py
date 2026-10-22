@@ -39,6 +39,7 @@ def run_tool(command):
             text=True,
             encoding="utf-8",
             errors="replace",
+            timeout=20,
         ).stdout
     except FileNotFoundError as exc:
         raise VerificationError(
@@ -47,6 +48,8 @@ def run_tool(command):
             "(macOS: brew install poppler, Debian/Ubuntu: apt install poppler-utils, "
             "Windows: choco install poppler)"
         ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise VerificationError(f"{command[0]} tardó demasiado leyendo el PDF") from exc
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip() or (exc.stdout or "").strip()
         detail = detail or "command failed"
@@ -184,16 +187,22 @@ def find_non_ascii_date_ranges(text):
     return hits
 
 
-def _extract_pypdf(pdf_path):
-    """Return (text, pages) or None if pypdf is unavailable, raises, or yields no text."""
+def _extract_pypdf(pdf_path, max_pages=None):
+    """Return (text, pages) or None if pypdf is unavailable, raises, or yields no text.
+
+    `max_pages` limita las páginas de las que se extrae texto (`pages` es el total real).
+    """
     try:
         from pypdf import PdfReader
     except ImportError:
         return None
     try:
         reader = PdfReader(str(pdf_path))
+        if reader.is_encrypted and not reader.decrypt(""):
+            return None
         pages = len(reader.pages)
-        text = "\n".join((page.extract_text() or "") for page in reader.pages)
+        selected = reader.pages[:max_pages] if max_pages else reader.pages
+        text = "\n".join((page.extract_text() or "") for page in selected)
     except Exception:
         return None
     # Harden: treat empty/degraded extraction as failure so we fall back
@@ -202,21 +211,22 @@ def _extract_pypdf(pdf_path):
     return text, pages
 
 
-def _extract_pdftotext(pdf_path):
-    text = run_tool(["pdftotext", "-layout", "-enc", "UTF-8", str(pdf_path), "-"])
+def _extract_pdftotext(pdf_path, max_pages=None):
+    limit = ["-l", str(max_pages)] if max_pages else []
+    text = run_tool(["pdftotext", "-layout", "-enc", "UTF-8", *limit, str(pdf_path), "-"])
     # Always call pdfinfo here so the fallback path returns a page count
     # even when the caller did not request --pages (same Poppler package).
     pages = parse_page_count(run_tool(["pdfinfo", str(pdf_path)]))
     return text, pages
 
 
-def extract_text_layer(pdf_path):
+def extract_text_layer(pdf_path, max_pages=None):
     """Extract ATS-readable text. Returns (text, pages, extractor_name)."""
-    pypdf_result = _extract_pypdf(pdf_path)
+    pypdf_result = _extract_pypdf(pdf_path, max_pages)
     if pypdf_result is not None:
         text, pages = pypdf_result
         return text, pages, "pypdf"
-    text, pages = _extract_pdftotext(pdf_path)
+    text, pages = _extract_pdftotext(pdf_path, max_pages)
     return text, pages, "pdftotext"
 
 

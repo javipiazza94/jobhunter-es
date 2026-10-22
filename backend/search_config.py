@@ -5,6 +5,7 @@ Si el usuario no tiene `jobhunter.yaml`, se usa `backend/defaults/jobhunter.yaml
 Un fichero roto lanza `ConfigError` con la ruta y el campo, para fallar al arrancar y no a mitad de un scraping.
 """
 import logging
+import os
 import re
 import unicodedata
 from pathlib import Path
@@ -13,7 +14,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
-from config import JH_HOME
+import config
 
 DEFAULT_CONFIG_PATH = Path(__file__).parent / "defaults" / "jobhunter.yaml"
 USER_CONFIG_NAME = "jobhunter.yaml"
@@ -257,10 +258,32 @@ class Track(_Model):
         return self
 
 
+class AISettings(_Model):
+    """Proveedor de IA (opcional). Las claves NUNCA van aquí: viven en el llavero del sistema o en variables de entorno."""
+
+    provider: Literal["none", "ollama", "anthropic", "openai", "claude_cli", "codex_cli"] = "none"
+    model: str | None = None
+    base_url: str | None = None
+    timeout_seconds: int = Field(120, ge=1, le=600)
+
+
+class EmailSettings(_Model):
+    """SMTP genérico con preset Gmail. La contraseña NUNCA va aquí (llavero o GMAIL_APP_PASSWORD)."""
+
+    preset: Literal["gmail", "custom"] = "gmail"
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = Field(587, ge=1, le=65535)
+    use_starttls: bool = True
+    username: str | None = None
+    from_name: str | None = None
+
+
 class JobHunterConfig(_Model):
     scoring: Scoring
     tracks: list[Track]
     sources: dict[str, dict] = {}
+    ai: AISettings = AISettings()
+    email: EmailSettings = EmailSettings()
 
     @field_validator("tracks")
     @classmethod
@@ -313,8 +336,13 @@ def load_config(path: Path | None = None) -> JobHunterConfig:
         raise ConfigError(_format_errors(path, exc)) from exc
 
 
+def user_config_path() -> Path:
+    """`JH_HOME/jobhunter.yaml`, con JH_HOME leído de `config` en cada llamada (los tests pueden cambiarlo)."""
+    return Path(config.JH_HOME) / USER_CONFIG_NAME
+
+
 def _active_path() -> Path:
-    user_path = JH_HOME / USER_CONFIG_NAME
+    user_path = user_config_path()
     return user_path if user_path.exists() else DEFAULT_CONFIG_PATH
 
 
@@ -367,6 +395,25 @@ def set_config(cfg: JobHunterConfig | None) -> None:
 def reload_config() -> JobHunterConfig:
     set_config(None)
     return get_config()
+
+
+def save_config(cfg: JobHunterConfig, path: Path | None = None) -> Path:
+    """Escribe la config como YAML (atómico: tmp + os.replace) en `path` o `JH_HOME/jobhunter.yaml`.
+
+    Revalida releyendo el fichero escrito (si no carga, se borra el tmp y se lanza `ConfigError`, sin tocar el
+    original) y recarga la config activa. No escribe secretos: el esquema no tiene campos para ellos."""
+    target = Path(path) if path is not None else user_config_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    text = yaml.safe_dump(cfg.model_dump(mode="json", exclude_defaults=False), allow_unicode=True, sort_keys=False)
+    tmp = target.with_name(target.name + ".tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        load_config(tmp)
+        os.replace(tmp, target)
+    finally:
+        tmp.unlink(missing_ok=True)
+    reload_config()
+    return target
 
 
 _COMPANY_NOISE = {"sa", "sl", "slu", "sau", "spain", "espana", "iberia", "group", "grupo", "inc", "ltd", "gmbh"}

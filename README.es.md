@@ -96,6 +96,41 @@ Dashboard en `http://localhost:3010`
 - La BD lleva versión (`PRAGMA user_version`). Para cambiar el esquema añade una función `_migration_00N_…` al final de `MIGRATIONS` en `backend/database.py` y no edites las anteriores; cada una se ejecuta una vez y de forma atómica.
 - Los modelos de la API están en `backend/schemas.py`; `backend/tests/test_api_contract.py` comprueba que los tipos de `frontend/lib/types.ts` no se desajusten con ellos.
 
+## Primer arranque
+
+Sin `profile.json` en la carpeta de datos (`JH_HOME`, `./data/` por defecto), el dashboard abre un asistente de tres pasos en lugar de pedirte editar ficheros a mano. Si ya tienes `profile.json` pero no un `jobhunter.yaml` propio (instalación anterior), la app sigue funcionando con la configuración por defecto y solo muestra un aviso descartable, «Configura tu búsqueda con el asistente», que lo abre precargado y cancelable:
+
+1. **Tu CV.** Sube un PDF o DOCX (hasta 10 MB) o rellena el formulario. El texto se extrae **en local** y el archivo se guarda en `JH_HOME/cv/`. Si hay un proveedor de IA configurado, propone un borrador de perfil a partir del texto; sin IA el borrador sale vacío y lo rellenas tú.
+2. **Revisión.** Comprueba y edita lo entendido: puestos objetivo (cada uno será un track), experiencia, herramientas (palabras clave del scoring), idiomas con nivel CEFR, modalidad y ciudad, y elegibilidad (permiso de trabajo, patrocinio de visado, carnet de conducir).
+3. **Dónde buscar.** Elige mercados, que sugieren fuentes (las de condiciones de uso delicadas empiezan sin marcar y exigen aceptación expresa), y opcionalmente empresas a seguir. Pulsa «Buscar ofertas».
+
+El asistente escribe `JH_HOME/profile.json` y `JH_HOME/jobhunter.yaml` (tracks, grupos de palabras con pesos que suman 1.0 y `scoring.min_relevance` calibrado al perfil). Todo sigue siendo editable después en la pestaña **Perfil**, que también permite repetir el asistente, cambiar fuentes y configurar la IA y el SMTP. Repetir el asistente no borra nada que no pregunte: en el perfil se conservan el resumen, las cartas, los otros CV, la formación, etc.; en `jobhunter.yaml`, los tracks aislados, los grupos de palabras propios, las reglas de scoring y los ajustes propios de cada fuente (solo se regeneran los tracks estándar y sus grupos).
+
+### Proveedores de IA
+
+La IA es opcional y solo se usa para leer el CV, adaptar cartas de presentación (la plantilla es la alternativa) y preparar entrevistas. **El scoring nunca usa IA.** Con `none` todo funciona con formularios manuales y cartas de plantilla.
+
+| Proveedor | Cómo se conecta | Credenciales |
+|-----------|-----------------|--------------|
+| `none` (por defecto) | sin IA | no aplica |
+| `ollama` | HTTP local (`http://127.0.0.1:11434`), modelo por defecto `llama3.1` | ninguna, nada sale de tu equipo |
+| `anthropic` | API de Anthropic, modelo por defecto `claude-sonnet-5-5` | clave de API |
+| `openai` | API de OpenAI, modelo por defecto `gpt-4o-mini` | clave de API |
+| `claude_cli` | tu **suscripción de Claude** mediante el CLI local `claude -p` | la sesión del propio CLI |
+| `codex_cli` | tu **suscripción de ChatGPT** mediante el CLI local `codex exec` | la sesión del propio CLI |
+
+Se elige en el asistente o en Perfil (un botón «Probar» lo comprueba). El modelo se puede cambiar con `ai.model` en `jobhunter.yaml`. Con los proveedores por CLI la app no guarda credenciales de suscripción: solo comprueba que el CLI está instalado y con sesión.
+
+**Secretos.** Las claves de API y la contraseña SMTP van al llavero del sistema operativo (vía `keyring`), nunca a `jobhunter.yaml`, `profile.json`, logs ni respuestas de la API. Las variables de entorno tienen prioridad y son la alternativa si no hay llavero (por ejemplo, Linux sin Secret Service; guardar una clave devuelve entonces un error claro): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GMAIL_APP_PASSWORD` (y `GMAIL_USER`).
+
+**Privacidad.** Nada sale de tu equipo salvo las búsquedas en los portales que actives y, si eliges un proveedor en la nube (`anthropic`, `openai` o los CLI, que hablan con su fabricante), el texto que se le envía (CV, ofertas). Con `ollama` o `none` no hay tráfico de IA.
+
+### Email (SMTP)
+
+El envío es siempre manual y aprobado por ti. En Perfil > Email elige el preset de Gmail (`smtp.gmail.com:587`, STARTTLS, requiere contraseña de aplicación) o un servidor SMTP propio (host, puerto, STARTTLS, usuario, nombre del remitente). La contraseña va al llavero; «Probar» se conecta y autentica sin enviar nada. Una instalación sin sección `email:` sigue funcionando como antes con `GMAIL_USER` y `GMAIL_APP_PASSWORD`.
+
+---
+
 ## Uso
 
 Flujo completo (seed → scraping → contactos → borradores → formularios → envío tras aprobación en el dashboard) y comandos: skill `run-pipeline` (`.claude/skills/run-pipeline/SKILL.md`). Ofertas y candidaturas dejadas en el inbox: `docs/inbox.md`.

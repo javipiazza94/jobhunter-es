@@ -127,3 +127,190 @@ export interface Track {
   label: Record<string, string>;
   kind: "standard" | "isolated";
 }
+
+// ── Asistente de primer arranque, perfil y ajustes (IA / email) ──────────────────────────────
+// Los secretos nunca vuelven de la API: solo si existen (`has_*`) y de dónde salen (`*_source`).
+
+export type SecretSource = "env" | "keychain" | null;
+export type AIProviderId = "none" | "ollama" | "anthropic" | "openai" | "claude_cli" | "codex_cli";
+export type CefrLevel = "A1" | "A2" | "B1" | "B2" | "C1" | "C2" | "native";
+export type WorkModality = "remote" | "hybrid" | "onsite";
+
+/** GET /api/setup/status */
+export interface SetupStatus {
+  needs_setup: boolean;
+  has_profile: boolean;
+  has_config: boolean;
+}
+
+/** Una fuente sugerida para un mercado (GET /api/setup/markets → Record<mercado, MarketSource[]>). */
+export interface MarketSource {
+  id: string;
+  label: string;
+  requires_ack: boolean;
+  default_on: boolean;
+}
+
+export interface TargetDraft {
+  title: string;
+  keywords: string[];
+}
+
+export interface ExperienceDraft {
+  company: string;
+  role: string;
+  start: string;
+  end: string;
+  description: string;
+  stack: string[];
+}
+
+export interface LanguageDraft {
+  language: string;
+  level: CefrLevel;
+}
+
+export interface EligibilityDraft {
+  work_permit_countries: string[];
+  needs_sponsorship: boolean | null;
+  driving_license: boolean | null;
+}
+
+export interface ProfileDraft {
+  full_name: string;
+  email: string;
+  phone: string;
+  city: string;
+  country: string;
+  targets: TargetDraft[];
+  years_experience: number | null;
+  experience: ExperienceDraft[];
+  tools: string[];
+  languages: LanguageDraft[];
+  modality: WorkModality[];
+  eligibility: EligibilityDraft;
+}
+
+/** POST /api/setup/cv (multipart `file`) y POST /api/setup/propose ({text}). */
+export interface SetupProposal {
+  draft: ProfileDraft;
+  source: "ai" | "empty";
+  text_chars: number;
+  cv_path: string | null;
+}
+
+export interface AISettings {
+  provider: AIProviderId;
+  model: string | null;
+  base_url: string | null;
+  timeout_seconds: number;
+}
+
+/** Cuerpo de POST /api/setup/apply. */
+export interface SetupAnswers {
+  draft: ProfileDraft;
+  markets: string[];
+  sources: string[];
+  acknowledged_sources: string[];
+  followed_companies: string[];
+  ai?: AISettings;
+  ui_language?: "es" | "en";
+  cv_path?: string | null;
+}
+
+/** Respuesta de POST /api/setup/apply. */
+export interface SetupApplyResult {
+  tracks: string[];
+  sources: string[];
+}
+
+/** GET/PUT /api/settings/ai */
+export interface AISettingsView {
+  provider: AIProviderId;
+  model: string | null;
+  base_url: string | null;
+  timeout_seconds: number;
+  has_key: Record<"anthropic" | "openai", boolean>;
+  key_source: Record<"anthropic" | "openai", SecretSource>;
+}
+
+/** Cuerpo de PUT /api/settings/ai (parcial: solo cambian los campos enviados); `api_key` va al llavero y
+ *  nunca se devuelve. `base_url` solo para ollama/openai (con openai la clave se envía a esa URL). */
+export interface AISettingsUpdate {
+  provider?: AIProviderId;
+  model?: string | null;
+  base_url?: string | null;
+  timeout_seconds?: number;
+  api_key?: string;
+}
+
+/** GET/PUT /api/settings/email */
+export interface EmailSettingsView {
+  preset: "gmail" | "custom";
+  smtp_host: string;
+  smtp_port: number;
+  use_starttls: boolean;
+  username: string | null;
+  from_name: string | null;
+  has_password: boolean;
+  password_source: SecretSource;
+}
+
+/** Cuerpo de PUT /api/settings/email (parcial); `password` va al llavero y nunca se devuelve. */
+export interface EmailSettingsUpdate {
+  preset?: "gmail" | "custom";
+  smtp_host?: string;
+  smtp_port?: number;
+  use_starttls?: boolean;
+  username?: string | null;
+  from_name?: string | null;
+  password?: string;
+}
+
+/** POST /api/settings/ai/test y /api/settings/email/test */
+export interface CheckResult {
+  ok: boolean;
+  message: string;
+}
+
+/** POST /api/applications/{id}/interview-pack */
+export interface InterviewPack {
+  path: string;
+  markdown: string;
+}
+
+/** GET/PUT /api/settings/sources: una fuente de ofertas y su estado en jobhunter.yaml. */
+export interface SourceSetting {
+  id: string;
+  label: string;
+  markets: string[];
+  requires_ack: boolean;
+  enabled: boolean;
+  acknowledged: boolean;
+}
+
+/** Cuerpo de PUT /api/settings/sources. Una fuente `requires_ack` solo se activa si viene en `acknowledged`. */
+export interface SourcesUpdate {
+  enabled: string[];
+  acknowledged: string[];
+}
+
+/** Cuerpo de POST /api/settings/ai/key (la clave va al llavero y nunca se devuelve). */
+export interface AIKeyUpdate {
+  provider: "anthropic" | "openai";
+  api_key: string;
+}
+
+/** Respuesta de POST /api/settings/ai/key. */
+export interface AIKeyResult {
+  provider: "anthropic" | "openai";
+  has_key: boolean;
+  key_source: SecretSource;
+}
+
+/** Respuesta de POST /api/scraper/run (fuente o track). */
+export interface JobStarted {
+  status: string;
+  source: string;
+  job_id: string;
+}

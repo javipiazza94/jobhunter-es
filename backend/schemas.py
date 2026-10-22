@@ -5,7 +5,12 @@ schemas.py — Contrato de la API (modelos de respuesta y de petición).
 no rompe nada; lo que se tipa es lo que el dashboard lee. Los tipos TypeScript equivalentes viven en
 frontend/lib/types.ts; tests/test_api_contract.py comprueba que no se desajusten.
 """
-from pydantic import BaseModel, ConfigDict
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from automation.profile_proposal import ProfileDraft
+from search_config import AISettings, EmailSettings
 
 
 class _Out(BaseModel):
@@ -227,3 +232,135 @@ class InboxStatusOut(BaseModel):
     last: InboxReportOut | None = None
     changes: int
     automatic: bool
+
+
+# ── Asistente de primer arranque, perfil y ajustes (IA / email) ────────────────────────────
+# Los secretos nunca viajan de vuelta: las respuestas solo dicen si existen y de dónde salen.
+
+SecretSource = Literal["env", "keychain"] | None
+
+
+class SetupStatusOut(_Out):
+    needs_setup: bool
+    has_profile: bool
+    has_config: bool
+
+
+class MarketSourceOut(_Out):
+    id: str
+    label: str
+    requires_ack: bool = False
+    default_on: bool = False
+
+
+class SetupProposalOut(_Out):
+    """Borrador de perfil propuesto (por IA o vacío). `cv_path` solo si se subió un archivo."""
+    draft: ProfileDraft
+    source: Literal["ai", "empty"]
+    text_chars: int
+    cv_path: str | None = None
+
+
+class SetupTextIn(BaseModel):
+    text: str = Field("", max_length=500_000)
+    ai: AISettings | None = None  # proveedor solo para esta llamada (el asistente aún no ha guardado nada)
+
+
+class SourceSettingOut(_Out):
+    """Una fuente de ofertas en Perfil: del catálogo de mercados y/o del jobhunter.yaml actual."""
+    id: str
+    label: str
+    markets: list[str]
+    requires_ack: bool
+    enabled: bool
+    acknowledged: bool
+
+
+class SourcesIn(BaseModel):
+    """PUT /api/settings/sources: fuentes activadas y fuentes `requires_ack` cuyo aviso aceptó el usuario."""
+    enabled: list[str] = Field(default_factory=list, max_length=50)
+    acknowledged: list[str] = Field(default_factory=list, max_length=50)
+
+
+class AIKeyIn(BaseModel):
+    """POST /api/settings/ai/key: guarda la clave en el llavero (vale antes de completar el asistente)."""
+    provider: Literal["anthropic", "openai"]
+    api_key: str = Field(..., min_length=1, max_length=500)
+
+
+class AIKeyOut(_Out):
+    provider: str
+    has_key: bool
+    key_source: Literal["env", "keychain"] | None = None
+
+
+class ProfileIn(BaseModel):
+    """Validación laxa de profile.json (PUT /api/profile): solo se exige la forma de las secciones que lee la
+    app; cualquier otra clave se guarda tal cual."""
+    model_config = ConfigDict(extra="allow")
+
+    personal: dict | None = None
+    eligibility: dict | None = None
+    availability: dict | None = None
+    salary_expectation: dict | None = None
+    stack: dict | None = None
+    languages: list[dict] | None = None
+    experience: list[dict] | None = None
+    education: list[dict] | None = None
+    certifications: list[str | dict] | None = None
+
+
+class SetupApplyOut(_Out):
+    tracks: list[str]
+    sources: list[str]
+
+
+class KeyFlagsOut(BaseModel):
+    anthropic: bool
+    openai: bool
+
+
+class KeySourcesOut(BaseModel):
+    anthropic: SecretSource = None
+    openai: SecretSource = None
+
+
+class AISettingsOut(_Out):
+    provider: str
+    model: str | None = None
+    base_url: str | None = None
+    timeout_seconds: int
+    has_key: KeyFlagsOut
+    key_source: KeySourcesOut
+
+
+class AISettingsIn(AISettings):
+    """Sección `ai:` completa más la clave de API opcional (va al llavero, nunca a jobhunter.yaml)."""
+    api_key: str | None = None
+
+
+class EmailSettingsOut(_Out):
+    preset: str
+    smtp_host: str
+    smtp_port: int
+    use_starttls: bool
+    username: str | None = None
+    from_name: str | None = None
+    has_password: bool
+    password_source: SecretSource = None
+
+
+class EmailSettingsIn(EmailSettings):
+    """Sección `email:` completa más la contraseña SMTP opcional (va al llavero)."""
+    password: str | None = None
+
+
+class CheckOut(_Out):
+    ok: bool
+    message: str
+
+
+class InterviewPackOut(_Out):
+    """Pack de entrevista generado: ruta del archivo y su contenido Markdown."""
+    path: str
+    markdown: str

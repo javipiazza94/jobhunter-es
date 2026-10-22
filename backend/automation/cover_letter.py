@@ -3,13 +3,27 @@ automation/cover_letter.py — Generates personalised cover letters via Jinja2.
 Supports variant_seed for deterministic cover letter variation per company.
 """
 import hashlib
-import json
+import re
+
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
-from config import PROFILE_PATH, TEMPLATES_DIR
+from config import TEMPLATES_DIR
+from profile_store import load_profile
 
 
 def _load_profile() -> dict:
-    return json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+    """Perfil del usuario; `{}` si aún no existe (la plantilla usa valores por defecto)."""
+    return load_profile()
+
+
+_INTRO_TOKEN = re.compile(r"\{\{|\}\}|\{company_name\}")
+
+
+def _fill_intro(text: str, company_name: str) -> str:
+    """Sustituye `{company_name}` y convierte `{{`/`}}` en llaves literales, como el antiguo `str.format`, pero
+    sin lanzar con otras llaves (`{x}`, `{0}` quedan tal cual)."""
+    def repl(m: re.Match) -> str:
+        return {"{{": "{", "}}": "}"}.get(m.group(0), company_name)
+    return _INTRO_TOKEN.sub(repl, text)
 
 
 def _pick_variant(variants: list[str], seed: str) -> str:
@@ -53,7 +67,7 @@ def generate(
         linkedin=personal.get("linkedin", ""),
         portfolio=personal.get("portfolio", ""),
         experience=it_experience,
-        cover_letter_intro=profile.get("cover_letter_intro", "").format(company_name=company_name),
+        cover_letter_intro=_fill_intro(profile.get("cover_letter_intro", ""), company_name),
         cover_letter_stack=profile.get("cover_letter_stack", ""),
         cover_letter_closing=profile.get("cover_letter_closing", ""),
         variant_index=variant_index,

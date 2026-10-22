@@ -1,0 +1,21 @@
+# Mercados del asistente de primer arranque → fuentes sugeridas.
+# Solo fuentes que existen hoy en backend/scraper (las nuevas llegan en SP4).
+# requires_ack: la fuente tiene condiciones de uso delicadas (sesión propia, términos del portal); el asistente
+#   la muestra desmarcada con un aviso y solo se guarda si el usuario la acepta expresamente.
+# default_on: marcada por defecto en el asistente (nunca para las requires_ack).
+markets:
+  spain:
+    - {id: tecnoempleo, label: Tecnoempleo, requires_ack: false, default_on: true}
+    - {id: infojobs, label: InfoJobs, requires_ack: true, default_on: false}
+    - {id: manfred, label: Manfred, requires_ack: false, default_on: true}
+    - {id: computrabajo, label: Computrabajo, requires_ack: false, default_on: true}
+  latam:
+    # Computrabajo e Indeed solo buscan hoy en sus portales de España: en LATAM solo queda LinkedIn.
+    - {id: linkedin, label: LinkedIn, requires_ack: true, default_on: false}
+  remote:
+    - {id: tecnoempleo, label: Tecnoempleo (remoto), requires_ack: false, default_on: true}
+    - {id: manfred, label: Manfred, requires_ack: false, default_on: true}
+    - {id: linkedin, label: LinkedIn, requires_ack: true, default_on: false}
+  global:
+    - {id: linkedin, label: LinkedIn, requires_ack: true, default_on: false}
+    - {id: indeed, label: Indeed (requiere SCRAPERAPI_KEY), requires_ack: false, default_on: false}

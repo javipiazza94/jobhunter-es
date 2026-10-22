@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+import config
 import search_config
 from search_config import ConfigError, JobHunterConfig, load_config
 
@@ -135,14 +136,14 @@ def test_regex_invalida_falla(tmp_path):
 
 
 def test_load_usa_jh_home_si_existe_y_defaults_si_no(tmp_path, monkeypatch):
-    monkeypatch.setattr(search_config, "JH_HOME", tmp_path)
+    monkeypatch.setattr(config, "JH_HOME", tmp_path)
     assert load_config().track("developer") is not None
     _write(tmp_path, _BASE)
     assert load_config().track("dev") is not None
 
 
 def test_set_get_reload_config(tmp_path, monkeypatch):
-    monkeypatch.setattr(search_config, "JH_HOME", tmp_path)
+    monkeypatch.setattr(config, "JH_HOME", tmp_path)
     cfg = load_config(TEST_CONFIG)
     search_config.set_config(cfg)
     try:

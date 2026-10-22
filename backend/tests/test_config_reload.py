@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+import config
 import search_config
 from search_config import ConfigError, get_config, set_config
 
@@ -31,7 +32,7 @@ def _write(home: Path, relevance: float, bump: int = 0) -> Path:
 @pytest.fixture
 def home(tmp_path, monkeypatch):
     legacy = get_config()
-    monkeypatch.setattr(search_config, "JH_HOME", tmp_path)
+    monkeypatch.setattr(config, "JH_HOME", tmp_path)
     set_config(None)
     yield tmp_path
     set_config(legacy)

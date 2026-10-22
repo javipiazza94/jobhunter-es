@@ -234,3 +234,14 @@ def test_linkedin_search_sin_track_aplica_a_todos():
         assert [s["keywords"] for s in linkedin_searches("sap")] == ["a", "b"]
     finally:
         set_config(original)
+
+
+def test_track_desde_la_api_solo_usa_las_fuentes_activadas(monkeypatch):
+    """Lanzado por la API (`only_sources`), un portal no activado (p. ej. InfoJobs sin aceptar) no se usa."""
+    import asyncio
+
+    seen = []
+    _fake_track_sources(monkeypatch, seen)
+    asyncio.run(runner.run_track_source("sap", True, 1, only_sources={"computrabajo"}))
+
+    assert {c[0] for c in seen} == {"computrabajo", "company_direct"}

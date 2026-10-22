@@ -11,13 +11,12 @@ import config  # noqa: E402
 import database  # noqa: E402
 import main  # noqa: E402
 import search_config  # noqa: E402
-from automation import application_engine, cv_selector  # noqa: E402
+from automation import cv_selector  # noqa: E402
 
 
 def _use_profile(monkeypatch, path):
-    # cv_selector es el lector público; application_engine se parchea también por si el endpoint volviera a usarlo.
+    # cv_selector es el lector público de este endpoint.
     monkeypatch.setattr(cv_selector, "PROFILE_PATH", path)
-    monkeypatch.setattr(application_engine, "PROFILE_PATH", path)
 
 
 @pytest.fixture

@@ -83,7 +83,7 @@ mkdir -p data
 cp backend/defaults/jobhunter.yaml data/jobhunter.yaml
 cp backend/profile.example.json data/profile.json
 ```
-Customize `data/jobhunter.yaml` to define your target city, keyword groups, and tracks. Customize `data/profile.json` with your experience, contact information, and resume paths.
+(Optional: skip this step and let the first-run wizard create both files; see [First run](#first-run).) Customize `data/jobhunter.yaml` to define your target city, keyword groups, and tracks. Customize `data/profile.json` with your experience, contact information, and resume paths.
 
 ---
 
@@ -103,6 +103,41 @@ bun run dev
 ```
 
 Visit the dashboard at `http://127.0.0.1:3010`.
+
+---
+
+## First run
+
+Without a `profile.json` in the data folder (`JH_HOME`, `./data/` by default) the dashboard opens a three-step wizard instead of asking you to edit files by hand. If you already have `profile.json` but no `jobhunter.yaml` of your own (an older install), the app keeps working with the default configuration and only shows a dismissible banner, "Configura tu búsqueda con el asistente", that opens the wizard prefilled and cancellable:
+
+1. **Your CV.** Upload a PDF or DOCX (up to 10 MB) or fill the form manually. The text is extracted **locally**; the file is stored in `JH_HOME/cv/`. If an AI provider is configured it proposes a draft profile from that text; without AI the draft is empty and you fill it in.
+2. **Review.** Check and edit what was understood: target roles (each becomes a track), experience, tools (scoring keywords), languages with CEFR level, modality and city, and eligibility (work permit, visa sponsorship, driving licence).
+3. **Where to search.** Pick markets, which suggest sources (sources with delicate terms of use start unchecked and need an explicit acknowledgement), and optionally followed companies. Then press "Search offers".
+
+The wizard writes `JH_HOME/profile.json` and `JH_HOME/jobhunter.yaml` (tracks, keyword groups with weights summing to 1.0, `scoring.min_relevance` calibrated to the profile). Everything stays editable later in the **Perfil** tab, which also lets you re-run the wizard, change sources, and set the AI provider and SMTP. Re-running the wizard never drops what it does not ask about: the profile keeps your summary, cover letters, other CVs, education, etc.; `jobhunter.yaml` keeps isolated tracks, your own keyword groups, scoring rules and per-source settings (only standard tracks and their keyword groups are regenerated).
+
+### AI providers
+
+AI is optional and only used to read the CV, adapt cover letters (the template is the fallback) and prepare interview packs. **Scoring never uses AI.** With `none` everything works with manual forms and template letters.
+
+| Provider | How it connects | Credentials |
+|----------|-----------------|-------------|
+| `none` (default) | no AI | n/a |
+| `ollama` | local HTTP (`http://127.0.0.1:11434`), default model `llama3.1` | none, nothing leaves your machine |
+| `anthropic` | Anthropic API, default model `claude-sonnet-5-5` | API key |
+| `openai` | OpenAI API, default model `gpt-4o-mini` | API key |
+| `claude_cli` | your **Claude subscription** through the local `claude -p` CLI | the CLI's own login |
+| `codex_cli` | your **ChatGPT subscription** through the local `codex exec` CLI | the CLI's own login |
+
+Choose it in the wizard or in Perfil (a "Test" button checks it). The model can be overridden with `ai.model` in `jobhunter.yaml`. For the CLI providers the app never stores subscription credentials: it only checks the CLI is installed and logged in.
+
+**Secrets.** API keys and the SMTP password are stored in the operating system keychain (via `keyring`), never in `jobhunter.yaml`, `profile.json`, logs or API responses. Environment variables take precedence and are the fallback when no keychain is available (for example headless Linux without a Secret Service; saving a key then returns a clear error): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GMAIL_APP_PASSWORD` (plus `GMAIL_USER`).
+
+**Privacy.** Nothing leaves your machine except the searches on the job portals you enable and, if you pick a cloud provider (`anthropic`, `openai`, or the CLIs, which talk to their vendor), the text sent to it (CV, offers). With `ollama` or `none` there is no AI traffic at all.
+
+### Email (SMTP)
+
+Sending is always manual and approved by you. In Perfil > Email choose the Gmail preset (`smtp.gmail.com:587`, STARTTLS, needs an app password) or a custom SMTP server (host, port, STARTTLS, username, sender name). The password goes to the keychain; "Test" connects and authenticates without sending anything. An install without an `email:` section keeps working as before with `GMAIL_USER` and `GMAIL_APP_PASSWORD`.
 
 ---
 
