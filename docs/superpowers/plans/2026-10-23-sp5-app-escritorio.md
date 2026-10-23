@@ -190,8 +190,8 @@ Entorno: contenedor Linux x86_64 (Ubuntu), sin pantalla (se usó Xvfb), con acce
 2. La primera ejecución de la CI en Windows y macOS probablemente necesite algún ajuste.
 3. Sin firma: SmartScreen y Gatekeeper avisan. En macOS la firma ad-hoc evita que Apple Silicon mate el binario, pero no quita el aviso.
 4. Durante el arranque (unos segundos; más la primera vez con antivirus) no hay ventana ni pantalla de carga.
-5. Los textos nuevos (aviso de Ollama, aviso de versión, errores de arranque) están en español y no pasan por i18n; SP4 deberá integrarlos.
-6. `OllamaNotice` se monta con una línea en `SetupWizard.tsx` (archivo compartido con SP4).
+5. i18n: `OllamaNotice` ya pasa por `t()` (claves `ollama_notice.*` en es/en). **Pendiente:** los diálogos nativos de Rust (aviso de versión nueva y errores de arranque, en `desktop/src-tauri/src/lib.rs`) siguen en español fijo.
+6. `OllamaNotice` se monta con una línea en `SetupWizard.tsx` (archivo compartido con SP4; ya fusionado sin conflictos).
 7. La CSP lleva `'unsafe-inline'` en scripts por el export de Next; no se pudo comprobar si Tauri lo sustituye por hashes.
 8. Un scraper en marcha al cerrar la app sigue hasta su tiempo límite.
-9. `origin/main` no tenía commits nuevos al cerrar: no hubo nada que fusionar. Si SP4 aterriza antes del merge, conviene volver a correr las suites.
+9. Cierre (2026-10-23): `main` (SP4, e2919f9) se fusionó en la rama sin conflictos; tras la fusión se volvió a congelar el backend y la prueba de humo pasó con sus 18 comprobaciones, ejecutada con ruta relativa desde la raíz (corregido el fallo de `smoke_backend.py` con `cwd` distinto).
