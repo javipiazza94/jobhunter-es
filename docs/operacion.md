@@ -1,5 +1,7 @@
 # Operación y detalles técnicos
 
+[Read in English](operations.md)
+
 Este documento reúne los detalles de operación que no caben en el [README](../README.es.md): seguridad de la API local, trabajos de scraping, inbox, esquema de la base de datos y ajuste del scoring. Para empezar a usar JobHunter ES, lee primero el README.
 
 ## Seguridad de la API local
