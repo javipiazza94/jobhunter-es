@@ -62,7 +62,8 @@ def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print(__doc__)
         return 2
-    command = argv[1:]
+    # El programa se lanza con cwd=<carpeta temporal>: una ruta relativa dejaría de resolverse.
+    command = [str(Path(argv[1]).resolve()), *argv[2:]]
     failures: list[str] = []
 
     def check(name: str, ok: bool, detail: object = "") -> None:
