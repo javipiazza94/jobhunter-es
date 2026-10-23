@@ -110,18 +110,18 @@
 
 **Interfaces:** a static check test `frontend/lib/i18n/no-hardcoded.test.ts` that scans `app/**/*.tsx` and `lib/**/*.ts` for JSX text nodes / string literals with letters outside an allowlist (class names, ids, URLs, keys) and fails on Spanish/English prose — keep the allowlist small and justified.
 
-- [ ] Tests: parity, no-hardcoded scan, a happy-dom test that renders main tabs in `en` and asserts no dictionary-es-only value appears.
-- [ ] Commit `feat(i18n): toda la interfaz en español e inglés`.
+- [x] Tests: parity, no-hardcoded scan, a happy-dom test that renders main tabs in `en` and asserts no dictionary-es-only value appears.
+- [x] Commit `feat(i18n): toda la interfaz en español e inglés`.
 
 ### Task 10: Wizard, Profile and sources UI on the registry
 
 **Files:** SetupWizard (markets → sources from registry with attribution + ack warning es/en; LATAM country picker for Computrabajo; remote sources), ProfileTab Búsqueda (per-source params: country, locations; followed companies), offers list/detail always show source name + link (attribution), `ui_language` step in wizard; Tests.
 
-- [ ] Commit `feat(frontend): fuentes del registro, país y atribución en asistente y perfil`.
+- [x] Commit `feat(frontend): fuentes del registro, país y atribución en asistente y perfil`.
 
 ### Task 11: Docs and finish line
 
 **Files:** `CONTRIBUTING.md` ("Add a source" = file + fixture test + doc line; "Add a language" = JSON + templates), README/README.es sources table (market, ack, attribution, notes), `docs/sources.md`; Test `backend/tests/test_sp4_finish.py` + frontend parity tests.
 
-- [ ] Finish-line tests: every registered source has a fixture test (meta-test enumerating the registry and asserting a test file references each id); adding a test language (`xx` dictionary + template dir in tmp) works without code; es↔en UI scan clean.
-- [ ] Commit `docs(sp4): añadir fuentes e idiomas; pruebas de cierre`.
+- [x] Finish-line tests: every registered source has a fixture test (meta-test enumerating the registry and asserting a test file references each id); adding a test language (`xx` dictionary + template dir in tmp) works without code; es↔en UI scan clean.
+- [x] Commit `docs(sp4): añadir fuentes e idiomas; pruebas de cierre`.

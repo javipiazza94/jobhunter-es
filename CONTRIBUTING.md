@@ -51,11 +51,14 @@ bun run lint
 ## Adding New Features
 
 ### Adding a New Scraper Source
-1. Inherit from `BaseScraper` in `backend/scraper/base.py`.
-2. Implement `scrape_keyword()` respecting rate limits (`delay_min`, `delay_max`) and robots compliance (`automation/robots_check.py`).
-3. Add source settings in `backend/defaults/jobhunter.yaml`.
-4. Register the scraper in `backend/scraper/runner.py`.
-5. Add unit and integration tests under `backend/tests/test_<source>.py`.
+
+Sources in JobHunter ES use a pluggable, self-describing registry architecture under `backend/scraper/sources/`:
+
+1. **Create the source module:** Add `backend/scraper/sources/<id>.py` defining a `spec() -> SourceSpec` (specifying `id`, `label` in `es` and `en`, `markets`, `requires_ack`, `default_on`, `attribution`, `params`, and `run(ctx)`).
+2. **Add a sample fixture:** Place mock JSON or HTML data in `backend/tests/fixtures/sources/<id>.{json,html}` with all personal information redacted.
+3. **Add unit tests:** In `backend/tests/test_sources_<category>.py` (or `test_<id>.py`), test offer normalization, keyword filtering, attribution details, and error resilience without network requests.
+4. **Document the source:** Add a row to `docs/sources.md` and the sources table in `README.md` and `README.es.md`.
+5. The registry automatically discovers the new source module, exposing it in the runner, the CLI, the settings API, and the setup wizard without any hard-coded wiring.
 
 ### Adding an AI Provider
 AI providers live in `backend/ai/` behind one interface (`Provider` in `backend/ai/base.py`: `generate_text`, `generate_json`, `check`).
@@ -67,20 +70,15 @@ AI providers live in `backend/ai/` behind one interface (`Provider` in `backend/
 
 ### Adding a Language
 
-JobHunter targets the Spanish job market, but cover letters can be written in other languages:
+Adding a new language (e.g. `de`, `fr`, `it`) requires **zero core code changes**:
 
-- **Cover letter templates** live in `backend/templates/` as Jinja2 files named `cover_letter_<name>.j2`
-  (`cover_letter_base.j2` is the fallback). A track selects its template with `cover_template: <name>` in
-  `jobhunter.yaml`, so a language is added as a new template (e.g. `cover_letter_tech_en.j2`) plus a track
-  (or an existing track) that points to it. Follow-up emails use `followup.j2`.
-- Reuse the variables the existing templates receive (see `backend/automation/cover_letter.py`), and add a
-  test under `backend/tests/` that renders the new template with neutral sample data.
-- Offer language requirements are checked in `backend/automation/language_gate.py` against the
-  `languages` declared in `profile.json` (an isolated track can also use `isolated.exclude_lang_regex`).
-  Supporting a new language there means adding its name variants to that module, with tests.
-- **Dashboard (UI) texts** are currently hard-coded in Spanish in the components under `frontend/app/`;
-  there is no i18n layer yet. Translating the UI is future work: open a feature request first so the
-  approach (library, message files) can be agreed before large changes.
+1. **Frontend UI Dictionary:** Add `frontend/lib/i18n/<lang>.json` matching the exact key structure of `es.json` (verified automatically by `backend/tests/test_sp4_finish.py` and `frontend/lib/i18n/i18n.test.ts`).
+2. **Cover Letter & Follow-up Templates:** Create Jinja2 templates under `backend/templates/<lang>/` (or in user overrides `JH_HOME/templates/<lang>/`):
+   - `cover_letter_base.j2`
+   - `cover_letter_tech.j2`
+   - `followup.j2`
+3. **LaTeX / Typst Document Labels:** Add `templates/latex/i18n/<lang>.yaml` with section headers, closing remarks, and localized date labels.
+4. **Offer Language Detection:** Language screening automatically detects common European languages (`es`, `en`, `de`, `fr`, `it`, `pt`) via `backend/automation/language_detect.py` and matches candidate requirements in `language_gate.py`.
 
 ### Modifying Tracks or Scoring Rules
 - Tracks and scoring criteria live exclusively in `jobhunter.yaml`.
