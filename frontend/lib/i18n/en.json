@@ -532,5 +532,11 @@
   "country.cr": "Costa Rica",
   "country.pa": "Panama",
   "country.gt": "Guatemala",
-  "country.do": "Dominican Republic"
+  "country.do": "Dominican Republic",
+
+  "ollama_notice.missing": "We couldn't find Ollama on this computer. Install it from ollama.com or pick another AI provider in the list above.",
+  "ollama_notice.install": "Download Ollama",
+  "ollama_notice.stopped": "Ollama is installed but not running. Open it and press \"Check again\".",
+  "ollama_notice.no_models": "Ollama is running but has no models downloaded. Download one from the Ollama app or pick another provider.",
+  "ollama_notice.recheck": "Check again"
 }

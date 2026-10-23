@@ -48,3 +48,17 @@ test("en escritorio avisa de que falta Ollama y enlaza a la descarga", async () 
   expect(container.querySelector("a")?.getAttribute("href")).toBe("https://ollama.com/download");
   await unmount();
 });
+
+test("el aviso sigue el idioma activo", async () => {
+  (window as unknown as Record<string, unknown>).__JH_DESKTOP__ = true;
+  const { setLocale } = await import("@/lib/i18n");
+  setLocale("en", { remember: false });
+  try {
+    const { container, unmount } = await mount();
+    expect(container.textContent).toContain("couldn't find Ollama");
+    expect(container.textContent).not.toContain("No hemos encontrado");
+    await unmount();
+  } finally {
+    setLocale("es", { remember: false });
+  }
+});

@@ -532,5 +532,11 @@
   "country.cr": "Costa Rica",
   "country.pa": "Panamá",
   "country.gt": "Guatemala",
-  "country.do": "República Dominicana"
+  "country.do": "República Dominicana",
+
+  "ollama_notice.missing": "No hemos encontrado Ollama en este equipo. Instálalo desde ollama.com o elige otro proveedor de IA en el desplegable de arriba.",
+  "ollama_notice.install": "Descargar Ollama",
+  "ollama_notice.stopped": "Ollama está instalado pero no está en marcha. Ábrelo y pulsa «Comprobar de nuevo».",
+  "ollama_notice.no_models": "Ollama responde pero no tiene ningún modelo descargado. Descarga uno desde la aplicación de Ollama o elige otro proveedor.",
+  "ollama_notice.recheck": "Comprobar de nuevo"
 }

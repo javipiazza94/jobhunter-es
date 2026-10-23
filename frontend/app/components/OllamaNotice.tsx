@@ -3,14 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchOllamaStatus } from "@/lib/api";
 import { isDesktopApp } from "@/lib/apiBase";
+import { t, useLocale } from "@/lib/i18n";
 import type { OllamaStatus } from "@/lib/types";
 
 export const T = {
-  missing: "No hemos encontrado Ollama en este equipo. Instálalo desde ollama.com o elige otro proveedor de IA en el desplegable de arriba.",
-  install: "Descargar Ollama",
-  stopped: "Ollama está instalado pero no está en marcha. Ábrelo y pulsa «Comprobar de nuevo».",
-  noModels: "Ollama responde pero no tiene ningún modelo descargado. Descarga uno desde la aplicación de Ollama o elige otro proveedor.",
-  recheck: "Comprobar de nuevo",
+  get missing() { return t("ollama_notice.missing"); },
+  get install() { return t("ollama_notice.install"); },
+  get stopped() { return t("ollama_notice.stopped"); },
+  get noModels() { return t("ollama_notice.no_models"); },
+  get recheck() { return t("ollama_notice.recheck"); },
 };
 
 export type NoticeKind = "missing" | "stopped" | "noModels" | null;
@@ -23,6 +24,7 @@ export function noticeKind(status: OllamaStatus): NoticeKind {
 
 /** Solo en la app de escritorio, donde Ollama no viene incluido. No aparece en el dashboard web. */
 export function OllamaNotice() {
+  useLocale();
   const [status, setStatus] = useState<OllamaStatus | null>(null);
   const desktop = isDesktopApp();
 
