@@ -1,11 +1,11 @@
 {
   "version": "0.15.0",
   "base_url": "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40{version}/",
-  "comment": "sha256 = null: pendiente de fijar. Ejecuta el workflow «Desktop» a mano (workflow_dispatch): imprime los hashes en el resumen del trabajo para copiarlos aquí. Con las versiones de tag la CI exige hash.",
+  "comment": "SHA-256 fijados el 2026-10-23 a partir de un ensayo manual del workflow «Desktop» (run 39934920686): cada hash lo calculó la CI sobre la descarga de ese objetivo desde la release oficial. No se cruzaron con una fuente independiente (la release no publica sumas). Al subir de versión: pon sha256 a null, ejecuta el workflow a mano, revisa los hashes del resumen y fíjalos. Con las versiones de tag la CI exige hash.",
   "assets": {
-    "x86_64-unknown-linux-musl": { "file": "tectonic-{version}-x86_64-unknown-linux-musl.tar.gz", "sha256": null },
-    "x86_64-pc-windows-msvc": { "file": "tectonic-{version}-x86_64-pc-windows-msvc.zip", "sha256": null },
-    "x86_64-apple-darwin": { "file": "tectonic-{version}-x86_64-apple-darwin.tar.gz", "sha256": null },
-    "aarch64-apple-darwin": { "file": "tectonic-{version}-aarch64-apple-darwin.tar.gz", "sha256": null }
+    "x86_64-unknown-linux-musl": { "file": "tectonic-{version}-x86_64-unknown-linux-musl.tar.gz", "sha256": "dfb82876f2986862996e564fa507a9e576e0c1e3bee63c2c1bd677c2543e6407" },
+    "x86_64-pc-windows-msvc": { "file": "tectonic-{version}-x86_64-pc-windows-msvc.zip", "sha256": "1d6bb76f049c8a3774f6e9d66e4b04e1a8c3dcb37527b6b41b7e894328e7bf29" },
+    "x86_64-apple-darwin": { "file": "tectonic-{version}-x86_64-apple-darwin.tar.gz", "sha256": "dd42576eaa4c0df58c243dd78b7b864d9deb405ffdfcdadd1b79a31faceab747" },
+    "aarch64-apple-darwin": { "file": "tectonic-{version}-aarch64-apple-darwin.tar.gz", "sha256": "24bd46566fa30d41101848405e9cbc4645edb92d8f857c9d21262174fb70cd33" }
   }
 }
