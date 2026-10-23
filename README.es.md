@@ -2,43 +2,80 @@
 
 [Read in English](README.md) · **Español**
 
-Automatización de candidaturas tecnológicas y de empleo en España con cola de revisión humana. Scraping de ofertas → clasificación configurable por tracks → borradores de cartas → aprobación manual → envío y seguimiento.
+Plataforma de código abierto para buscar empleo y preparar candidaturas, pensada para el mercado laboral español y ampliable a otros países. Rastrea ofertas en varios portales, las clasifica en perfiles de búsqueda configurables, puntúa su relevancia, prepara CV y cartas a medida y mantiene una cola de revisión local: **nada se envía sin que tú lo apruebes**.
 
-## Flujo
+Todo funciona en tu equipo. Tus datos (perfil, CV, base de datos, candidaturas) se guardan en una carpeta local y la inteligencia artificial es opcional: sin ella, la aplicación sigue funcionando con formularios y plantillas.
 
+---
+
+## Funcionalidades
+
+- **Búsqueda en varias fuentes:** Tecnoempleo, InfoJobs, Manfred, Computrabajo (por país), LinkedIn, Indeed, Remotive, RemoteOK, Arbeitnow, freehire y webs de empleo de empresas concretas. Un registro de fuentes autodescubierto permite añadir otras con un fichero y su test. Detalle en [docs/sources.md](docs/sources.md).
+- **Perfiles de búsqueda (tracks) y scoring configurables:** cada puesto objetivo es un track con sus grupos de palabras clave, pesos, reglas de ubicación, experiencia y salario, definidos en `jobhunter.yaml`. El scoring es determinista; **nunca usa IA**.
+- **Filtros de seguridad y elegibilidad:** detección de texto oculto o instrucciones dirigidas a una IA en las ofertas, respeto de `robots.txt`, filtro de idiomas exigidos y filtro de elegibilidad (permiso de trabajo, visado, residencia, titulación).
+- **Asistente de primer arranque:** subes tu CV (PDF o DOCX) o rellenas un formulario, revisas lo que la aplicación ha entendido y eliges dónde buscar. Genera tu perfil y tu configuración.
+- **Cola de revisión humana:** las candidaturas quedan como borrador en un panel local. Tú editas la carta, apruebas o rechazas; solo entonces se envía.
+- **CV y carta en PDF a medida de cada oferta:** con IA (un redactor y un revisor, con un validador que descarta cualquier dato que no figure en tu perfil) o sin IA (a partir de plantillas). Los PDF se verifican (páginas, legibilidad para sistemas de selección automáticos, datos de contacto) y se archivan por candidatura.
+- **Plantillas propias:** CV y carta en LaTeX o Typst, con compilación de prueba obligatoria antes de activarlas.
+- **Envío por SMTP con aprobación:** preset de Gmail o servidor propio, límite diario y periodo de espera por empresa para no recontactar.
+- **Seguimiento:** recordatorios para candidaturas sin respuesta y estados de cada candidatura.
+- **Rellenado de formularios de candidatura (ATS):** SuccessFactors, Workday, Greenhouse, Lever y formularios genéricos con Playwright. **Nunca pulsa «Enviar».**
+- **Inbox de ficheros:** ofertas y candidaturas dejadas en una carpeta se cargan solas en la base de datos, para integrar flujos externos ([docs/inbox.md](docs/inbox.md)).
+- **IA opcional y a tu elección:** Ollama (local), API de Anthropic u OpenAI, o tu suscripción de Claude o ChatGPT mediante su CLI. Las claves van al llavero del sistema.
+- **Interfaz en español e inglés**, y documentos en el idioma de la oferta cuando hay plantilla para él.
+- **App de escritorio** (Windows, macOS y Linux) que empaqueta todo en un instalador.
+
+### Limitaciones conocidas
+
+- LinkedIn e InfoJobs exigen que aceptes de forma expresa sus condiciones de uso y vienen desactivadas por defecto.
+- El rellenado de formularios está probado con SuccessFactors y formularios genéricos; Workday, Greenhouse y Lever siguen el mismo principio, pero no se han probado con un formulario real de cada uno.
+- Los instaladores de escritorio no están firmados y los de Windows y macOS son experimentales (ver [App de escritorio](#app-de-escritorio)).
+
+---
+
+## Cómo funciona
+
+```text
+Portales de empleo / empresas / ficheros del inbox
+                      ↓
+           Filtros de seguridad (guard, robots)
+                      ↓
+        Scoring y clasificación en un track
+                      ↓
+       Borrador de candidatura y carta a medida
+                      ↓
+   Panel local («Pendientes») ──> Aprobar / Editar / Rechazar
+                      ↓
+           Envío y archivo de la candidatura
+                      ↓
+      Recordatorios y seguimiento de estados
 ```
-Tecnoempleo / seed
-      ↓
- classify_track()            id de track | manual_review
-      ↓
-  create_drafts()            applications con status=pending_approval
-      ↓
-Dashboard "Pendientes"       editar carta + aprobar o rechazar
-      ↓
-  send_approved(id)          Gmail SMTP → company_contact_history
-```
 
-- **SAP** → CV del módulo de la oferta (`cv_sap_modules`: FI_CO / MM / SD; `sap_module` o título) o, sin módulo, `cv_sap_path` — `automation/cv_selector.py` — + plantilla `cover_letter_sap.j2`
-- **IA/Dev** → `cv_ia_path` + plantilla `cover_letter_tech.j2`
-- **manual_review** → se salta automáticamente (confianza < 0.2)
-- **Cooldown** 180 días por empresa para evitar recontactos
+---
 
 ## Stack
 
-| Capa | Tecnología |
-|------|-----------|
-| Backend | Python 3.11 · FastAPI · SQLite |
-| Scraping | Playwright (stealth) · BeautifulSoup |
-| Frontend | Next.js 16 · Tailwind CSS · TypeScript |
-| Email | Gmail SMTP (App Password) · Jinja2 |
+| Capa | Tecnologías |
+|---|---|
+| **Backend** | Python 3.11 · FastAPI · SQLite · Pydantic |
+| **Scraping** | Playwright · BeautifulSoup · ScraperAPI (opcional) |
+| **Frontend** | Next.js · TypeScript · Tailwind CSS · Bun |
+| **Documentos** | Jinja2 · LaTeX (Tectonic o XeLaTeX) · Typst (opcional) · pypdf · Poppler |
+| **IA (opcional)** | Ollama · API de Anthropic · API de OpenAI · CLI de Claude y de Codex |
+| **Email** | SMTP (contraseña de aplicación, STARTTLS) |
+| **Escritorio** | Tauri 2 · backend congelado con PyInstaller · Tectonic incluido |
+
+---
 
 ## Requisitos previos
 
-- Python 3.11+, Node.js 18+, [Bun](https://bun.sh/)
-- Gmail con [App Password](https://myaccount.google.com/apppasswords) activada
-- Playwright: `playwright install chromium`
-- Opcional para compilar PDF en local: [Tectonic](https://tectonic-typesetting.github.io/) (incluido en la app de escritorio) o `xelatex` más Poppler
-- Opcional para compilar la app de escritorio tú mismo: Rust (estable) y las librerías de sistema de Tauri; ver [desktop/README.md](desktop/README.md)
+- Python 3.11 o superior
+- Node.js 18 o superior y [Bun](https://bun.sh/)
+- Chromium de Playwright: `playwright install chromium`
+- Opcional, para compilar PDF en local: [Tectonic](https://tectonic-typesetting.github.io/) (incluido en la app de escritorio) o `xelatex` más Poppler
+- Opcional, para compilar la app de escritorio tú mismo: Rust (estable) y las librerías de sistema de Tauri; ver [desktop/README.md](desktop/README.md)
+
+---
 
 ## Instalación
 
@@ -48,8 +85,9 @@ cd jobhunter-es
 
 # Backend
 cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt        # solo ejecución; para los tests: requirements-dev.txt
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt        # para desarrollo y tests: requirements-dev.txt
 playwright install chromium
 
 # Frontend
@@ -57,72 +95,98 @@ cd ../frontend
 bun install
 ```
 
+Si prefieres no usar el terminal, instala la [app de escritorio](#app-de-escritorio).
+
+---
+
 ## Configuración
 
-Crea `backend/.env` (o `.env` en la raíz):
+Todo lo personal vive fuera del código, en la **carpeta de datos `JH_HOME`** (por defecto `./data/`, ignorada por git; en la app de escritorio, la carpeta de datos del sistema). Si no existe, la API la crea al arrancar.
 
-```env
-GMAIL_USER=tu@gmail.com
-GMAIL_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
-```
+| Fichero o carpeta | Contenido |
+|---|---|
+| `jobhunter.yaml` | Búsqueda, scoring, tracks, fuentes, IA y SMTP |
+| `profile.json` | Tu perfil: datos personales, resumen, experiencia, formación, idiomas |
+| `cv/` | Tus CV en PDF |
+| `job_hunter.db` | Base de datos SQLite |
+| `applications/` | CV y carta archivados de cada candidatura |
+| `inbox/`, `backups/`, `logs/`, `sessions/` | Entrada de ficheros, copias, registros y sesiones |
 
-**Carpeta de datos (`JH_HOME`).** Todo lo personal vive fuera del código, en `JH_HOME` (por defecto `./data/`, ignorada por git): `jobhunter.yaml` (búsqueda, scoring y tracks), `profile.json`, `cv/`, `job_hunter.db`, `inbox/`, `backups/`, `logs/` y `sessions/`. `JH_DB_PATH`, `JH_INBOX_DIR` y `JH_PROFILE_PATH` siguen mandando sobre `JH_HOME`. Si la carpeta no existe, la API la crea al arrancar.
+**Crear la configuración.** La forma más sencilla es dejar que el [asistente de primer arranque](#primer-arranque) genere `profile.json` y `jobhunter.yaml`. También puedes crearlos a mano:
 
-**Búsqueda y scoring (`jobhunter.yaml`).** Sin fichero en `JH_HOME` se usa `backend/defaults/jobhunter.yaml` (desarrollador genérico). Para tu perfil, copia uno de `examples/` (`developer`, `sap-consultant`, `data-ai`; ver `examples/README.md`) a `JH_HOME/jobhunter.yaml` y adáptalo. Un YAML inválido (pesos que no suman 1.0, id de track repetido…) impide arrancar la API y el error indica fichero, campo y motivo. **Los cambios en `jobhunter.yaml` se aplican solos** (la API detecta que el fichero cambió; no hace falta reiniciar): si el fichero tiene un error, la API sigue con la última versión válida y lo registra en el log. Un track aislado (trabajo puente) lleva sus búsquedas en `search_keywords` y `remote_search_keywords` (estas últimas se buscan como «<palabra> teletrabajo»); las ubicaciones de esa búsqueda están en `sources.generic`.
-
-`profile.json` (en `JH_HOME`, ignorado por git; contiene datos personales como DNI y fecha de nacimiento). Cópialo desde la plantilla y edítalo con tus datos:
 ```bash
-mkdir -p data && cp backend/profile.example.json data/profile.json
+mkdir -p data
+cp backend/defaults/jobhunter.yaml data/jobhunter.yaml
+cp backend/profile.example.json data/profile.json
 ```
-Esquema completo: personal (incluye `dni_nie`, `birth_date` — usados por el handler de SuccessFactors), `availability`, `salary_expectation`, `summary`, `stack`, `languages`, `certifications`, `education`, `experience`.
 
-Copia tus CVs a `data/cv/` con los nombres que indica `profile.json` (por ejemplo `cv_ia_path`, `cv_sap_path`, `cv_sap_modules`, según las claves de `cv:` de cada track).
+- **`jobhunter.yaml`:** sin fichero en `JH_HOME` se usa `backend/defaults/jobhunter.yaml` (desarrollador genérico). En [`examples/`](examples/README.md) hay configuraciones de ejemplo (`developer`, `sap-consultant`, `data-ai`) que puedes copiar y adaptar. Un YAML inválido (pesos que no suman 1.0, id de track repetido…) impide arrancar la API y el error indica fichero, campo y motivo. Los cambios se aplican solos, sin reiniciar: si el fichero tiene un error, la API sigue con la última versión válida y lo registra en el log.
+- **`profile.json`:** contiene datos personales (puedes incluir DNI/NIE y fecha de nacimiento, que usan algunos formularios de candidatura); no lo subas a ningún repositorio. Copia tus CV a `JH_HOME/cv/` con los nombres que indica el perfil.
+- **Tracks aislados (trabajos puente):** más detalle en [docs/operacion.md](docs/operacion.md#tracks-aislados-trabajos-puente).
+
+**Variables de entorno.** Se leen de `backend/.env` o de un `.env` en la raíz. Tienen prioridad sobre los ficheros.
+
+| Variable | Para qué |
+|---|---|
+| `JH_HOME` | Carpeta de datos. `JH_DB_PATH`, `JH_INBOX_DIR` y `JH_PROFILE_PATH` mandan sobre ella |
+| `GMAIL_USER`, `GMAIL_APP_PASSWORD` | Envío por Gmail (alternativa a configurarlo en el panel) |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | Claves de API de IA (alternativa al llavero) |
+| `SCRAPERAPI_KEY` | Clave de ScraperAPI, solo para Indeed |
+| `ALLOWED_HOSTS` | Hosts que acepta la API local (por defecto `localhost,127.0.0.1`) |
+| `SCRAPER_COOLDOWN_SECONDS` | Espera mínima entre ejecuciones de una misma fuente (300 s) |
+
+Límites de operación y ajuste fino del scoring: [docs/operacion.md](docs/operacion.md).
+
+---
 
 ## App de escritorio
 
-Si prefieres no usar el terminal, la [app de escritorio](desktop/README.md) trae el dashboard, el backend y Tectonic en un instalador, y se usa como cualquier otro programa.
+Si prefieres no usar el terminal, la [app de escritorio](desktop/README.md) trae el panel, el backend y Tectonic en un instalador, y se usa como cualquier otro programa.
 
 - **Instaladores:** Windows (`.msi`/`.exe`), macOS (`.dmg`, Apple Silicon e Intel) y Linux (`.deb`, `.AppImage`), generados por el workflow `Desktop` de GitHub Actions.
-- **Tus datos** (perfil, base de datos, CVs, candidaturas) están en la carpeta de datos del sistema (`~/.local/share/jobhunter`, `%APPDATA%\jobhunter`, `~/Library/Application Support/jobhunter`), nunca en la carpeta de instalación.
+- **Tus datos** están en la carpeta de datos del sistema (`~/.local/share/jobhunter`, `%APPDATA%\jobhunter`, `~/Library/Application Support/jobhunter`), nunca en la carpeta de instalación.
 - **Solo en local:** el backend incluido escucha en `127.0.0.1` en un puerto libre y mantiene las protecciones de la API descritas en [docs/adr/](docs/adr/).
 - **Bajo demanda:** Chromium (relleno de formularios) se descarga la primera vez que hace falta. Ollama no va incluido: la app lo detecta y ofrece instalarlo o elegir otro proveedor de IA.
 - **Sin firmar y sin actualización automática:** el sistema avisa la primera vez que la abres (la guía explica cómo continuar) y la app solo te dice cuándo hay una versión nueva.
 
-> **Estado:** la CI genera los instaladores con cada tag de versión y en ejecuciones manuales, pero todavía no hay ninguna release publicada. El `.deb` de Linux se ha instalado y abierto de punta a punta; los de Windows y macOS se generan y pasan la prueba de humo del backend, pero se han probado poco en un equipo real: considéralos experimentales.
+Las compilaciones de Windows y macOS son experimentales: se generan y pasan la prueba de humo del backend, pero se han probado poco en equipos reales.
 
-## Arranque
+---
+
+## Ejecución en local
+
+En dos terminales:
 
 ```bash
-# Terminal 1 — API
-cd backend && .venv/bin/uvicorn main:app --reload --port 8020
+# 1. API (puerto 8020)
+cd backend
+source .venv/bin/activate
+python -m uvicorn main:app --host 127.0.0.1 --port 8020
 
-# Terminal 2 — Dashboard
-cd frontend && bun run dev
+# 2. Panel (puerto 3010)
+cd frontend
+bun run dev
 ```
 
-Dashboard en `http://localhost:3010`
+Abre `http://127.0.0.1:3010`.
 
-**Seguridad:** la API no tiene login, así que solo escucha en `127.0.0.1`, solo atiende peticiones cuyo `Host` sea `localhost`/`127.0.0.1` (configurable con `ALLOWED_HOSTS`) y exige la cabecera `X-JH-Client: dashboard` en `POST`/`PUT`/`PATCH`/`DELETE`. Si llamas a la API con `curl` o un script, añade esa cabecera. Cada fuente de `POST /api/scraper/run` espera `SCRAPER_COOLDOWN_SECONDS` (300 por defecto) entre ejecuciones y no puede lanzarse dos veces a la vez. Detalle y motivos: `docs/adr/0001-proteccion-de-la-api-local.md`.
+La API no tiene login: solo escucha en `127.0.0.1`, comprueba el `Host` y exige la cabecera `X-JH-Client: dashboard` en las peticiones que modifican datos (si llamas con `curl` o un script, añádela). Detalle y motivos: [docs/adr/0001-proteccion-de-la-api-local.md](docs/adr/0001-proteccion-de-la-api-local.md) y [docs/operacion.md](docs/operacion.md).
 
-**Trabajos, esquema y contrato:**
-- `POST /api/scraper/run` lanza cada fuente como un proceso aparte (`python -m scraper.jobs <fuente>`) con tiempo límite (`JOB_TIMEOUT_SECONDS`, 1800 s por defecto). Su estado y las últimas líneas del log se consultan en `GET /api/jobs` y `GET /api/jobs/{id}`. El estado vive en el proceso de la API.
-- **Inbox (n8n):** lo que dejan en `data/inbox/` (`candidaturas_*.txt`, `ofertas_*.txt`) lo carga la propia API: al arrancar y cada 60 s (`JH_INBOX_POLL_SECONDS`, 0 = desactivado), con copia previa de la BD (`data/backups/job_hunter.db.bak-auto-<fecha>`, se conservan las 10 últimas). Los cargadores deduplican, nunca bajan un estado y dejan en el fichero las filas dudosas. El dashboard se refresca solo y avisa de lo que queda sin cargar (`GET /api/inbox/status`; `POST /api/inbox/sync` fuerza la carga). Los trabajos `inbox` (simulacro) e `inbox-apply` siguen disponibles por `POST /api/scraper/run`. Para probar sin tocar tus datos: `JH_DB_PATH` y `JH_INBOX_DIR` apuntan a una copia de la BD y a un inbox temporal.
-- La BD lleva versión (`PRAGMA user_version`). Para cambiar el esquema añade una función `_migration_00N_…` al final de `MIGRATIONS` en `backend/database.py` y no edites las anteriores; cada una se ejecuta una vez y de forma atómica.
-- Los modelos de la API están en `backend/schemas.py`; `backend/tests/test_api_contract.py` comprueba que los tipos de `frontend/lib/types.ts` no se desajusten con ellos.
+---
 
 ## Primer arranque
 
-Sin `profile.json` en la carpeta de datos (`JH_HOME`, `./data/` por defecto), el dashboard abre un asistente de tres pasos en lugar de pedirte editar ficheros a mano. Si ya tienes `profile.json` pero no un `jobhunter.yaml` propio (instalación anterior), la app sigue funcionando con la configuración por defecto y solo muestra un aviso descartable, «Configura tu búsqueda con el asistente», que lo abre precargado y cancelable:
+Sin `profile.json` en la carpeta de datos, el panel abre un asistente de tres pasos en lugar de pedirte editar ficheros a mano. Si ya tienes `profile.json` pero no un `jobhunter.yaml` propio (instalación anterior), la aplicación sigue funcionando con la configuración por defecto y solo muestra un aviso descartable que abre el asistente precargado.
 
 1. **Tu CV.** Sube un PDF o DOCX (hasta 10 MB) o rellena el formulario. El texto se extrae **en local** y el archivo se guarda en `JH_HOME/cv/`. Si hay un proveedor de IA configurado, propone un borrador de perfil a partir del texto; sin IA el borrador sale vacío y lo rellenas tú.
 2. **Revisión.** Comprueba y edita lo entendido: puestos objetivo (cada uno será un track), experiencia, herramientas (palabras clave del scoring), idiomas con nivel CEFR, modalidad y ciudad, y elegibilidad (permiso de trabajo, patrocinio de visado, carnet de conducir).
 3. **Dónde buscar.** Elige mercados, que sugieren fuentes (las de condiciones de uso delicadas empiezan sin marcar y exigen aceptación expresa), y opcionalmente empresas a seguir. Pulsa «Buscar ofertas».
 
-El asistente escribe `JH_HOME/profile.json` y `JH_HOME/jobhunter.yaml` (tracks, grupos de palabras con pesos que suman 1.0 y `scoring.min_relevance` calibrado al perfil). Todo sigue siendo editable después en la pestaña **Perfil**, que también permite repetir el asistente, cambiar fuentes y configurar la IA y el SMTP. Repetir el asistente no borra nada que no pregunte: en el perfil se conservan el resumen, las cartas, los otros CV, la formación, etc.; en `jobhunter.yaml`, los tracks aislados, los grupos de palabras propios, las reglas de scoring y los ajustes propios de cada fuente (solo se regeneran los tracks estándar y sus grupos).
+El asistente escribe `JH_HOME/profile.json` y `JH_HOME/jobhunter.yaml` (tracks, grupos de palabras con pesos que suman 1.0 y `scoring.min_relevance` calibrado al perfil). Todo sigue siendo editable después en la pestaña **Perfil**, que también permite repetir el asistente, cambiar fuentes y configurar la IA y el SMTP. Repetir el asistente no borra nada que no pregunte: se conservan el resumen, las cartas, los otros CV y la formación del perfil, y los tracks aislados, los grupos de palabras propios, las reglas de scoring y los ajustes de cada fuente.
 
 ### Proveedores de IA
 
-La IA es opcional y solo se usa para leer el CV, adaptar cartas de presentación (la plantilla es la alternativa) y preparar entrevistas. **El scoring nunca usa IA.** Con `none` todo funciona con formularios manuales y cartas de plantilla.
+La IA es opcional y solo se usa para leer el CV, adaptar cartas (la plantilla es la alternativa) y preparar entrevistas. **El scoring nunca usa IA.** Con `none` todo funciona con formularios manuales y cartas de plantilla.
 
 | Proveedor | Cómo se conecta | Credenciales |
 |-----------|-----------------|--------------|
@@ -133,32 +197,30 @@ La IA es opcional y solo se usa para leer el CV, adaptar cartas de presentación
 | `claude_cli` | tu **suscripción de Claude** mediante el CLI local `claude -p` | la sesión del propio CLI |
 | `codex_cli` | tu **suscripción de ChatGPT** mediante el CLI local `codex exec` | la sesión del propio CLI |
 
-Se elige en el asistente o en Perfil (un botón «Probar» lo comprueba). El modelo se puede cambiar con `ai.model` en `jobhunter.yaml`. Con los proveedores por CLI la app no guarda credenciales de suscripción: solo comprueba que el CLI está instalado y con sesión.
+Se elige en el asistente o en Perfil (un botón «Probar» lo comprueba). El modelo se puede cambiar con `ai.model` en `jobhunter.yaml`. Con los proveedores por CLI la aplicación no guarda credenciales de suscripción: solo comprueba que el CLI está instalado y con sesión.
 
-**Secretos.** Las claves de API y la contraseña SMTP van al llavero del sistema operativo (vía `keyring`), nunca a `jobhunter.yaml`, `profile.json`, logs ni respuestas de la API. Las variables de entorno tienen prioridad y son la alternativa si no hay llavero (por ejemplo, Linux sin Secret Service; guardar una clave devuelve entonces un error claro): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GMAIL_APP_PASSWORD` (y `GMAIL_USER`).
+**Secretos.** Las claves de API y la contraseña SMTP van al llavero del sistema operativo (vía `keyring`), nunca a `jobhunter.yaml`, `profile.json`, logs ni respuestas de la API. Las variables de entorno tienen prioridad y son la alternativa si no hay llavero (por ejemplo, Linux sin Secret Service; guardar una clave devuelve entonces un error claro).
 
 **Privacidad.** Nada sale de tu equipo salvo las búsquedas en los portales que actives y, si eliges un proveedor en la nube (`anthropic`, `openai` o los CLI, que hablan con su fabricante), el texto que se le envía (CV, ofertas). Con `ollama` o `none` no hay tráfico de IA.
 
 ### Email (SMTP)
 
-El envío es siempre manual y aprobado por ti. En Perfil > Email elige el preset de Gmail (`smtp.gmail.com:587`, STARTTLS, requiere contraseña de aplicación) o un servidor SMTP propio (host, puerto, STARTTLS, usuario, nombre del remitente). La contraseña va al llavero; «Probar» se conecta y autentica sin enviar nada. Una instalación sin sección `email:` sigue funcionando como antes con `GMAIL_USER` y `GMAIL_APP_PASSWORD`.
+El envío es siempre manual y aprobado por ti. En Perfil > Email elige el preset de Gmail (`smtp.gmail.com:587`, STARTTLS, requiere [contraseña de aplicación](https://myaccount.google.com/apppasswords)) o un servidor SMTP propio (host, puerto, STARTTLS, usuario, nombre del remitente). La contraseña va al llavero; «Probar» se conecta y autentica sin enviar nada.
 
 ### Preparación de documentos y candidaturas
 
-El botón **"Preparar candidatura"** en la tarjeta de revisión (o el endpoint `POST /api/applications/{id}/prepare`) genera y compila un CV y una carta de presentación en PDF a medida de la oferta:
+El botón **«Preparar candidatura»** de la tarjeta de revisión (o `POST /api/applications/{id}/prepare`) genera y compila un CV y una carta de presentación en PDF a medida de la oferta:
 
-- **Sin IA (determinista):** genera el CV y la carta a partir de los datos de `profile.json` y la plantilla activa, recortando viñetas menos relevantes si desborda el límite de páginas.
-- **Con IA (redactor + revisor):** si hay un proveedor de IA configurado, un redactor adapta el resumen, competencias y viñetas del perfil para alinearlos con la oferta, y un revisor critica el encaje. Un **validador de honestidad** estricto descarta cualquier empresa, titulación o habilidad inventada que no figure en el perfil. Si el documento desborda las páginas límite, se solicita un recorte a la IA y, de persistir, se aplica el recorte determinista.
-- **Límites y verificación:** el CV se ciñe a un máximo de 2 páginas (configurable) y la carta a 1 página exacta. Se comprueba mediante `verify_pdf` que los PDFs son legibles por ATS, contienen los datos de contacto literales (email y teléfono) y fechas en formato estándar.
-- **Archivo por candidatura:** los PDFs resultantes se archivan de forma atómica en `JH_HOME/applications/<id>/` (`cv.pdf`, `cover.pdf`, `job_posting.md` y `metadata.json`). Al pulsar **"Aprobar y enviar"**, se adjuntan automáticamente los PDFs archivados.
+- **Sin IA (determinista):** genera el CV y la carta a partir de `profile.json` y la plantilla activa, recortando las viñetas menos relevantes si se desborda el límite de páginas.
+- **Con IA (redactor + revisor):** un redactor adapta el resumen, las competencias y las viñetas del perfil a la oferta y un revisor critica el encaje. Un **validador de honestidad** descarta cualquier empresa, titulación, fecha o habilidad que no figure en el perfil. Si el documento desborda las páginas, se pide un recorte a la IA y, si persiste, se aplica el recorte determinista.
+- **Límites y verificación:** el CV ocupa como máximo 2 páginas (configurable) y la carta 1. Se comprueba que los PDF son legibles por sistemas de selección automáticos, que contienen los datos de contacto literales (email y teléfono) y que las fechas tienen formato estándar.
+- **Archivo por candidatura:** los PDF se guardan de forma atómica en `JH_HOME/applications/<id>/` (`cv.pdf`, `cover.pdf`, `job_posting.md` y `metadata.json`). Al pulsar **«Aprobar y enviar»** se adjuntan automáticamente.
 
 #### Motor de compilación (Tectonic / LaTeX)
 
-Para compilar las plantillas LaTeX a PDF se recomienda **Tectonic** (motor autónomo y moderno que descarga paquetes bajo demanda sin necesidad de instalar TeX Live completo). Si no hay ningún motor en el sistema, la preparación responde con un aviso 409 indicando cómo instalarlo:
+Para compilar las plantillas LaTeX se recomienda **Tectonic**, un motor autónomo que descarga los paquetes bajo demanda sin instalar TeX Live completo. Si no hay ningún motor en el sistema, la preparación responde con un aviso 409 que indica cómo instalarlo. Métodos de la [guía oficial](https://tectonic-typesetting.github.io/book/latest/installation/):
 
-Métodos de instalación de la [guía oficial](https://tectonic-typesetting.github.io/book/latest/installation/):
-
-- **Linux / macOS (instalador oficial):** descarga el binario `tectonic` en la carpeta actual; muévelo a una carpeta del `PATH` (p. ej. `~/.local/bin`):
+- **Linux / macOS (instalador oficial):** descarga el binario `tectonic` en la carpeta actual; muévelo a una carpeta del `PATH` (por ejemplo `~/.local/bin`):
   ```bash
   curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh
   ```
@@ -170,150 +232,165 @@ Métodos de instalación de la [guía oficial](https://tectonic-typesetting.gith
   [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
   iex ((New-Object System.Net.WebClient).DownloadString('https://drop-ps1.fullyjustified.net'))
   ```
-- **Desde el código (cualquier sistema):** `cargo install tectonic` (requiere Rust y las bibliotecas del sistema que indica la guía oficial).
+- **Desde el código (cualquier sistema):** `cargo install tectonic` (requiere Rust y las librerías de sistema de la guía oficial).
 
-Debian/Ubuntu no tienen paquete apt `tectonic`: usa el instalador, Homebrew o conda.
+Debian y Ubuntu no tienen paquete apt `tectonic`: usa el instalador, Homebrew o conda. También se detectan `xelatex` y `lualatex` si ya están en el `PATH`.
 
-*Nota:* También se detectan y soportan motores tradicionales como `xelatex` o `lualatex` si ya están en el `PATH`.
+#### Plantillas propias de CV y carta
 
-#### Plantillas personalizadas de CV y carta
+Por defecto se usan plantillas basadas en `moderncv` (estilo banking) para el CV y `cover.cls` para la carta. Puedes registrar plantillas propias en LaTeX (`.tex.j2`) o Typst (`.typ.j2`):
 
-JobHunter incluye por defecto plantillas integradas basadas en `moderncv` (banking) para CV y `cover.cls` para cartas. Es posible añadir y activar plantillas propias en formato LaTeX (`.tex.j2`) o Typst (`.typ.j2`):
-- Desde el dashboard en **Perfil > Plantillas**.
-- Vía API con `POST /api/templates` o el comando Claude Code `/add-template`.
-- Cada plantilla registrada realiza una **compilación de prueba obligatoria** contra el perfil de ejemplo (`profile.example.json`) para garantizar que compila sin errores antes de guardarse en `JH_HOME/templates/<kind>/<name>/`.
-- Cada plantilla elige compilador de una lista cerrada (`tectonic`, `xelatex`, `typst`) y puede fijar su límite de páginas y reglas de estilo (llegan a la IA como indicaciones de forma). No hay comando de compilación libre.
-- **Una plantilla puede leer ficheros de tu equipo y meterlos en el PDF que envías: instala solo plantillas de fuentes de confianza.** Registrarla exige confirmarlo (`trusted`; casilla en el dashboard, `--trusted` en el CLI). Como red de seguridad, las plantillas propias se renderizan en un entorno Jinja aislado, toda salida `((( valor )))` se escapa por defecto (`|safe_raw` para texto crudo a propósito) y los compiladores van sin shell-escape. Para plantillas LaTeX propias se prefiere xelatex con kpathsea en modo paranoico (`openin_any=p`, `openout_any=p`: sin rutas absolutas ni `..`); lualatex no se usa con ellas (`\directlua` lee ficheros fuera de kpathsea); **Tectonic no confina las lecturas**, así que solo se usa con plantillas propias si no hay xelatex, y «Preparar candidatura» lo avisa. Los ficheros de una plantilla propia se copian en su propia subcarpeta sin seguir enlaces simbólicos y no pueden usar los nombres reservados de las integradas (`cover.cls`, `OpenFonts/`...); el render tiene tope de tamaño y de tiempo. Typst va con `--root` en la carpeta de trabajo. Los `latexmkrc`/`texmf.cnf` se descartan y un lint de mejor esfuerzo sobre todos los ficheros de texto de la plantilla rechaza `\input`/`\include`/`\openin`/`\read`/`\includegraphics`... con rutas absolutas, `~` o `..`, `\@@input`, alias con `\let` y rutas en macros de órdenes de lectura, `\directlua`/`luacode`, `\write18`, cambios de `\catcode` y órdenes de lectura construidas con `\csname` (no es una barrera completa).
-- Si una plantilla propia falla al preparar una candidatura, se muestra el error con un botón para reintentar con las plantillas integradas.
+- Desde el panel, en **Perfil > Plantillas**, con `POST /api/templates` o con el comando de Claude Code `/add-template`.
+- Cada plantilla pasa una **compilación de prueba obligatoria** con el perfil de ejemplo (`profile.example.json`) antes de guardarse en `JH_HOME/templates/<tipo>/<nombre>/`.
+- Cada plantilla elige compilador de una lista cerrada (`tectonic`, `xelatex`, `typst`) y puede fijar su límite de páginas y reglas de estilo. No hay comando de compilación libre.
+- **Una plantilla puede leer ficheros de tu equipo y meterlos en el PDF que envías: instala solo plantillas de fuentes de confianza.** Registrarla exige confirmarlo expresamente. Las medidas de aislamiento (entorno Jinja aislado, escapado por defecto, compiladores sin shell-escape, xelatex con kpathsea en modo paranoico, lint de las plantillas) están en [docs/operacion.md](docs/operacion.md#plantillas-propias-seguridad).
+- Si una plantilla propia falla al preparar una candidatura, el panel muestra el error con un botón para reintentar con las plantillas integradas.
 
 ---
 
 ## Idiomas
 
-- **Interfaz:** español e inglés, con selector de idioma en la app. El primer arranque sigue el idioma de tu perfil o del navegador y tu elección se recuerda.
+- **Interfaz:** español e inglés, con selector de idioma en la aplicación. El primer arranque sigue el idioma de tu perfil o del navegador y tu elección se recuerda.
 - **Documentos:** las cartas y los seguimientos se escriben en el idioma de la oferta si hay plantilla para él y, si no, en tu idioma por defecto. El filtro de idiomas también reconoce ofertas en alemán, francés, italiano y portugués.
 - **Añadir un idioma** (`de`, `fr`, `it`…) no requiere cambios en el código del núcleo: un diccionario, unas plantillas y un fichero de etiquetas. Ver [Adding a Language](CONTRIBUTING.md#adding-a-language).
 
-## Uso
+---
 
-Flujo completo (seed → scraping → contactos → borradores → formularios → envío tras aprobación en el dashboard) y comandos: skill `run-pipeline` (`.claude/skills/run-pipeline/SKILL.md`). Ofertas y candidaturas dejadas en el inbox: `docs/inbox.md`.
+## Fuentes de empleo
 
-El botón **"Generar borradores"** del dashboard lanza la generación de borradores y navega directo al tab Pendientes.
+JobHunter ES cuenta con un registro extensible y autodescubierto de fuentes ([docs/sources.md](docs/sources.md)):
 
-## Arquitectura
-
-```
-backend/
-├── main.py                      FastAPI API REST (:8020)
-├── config.py                    Rutas (JH_HOME) y límites de operación
-├── search_config.py             Esquema y carga de jobhunter.yaml (scoring, tracks, fuentes)
-├── database.py                  SQLite schema + migraciones + upserts (scrapers y motor de candidaturas)
-├── repository.py                Consultas SQL de los endpoints (main.py no contiene SQL)
-├── defaults/jobhunter.yaml      Configuración genérica por defecto
-├── scraper/
-│   ├── runner.py                CLI (--source seed|tecnoempleo|indeed|manfred|contacts|generic|… · --track <id>)
-│   ├── persist.py               Puntúa y guarda ofertas scrapeadas (punto único)
-│   ├── sources/                 Registro de fuentes autodescubierto: un fichero por fuente (ver docs/sources.md)
-│   ├── tecnoempleo.py · infojobs.py · computrabajo.py · linkedin_jobs.py · manfred.py · company_direct.py
-│   ├── generic.py               Trabajos puente (InfoJobs/Indeed)
-│   ├── seed_loader.py           50 empresas con salario público
-│   └── contact_extractor.py     Extrae emails y detecta formularios
-├── automation/
-│   ├── filter_engine.py         Scoring de relevancia + classify_track()
-│   ├── generic_filter.py        Scoring de trabajos puente
-│   ├── salary.py                Pretensión salarial según ubicación
-│   ├── cv_selector.py           Elige el CV de cada candidatura según su track
-│   ├── application_engine.py    create_drafts() + fill_forms() + send_approved()
-│   ├── form_filler.py · ats_handlers/   Playwright por ATS; nunca pulsa Enviar
-│   ├── language_gate.py         Idiomas exigidos vs perfil (exige uno que no tienes → score 0)
-│   ├── posting_guard.py         Texto oculto / instrucciones a una IA en ofertas (de ai-job-search, MIT)
-│   ├── offer_review.py          Guard + idiomas → job_offers.review_flags (scrapers e inbox)
-│   ├── followup.py              Recordatorios a candidaturas sin respuesta y cierre como no_response
-│   ├── cover_letter.py          Generación Jinja2 con variación
-│   └── email_sender.py          Gmail SMTP con rate limiting
-└── scripts/                     load_inbox_offers.py (inbox), watch_sap_ps.py, tagging puntuales
-
-examples/                        jobhunter.yaml de ejemplo (developer, sap-consultant, data-ai)
-data/                            JH_HOME por defecto: config, perfil, CVs, BD, inbox (gitignored)
-
-frontend/
-├── app/page.tsx                 Dashboard: estado, carga de datos, acciones y modales de detalle
-├── app/components/tabs/         Una pestaña por fichero (Ofertas, Candidaturas, Empresas, Contactos, Revisión)
-├── app/components/OfferBucketTab.tsx  Una pestaña por track (generadas desde `GET /api/tracks`)
-├── app/hooks/                   Filtros de Ofertas y de Candidaturas
-├── app/components/PendingCard.tsx  Tarjeta de revisión con textarea editable
-├── lib/i18n/                    Diccionarios es/en (añadir un idioma = un JSON más)
-└── lib/api.ts                   Cliente API tipado
-
-desktop/                         App de escritorio (Tauri 2): scripts de empaquetado y configuración de instaladores
-templates/                       Plantillas LaTeX (CV y carta) y etiquetas por idioma
-```
-
-## Fuentes de Empleo Soportadas
-
-JobHunter ES cuenta con un registro extensible y autodescubierto de fuentes (`docs/sources.md`):
-
-| Fuente | Mercados | Tipo | Requiere Consentimiento (`ack`) | Atribución Obligatoria | Notas |
+| Fuente | Mercados | Tipo | Requiere consentimiento (`ack`) | Atribución obligatoria | Notas |
 |---|---|---|---|---|---|
 | **Tecnoempleo** | España, Remoto | HTML | No | No | Filtro de provincias y ofertas en remoto. |
-| **InfoJobs** | España | HTML | **Sí** | No | Requiere aceptación explícita de condiciones. Desactivada por defecto. |
+| **InfoJobs** | España | HTML | **Sí** | No | Requiere aceptación expresa de condiciones. Desactivada por defecto. |
 | **Manfred** | España, Remoto | JSON API | No | No | Portal de empleo tech con salarios transparentes. |
-| **Computrabajo** | España, LATAM | HTML | No | No | Soporte por país (`country`: `es`, `mx`, `co`, `ar`, `pe`, `cl`...) y localidades. |
-| **LinkedIn** | LATAM, Remoto, Global | HTML | **Sí** | No | Requiere aceptación explícita de condiciones de automatización. Desactivada por defecto. |
+| **Computrabajo** | España, LATAM | HTML | No | No | Soporte por país (`country`: `es`, `mx`, `co`, `ar`, `pe`, `cl`…) y localidades. |
+| **LinkedIn** | LATAM, Remoto, Global | HTML | **Sí** | No | Requiere aceptación expresa de las condiciones de automatización. Desactivada por defecto. |
 | **Remotive** | Remoto, Global | JSON API | No | **Sí** | API pública de empleo remoto. Enlaza siempre a la oferta original. |
 | **RemoteOK** | Remoto, Global | JSON API | No | **Sí** | API pública de empleo remoto. Enlaza siempre a la oferta original. |
 | **Arbeitnow** | Remoto, Global | JSON API | No | No | Ofertas europeas y remotas con etiquetas de visado patrocinado. |
 | **Freehire** | Remoto, Global | JSON API | No | No | Puestos remotos directos y sin intermediarios. |
-| **Indeed** | Global | HTML/API | No | No | Opcional, requiere clave `SCRAPERAPI_KEY` en llavero o entorno. |
-| **Empresas Directas** | Track directo | HTML | No | No | Web de empleo directa y monitorización de empresas seguidas sobre agregadores. |
+| **Indeed** | Global | HTML/API | No | No | Opcional, requiere `SCRAPERAPI_KEY` en el llavero o el entorno. |
+| **Empresas directas** | Track directo | HTML | No | No | Webs de empleo de empresas y empresas seguidas sobre agregadores. |
 
-Para especificaciones técnicas y parámetros detallados, consulta [docs/sources.md](docs/sources.md).
+### Ejecutar los scrapers
 
-## Tuning
+Desde el panel (botón de búsqueda) o por línea de comandos:
 
-Umbrales, pesos, keywords, tracks y parámetros de los scrapers viven en `jobhunter.yaml` (`min_relevance`, `keyword_groups`, `tracks`, `sources`…). Los límites de operación (`MAX_EMAILS_PER_DAY`, `RECONTACT_COOLDOWN_DAYS`…) siguen en `backend/config.py`. Para lanzar el buscador de un track: `python -m scraper.runner --track <id>`. Guía de ajuste del scoring: `CLAUDE.md`.
+```bash
+cd backend
+source .venv/bin/activate
 
-## Base de datos
+# Pipeline multiportal para un track estándar de jobhunter.yaml
+python -m scraper.runner --track developer
 
-SQLite en `data/job_hunter.db` (dentro de `JH_HOME`, ignorada por git; `JH_DB_PATH` la redirige).
+# Una sola fuente: seed, tecnoempleo, indeed, manfred, contacts, generic,
+# resolve-websites, linkedin-login, o "all"
+python -m scraper.runner --source tecnoempleo --dry-run
 
-| Tabla | Contenido |
-|-------|-----------|
-| `companies` | Empresas con URL, ciudad, sector |
-| `job_offers` | Ofertas con score, cv_profile, descripción; `job_kind='generic'` = trabajo puente (aislado del scoring normal) |
-| `contacts` | Emails y formularios extraídos |
-| `applications` | Borradores y enviadas (status, cover_letter_edited, approved_at) |
-| `company_contact_history` | Historial de contactos para cooldown |
+# Trabajos puente del track aislado (portales: infojobs y/o indeed)
+python -m scraper.runner --source generic --generic-sources infojobs,indeed
+```
 
-## Roadmap
+---
 
-- [x] Scrapers InfoJobs, Computrabajo, LinkedIn (public search) e Indeed
-- [x] Form filler con Playwright — SuccessFactors + genérico, probados contra formularios reales (`fill-forms`, nunca auto-envía)
-- [x] Form filler: cobertura Workday / Greenhouse / Lever — mismo principio de no auto-enviar, pero sin probar aún contra un formulario real de cada uno (a diferencia de SuccessFactors/genérico). Si sale un falso negativo, hay que ajustar los selectores.
-- [x] Integración de herramientas upstream `ai-job-search` (posting guard, robots.txt, compilação LaTeX, verificación PDF/layout, caché de investigación y triage)
-- [x] Internacionalización: interfaz es/en, documentos en el idioma de la oferta, fuentes remotas (Remotive, RemoteOK, Arbeitnow, freehire) y Computrabajo por país
-- [x] App de escritorio (Tauri): instaladores generados por la CI (Linux probado; Windows y macOS, experimentales)
-- [ ] Publicar la primera versión (tag) y probar los instaladores de Windows y macOS en equipos reales
-- [ ] Hunter.io API para más emails
-- [ ] Notificaciones cuando responden (Gmail polling)
+## Integración con Claude Code (opcional)
 
-## Automatización avanzada y Claude Code
+El proyecto incluye comandos y agentes para [Claude Code](https://claude.com/claude-code), portados y adaptados de [ai-job-search](https://github.com/MadsLorentzen/ai-job-search):
 
-El proyecto incluye comandos interactivos y agentes para Claude Code portados y adaptados de [ai-job-search](https://github.com/MadsLorentzen/ai-job-search):
+| Comando | Qué hace |
+|---|---|
+| `/apply <url\|texto>` | Flujo de dos agentes (extractor y revisor) con verificación de integridad de la oferta, extracción y redacción de CV y carta |
+| `/rank` | Triage por lotes de las ofertas de la base de datos contra tu perfil |
+| `/upskill` | Análisis de brechas de habilidades y plan de estudio |
+| `/expand` | Descubrimiento de competencias a partir de documentos locales y GitHub |
+| `/add-template` | Registro y cambio de plantillas propias |
+| `/add-portal` | Generador de scrapers para portales de empleo de otros mercados |
 
-- **`/apply <url|texto>`**: Flujo orquestado de dos agentes (fetcher + reviewer) con verificación de integridad (`posting_guard`), extracción y redacción de CV y carta.
-- **`/rank`**: Triage por lotes de ofertas almacenadas en la base de datos `data/job_hunter.db` contra el perfil del candidato.
-- **`/upskill`**: Análisis de brechas de habilidades técnicas y plan de estudio personalizado.
-- **`/expand`**: Descubrimiento y enriquecimiento de competencias a partir de documentos locales y GitHub.
-- **`/add-template`**: Registro y conmutación de plantillas personalizadas (LaTeX, Typst, etc.).
-- **`/add-portal`**: Generador de habilidades de búsqueda para portales de empleo de mercados locales.
+Para el flujo completo por línea de comandos (carga, scraping, contactos, borradores, formularios y envío tras aprobación) está la skill `run-pipeline` (`.claude/skills/run-pipeline/SKILL.md`).
 
-### Herramientas de soporte
+---
 
-- **Generador de documentos determinista**: `backend/automation/document_generator.py` (Jinja2 → LaTeX con compilación automática vía Tectonic, LuaLaTeX o XeLaTeX).
-- **Verificación ATS y maquetación**: `backend/automation/verify_pdf.py` y `backend/automation/verify_layout.py`.
-- **Archivo de candidaturas**: `backend/automation/application_archive.py` (`data/applications/<id>/`).
-- **Gate de elegibilidad**: `backend/automation/eligibility_gate.py` (permiso laboral, visado, residencia, titulación).
+## Tests
 
-Para detalles de licencia y derechos de autor de las herramientas portadas y tipografías, consulta [ATTRIBUTION.md](ATTRIBUTION.md).
+Las suites se ejecutan sin conexión con datos de prueba neutros:
 
+```bash
+# Backend
+cd backend
+pytest -q
+ruff check --config ../ruff.toml .
+
+# Frontend
+cd ../frontend
+bun run test
+bunx tsc --noEmit -p .
+bun run lint
+
+# Scripts de empaquetado de escritorio
+cd ..
+python -m pytest -q desktop/scripts
+```
+
+Los tests de documentos compilan PDF reales, así que necesitan un motor LaTeX y Poppler. En Debian/Ubuntu: `sudo apt-get install texlive-xetex texlive-latex-extra texlive-fonts-recommended texlive-fonts-extra poppler-utils` (la CI instala los mismos paquetes), o instala Tectonic.
+
+---
+
+## Estructura del proyecto
+
+```text
+jobhunter-es/
+├── backend/
+│   ├── main.py                 API REST con FastAPI (puerto 8020)
+│   ├── config.py               Rutas (JH_HOME) y límites de operación
+│   ├── search_config.py        Esquema y carga de jobhunter.yaml
+│   ├── database.py             Esquema SQLite, migraciones y escrituras
+│   ├── repository.py           Consultas SQL de los endpoints
+│   ├── schemas.py              Modelos de la API
+│   ├── defaults/               Configuración por defecto (jobhunter.yaml)
+│   ├── ai/                     Proveedores de IA (Ollama, Anthropic, OpenAI, CLI)
+│   ├── scraper/
+│   │   ├── runner.py           CLI de los scrapers
+│   │   ├── persist.py          Puntúa y guarda las ofertas
+│   │   └── sources/            Registro de fuentes: un fichero por fuente
+│   ├── automation/             Scoring, filtros, documentos, candidaturas, formularios, email
+│   ├── templates/              Plantillas Jinja2 (cartas y seguimientos por idioma)
+│   ├── scripts/                Cargadores del inbox y utilidades
+│   └── tests/                  Suite de tests con datos neutros
+├── frontend/                   Panel de revisión (Next.js; diccionarios es/en en lib/i18n)
+├── desktop/                    App de escritorio (Tauri 2): empaquetado e instaladores
+├── templates/                  Plantillas LaTeX (CV y carta) y etiquetas por idioma
+├── examples/                   Configuraciones de ejemplo de jobhunter.yaml
+├── seeds/                      Datos de partida (empresas con salario público)
+├── docs/                       Guías, formato del inbox, fuentes y decisiones (ADR)
+├── .github/workflows/          CI de tests e instaladores de escritorio
+├── CONTRIBUTING.md             Guía para contribuir
+├── ATTRIBUTION.md              Atribuciones de código y fuentes abiertas
+├── LICENSE                     Licencia MIT
+└── NOTICE                      Avisos de terceros
+```
+
+---
+
+## Documentación adicional
+
+- [docs/sources.md](docs/sources.md): catálogo de fuentes, parámetros y atribuciones.
+- [docs/inbox.md](docs/inbox.md): formato de los ficheros del inbox.
+- [docs/operacion.md](docs/operacion.md): seguridad de la API, trabajos, esquema de la base de datos y ajuste del scoring.
+- [docs/adr/](docs/adr/): decisiones de arquitectura.
+- [desktop/README.md](desktop/README.md): guía de la app de escritorio.
+
+---
+
+## Contribuir
+
+¡Las contribuciones son bienvenidas! Consulta [CONTRIBUTING.md](CONTRIBUTING.md) para el estilo de código, los tests y el proceso de envío.
+
+---
+
+## Atribuciones y licencia
+
+Este proyecto se distribuye bajo la **licencia MIT**; ver [LICENSE](LICENSE).
+
+Los componentes y conceptos adaptados de [MadsLorentzen/ai-job-search](https://github.com/MadsLorentzen/ai-job-search) y las fuentes abiertas (Lato, Raleway) están documentados en [ATTRIBUTION.md](ATTRIBUTION.md) y [NOTICE](NOTICE).
