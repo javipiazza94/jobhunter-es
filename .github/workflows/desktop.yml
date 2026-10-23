@@ -1,0 +1,158 @@
+name: Desktop
+
+# Instaladores de la app de escritorio (Tauri 2 + backend congelado con PyInstaller + Tectonic).
+#  - Pull request / push a main que toquen la app: comprobaciones (versión, tests de scripts, tests de Rust,
+#    backend congelado + prueba de humo con las protecciones de la API).
+#  - Tag vX.Y.Z: instaladores sin firmar para Windows, macOS (Apple Silicon e Intel) y Linux, subidos a una
+#    release EN BORRADOR de GitHub. La publica una persona.
+#  - Ejecución manual: ensayo. Construye lo mismo, sin release; deja los instaladores como artefactos e
+#    imprime los SHA-256 de Tectonic en el resumen para fijarlos en desktop/scripts/tectonic.json.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths: ["desktop/**", "backend/**", "frontend/**", "templates/**", "seeds/**", ".github/workflows/desktop.yml"]
+  pull_request:
+    paths: ["desktop/**", "backend/**", "frontend/**", "templates/**", "seeds/**", ".github/workflows/desktop.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  checks:
+    name: Comprobaciones (versión, scripts, Rust, backend congelado)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+      - name: Dependencias del sistema (Tauri en Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev patchelf build-essential pkg-config
+      - run: pip install -r backend/requirements-dev.txt pyinstaller
+      - name: Versión coherente
+        run: python desktop/scripts/check_version.py
+      - name: Tests de los scripts de empaquetado
+        run: python -m pytest -q desktop/scripts
+      - name: Tests del arranque de escritorio
+        working-directory: backend
+        run: python -m pytest -q tests/test_desktop_main.py tests/test_browser_install.py tests/test_ollama_status.py
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - name: Carpeta de recursos mínima para compilar
+        run: mkdir -p desktop/src-tauri/resources/bin desktop/src-tauri/resources/jobhunter-api frontend/out
+      - name: Tests de Rust
+        working-directory: desktop/src-tauri
+        run: cargo test
+      - name: Congelar el backend
+        run: python desktop/scripts/freeze_backend.py
+      - name: Prueba de humo del backend congelado
+        run: python desktop/scripts/smoke_backend.py desktop/src-tauri/resources/jobhunter-api/jobhunter-api
+
+  installers:
+    name: Instalador (${{ matrix.name }})
+    needs: checks
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write # crear la release en borrador y subir los instaladores
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            os: ubuntu-22.04
+            tectonic: x86_64-unknown-linux-musl
+            backend_exe: jobhunter-api
+          - name: Windows x64
+            os: windows-latest
+            tectonic: x86_64-pc-windows-msvc
+            backend_exe: jobhunter-api.exe
+          - name: macOS Apple Silicon
+            os: macos-latest
+            tectonic: aarch64-apple-darwin
+            backend_exe: jobhunter-api
+          - name: macOS Intel
+            os: macos-15-intel
+            tectonic: x86_64-apple-darwin
+            backend_exe: jobhunter-api
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - name: Dependencias del sistema (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev patchelf build-essential pkg-config
+      - name: La versión coincide con el tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: python desktop/scripts/check_version.py --tag "${GITHUB_REF_NAME}"
+      - run: pip install -r backend/requirements.txt pyinstaller
+      - run: bun install --frozen-lockfile
+        working-directory: desktop
+      - name: Congelar el backend
+        run: python desktop/scripts/freeze_backend.py
+      - name: Prueba de humo del backend congelado (${{ matrix.name }})
+        run: python desktop/scripts/smoke_backend.py "desktop/src-tauri/resources/jobhunter-api/${{ matrix.backend_exe }}"
+      - name: Tectonic (versión y hash fijados)
+        run: |
+          # En un tag el hash es obligatorio. En el ensayo manual se acepta sin él y se imprime para fijarlo.
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            python desktop/scripts/fetch_tectonic.py --target "${{ matrix.tectonic }}" | tee tectonic.out
+          else
+            python desktop/scripts/fetch_tectonic.py --target "${{ matrix.tectonic }}" --allow-unverified | tee tectonic.out
+            { echo "### Tectonic ${{ matrix.name }}"; echo '```'; grep sha256= tectonic.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Instalador de la app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: ${{ github.ref_type == 'tag' && format('JobHunter {0}', github.ref_name) || '' }}
+          releaseBody: "Instaladores sin firmar. macOS: clic derecho → Abrir la primera vez. Windows: «Más información» → «Ejecutar de todas formas». Ver desktop/README.md."
+          releaseDraft: true
+          prerelease: false
+      - name: Guardar los instaladores del ensayo
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: instalador-${{ matrix.os }}
+          path: |
+            desktop/src-tauri/target/release/bundle/deb/*.deb
+            desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+            desktop/src-tauri/target/release/bundle/msi/*.msi
+            desktop/src-tauri/target/release/bundle/nsis/*.exe
+            desktop/src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error

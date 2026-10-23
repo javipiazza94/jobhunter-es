@@ -46,15 +46,32 @@ document.addEventListener("click", function (e) {{
     )
 }
 
+/// Lee la siguiente línea sin fallar por bytes que no sean UTF-8 (un fallo aquí dejaría de vaciar la
+/// tubería y acabaría bloqueando al backend). None = fin de la salida.
+fn next_line<R: BufRead>(reader: &mut R) -> Option<String> {
+    let mut buf = Vec::new();
+    match reader.read_until(b'\n', &mut buf) {
+        Ok(0) | Err(_) => None,
+        Ok(_) => Some(String::from_utf8_lossy(&buf).trim_end_matches(['\r', '\n']).to_string()),
+    }
+}
+
 /// Lee líneas hasta encontrar la de aviso; `forward` recibe cada línea (para el registro).
-pub fn read_until_ready<R: BufRead>(reader: R, mut forward: impl FnMut(&str)) -> Option<u16> {
-    for line in reader.lines().map_while(Result::ok) {
+pub fn read_until_ready<R: BufRead>(reader: &mut R, mut forward: impl FnMut(&str)) -> Option<u16> {
+    while let Some(line) = next_line(reader) {
         forward(&line);
         if let Some(port) = parse_ready(&line) {
             return Some(port);
         }
     }
     None
+}
+
+/// Vacía la salida restante hacia el registro.
+fn drain<R: BufRead>(mut reader: R) {
+    while let Some(line) = next_line(&mut reader) {
+        eprintln!("[backend] {line}");
+    }
 }
 
 pub struct Backend {
@@ -69,6 +86,8 @@ impl Backend {
         }
         let mut cmd = Command::new(exe);
         cmd.env("JH_PARENT_WATCH", "1")
+            .env("PYTHONUTF8", "1")
+            .env("PYTHONIOENCODING", "utf-8")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -94,15 +113,9 @@ impl Backend {
                 let _ = tx.send(port);
             }
             // Sigue leyendo para que el backend no se bloquee con la tubería llena.
-            for line in reader.lines().map_while(Result::ok) {
-                eprintln!("[backend] {line}");
-            }
+            drain(reader);
         });
-        std::thread::spawn(move || {
-            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-                eprintln!("[backend] {line}");
-            }
-        });
+        std::thread::spawn(move || drain(BufReader::new(stderr)));
 
         match rx.recv_timeout(STARTUP_TIMEOUT) {
             Ok(port) => Ok(Backend { child, port }),
@@ -161,14 +174,21 @@ mod tests {
     fn salta_el_ruido_hasta_el_aviso_y_lo_reenvia() {
         let salida = "INFO Iniciando\nWARN algo\nJH_READY port=4242\nINFO listo\n";
         let mut vistas = Vec::new();
-        let port = read_until_ready(Cursor::new(salida), |l| vistas.push(l.to_string()));
+        let port = read_until_ready(&mut Cursor::new(salida), |l| vistas.push(l.to_string()));
         assert_eq!(port, Some(4242));
         assert_eq!(vistas, vec!["INFO Iniciando", "WARN algo", "JH_READY port=4242"]);
     }
 
     #[test]
+    fn bytes_que_no_son_utf8_no_cortan_la_lectura() {
+        let mut salida: Vec<u8> = b"ruido \xff\xfe cp1252\n".to_vec();
+        salida.extend_from_slice(b"JH_READY port=77\n");
+        assert_eq!(read_until_ready(&mut Cursor::new(salida), |_| {}), Some(77));
+    }
+
+    #[test]
     fn sin_aviso_no_hay_puerto() {
-        assert_eq!(read_until_ready(Cursor::new("solo ruido\n"), |_| {}), None);
+        assert_eq!(read_until_ready(&mut Cursor::new("solo ruido\n"), |_| {}), None);
     }
 
     #[test]

@@ -72,9 +72,9 @@ def main(argv: list[str]) -> int:
 
     home = Path(tempfile.mkdtemp(prefix="jh-smoke-"))
     env = {k: v for k, v in os.environ.items() if not k.startswith(("JH_", "CORS_", "ALLOWED_", "PLAYWRIGHT_"))}
-    env.update(JH_HOME=str(home), JH_PARENT_WATCH="1", JH_INBOX_POLL_SECONDS="0")
+    env.update(JH_HOME=str(home), JH_PARENT_WATCH="1", JH_INBOX_POLL_SECONDS="0", PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
     proc = subprocess.Popen(command, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, text=True, cwd=home)
+                            stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", cwd=home)
     try:
         port = read_ready(proc, 120)
         check("anuncia el puerto", port > 0, port)
@@ -115,7 +115,7 @@ def main(argv: list[str]) -> int:
 
     # Subproceso `-m` (como lo lanza job_manager): carga las semillas en la BD del JH_HOME.
     res = subprocess.run([*command, "-m", "scraper.jobs", "seed"], env=env, cwd=home, capture_output=True,
-                         text=True, timeout=180)
+                         text=True, encoding="utf-8", errors="replace", timeout=180)
     check("-m scraper.jobs seed termina bien", res.returncode == 0, (res.returncode, res.stdout[-300:], res.stderr[-300:]))
     try:
         n = sqlite3.connect(home / "job_hunter.db").execute("SELECT COUNT(*) FROM companies").fetchone()[0]
@@ -125,7 +125,7 @@ def main(argv: list[str]) -> int:
 
     # El driver de Playwright viaja en el paquete (Chromium no: se descarga bajo demanda).
     res = subprocess.run([*command, "-m", "automation.browser_install"], env={**env, "PLAYWRIGHT_BROWSERS_PATH": str(home / "nav")},
-                         cwd=home, capture_output=True, text=True, timeout=120)
+                         cwd=home, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
     check("el driver de Playwright responde", res.returncode == 0 and "chromium no instalado" in res.stdout,
           (res.returncode, res.stdout[-200:], res.stderr[-300:]))
 

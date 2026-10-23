@@ -132,10 +132,10 @@ Tauri 2 (desktop/src-tauri, Rust)
 
 **Ficheros:** crear `.github/workflows/desktop.yml`.
 
-- [ ] Job `smoke` (PR/push que toquen `desktop/` o `backend/`): congela el backend y pasa la prueba de humo en Linux.
-- [ ] Job `release` (tag `v*`, o `workflow_dispatch` en modo ensayo sin publicar): matriz Linux x64, Windows x64, macOS Apple Silicon y macOS Intel; instala dependencias, congela el backend, descarga Tectonic, exporta el frontend, comprueba que el tag coincide con la versión y llama a `tauri-apps/tauri-action` con `releaseDraft: true`.
-- [ ] Validar el YAML (`yaml.safe_load` + `actionlint` si hay red).
-- [ ] Commit `ci(desktop): instaladores para Windows, macOS y Linux en cada tag`.
+- [x] Job `smoke` (PR/push que toquen `desktop/` o `backend/`): congela el backend y pasa la prueba de humo en Linux.
+- [x] Job `release` (tag `v*`, o `workflow_dispatch` en modo ensayo sin publicar): matriz Linux x64, Windows x64, macOS Apple Silicon y macOS Intel; instala dependencias, congela el backend, descarga Tectonic, exporta el frontend, comprueba que el tag coincide con la versión y llama a `tauri-apps/tauri-action` con `releaseDraft: true`.
+- [x] Validar el YAML (`yaml.safe_load` + `actionlint`).
+- [x] Commit `ci(desktop): instaladores para Windows, macOS y Linux en cada tag`.
 
 ### Tarea 10: Documentación
 
