@@ -147,14 +147,51 @@ Tauri 2 (desktop/src-tauri, Rust)
 
 ### Tarea 11: Cierre
 
-- [ ] `git fetch origin` y `git merge origin/main` (merge, sin rebase), conflictos resueltos sin perder lo de SP4.
-- [ ] Suites completas, `graphify update .` si procede, revisión de privacidad antes del push.
-- [ ] Push a `sp5-app-escritorio`. Actualizar el registro de verificación.
+- [x] `git fetch origin` y `git merge origin/main` (merge, sin rebase), conflictos resueltos sin perder lo de SP4.
+- [x] Suites completas, `graphify update .` si procede, revisión de privacidad antes del push.
+- [x] Push a `sp5-app-escritorio`. Actualizar el registro de verificación.
 
 ---
 
 ## Registro de verificación
 
-> Se rellena al terminar cada tarea con lo realmente ejecutado y lo que no se pudo ejecutar en este entorno.
+Entorno: contenedor Linux x86_64 (Ubuntu), sin pantalla (se usó Xvfb), con acceso a PyPI, npm y crates.io, **sin** acceso a GitHub Releases ni a la CDN de Playwright.
 
-_(pendiente)_
+### Verificado, y cómo
+
+| Qué | Cómo | Resultado |
+|---|---|---|
+| Backend (suite completa) | `cd backend && python -m pytest -q` con TeX Live y Poppler instalados | 1597 pasan, 6 omitidos |
+| Lint backend | `ruff check --config ../ruff.toml .` | limpio |
+| Frontend | `bunx tsc --noEmit`, `bun run lint`, `bun test` | limpio, 161 tests |
+| Export estático | `JH_DESKTOP_EXPORT=1 bun run build` | `frontend/out/index.html` y fuentes incluidas; la URL de la API se resuelve en ejecución |
+| Congelado | `python desktop/scripts/freeze_backend.py` (PyInstaller 6, modo carpeta, ~220 MB) | genera `jobhunter-api/` |
+| Prueba de humo del congelado | `smoke_backend.py`: puerto dinámico, `Host` ajeno y de LAN → 400, origen ajeno sin CORS, origen del dashboard web sin CORS, POST sin `X-JH-Client` → 403, preflight desde `tauri://localhost`, parada al cerrar stdin, `-m scraper.jobs seed`, driver de Playwright | 18 comprobaciones, todas OK |
+| Asistente de punta a punta con el congelado | script ad hoc (no versionado): `setup/apply` → candidatura → `prepare` | CV y carta en PDF generados con el motor del sistema (xelatex) |
+| Rust | `cargo check`, `cargo test` (15 pasan) y la prueba ignorada contra el backend congelado real | OK |
+| App completa en Linux | `tauri build --no-bundle` y `--bundles deb`; abierta bajo Xvfb, con captura | el asistente se pinta, la API responde 200 a las peticiones del dashboard y aparece el aviso de Ollama |
+| `.deb` instalado | `dpkg -i`, ejecutado `/usr/bin/jobhunter-desktop` sin variables de JobHunter | el backend sale de `/usr/lib/JobHunter/jobhunter-api` y los datos se crean en `$XDG_DATA_HOME/jobhunter` (platformdirs) |
+| Sin huérfanos | `kill -9` a la app | el backend desaparece solo en pocos segundos |
+| Workflow | `yaml.safe_load` y `actionlint 1.7.12` | sin avisos |
+| Scripts de empaquetado | `pytest desktop/scripts` | 12 pasan |
+
+### NO verificado
+
+- **Ninguna ejecución real de la CI** (no se pueden lanzar workflows ni crear tags desde aquí). El workflow solo está validado sintácticamente. Windows y macOS (Apple Silicon e Intel) no se han construido ni abierto nunca: puede haber fallos específicos de plataforma (rutas, firma ad-hoc, `macos-15-intel`, WiX/NSIS).
+- **Tectonic**: nunca se ha descargado ni ejecutado desde el instalador. Los hashes SHA-256 de `tectonic.json` están en `null` porque GitHub Releases está bloqueado desde aquí; hasta fijarlos, un tag falla en ese paso (a propósito). Tampoco se ha comprobado que una compilación con Tectonic (descarga de paquetes LaTeX en la primera vez) funcione dentro de la app: las pruebas usaron `xelatex` del sistema. La parte del `PATH` está cubierta por tests.
+- **Chromium bajo demanda**: la descarga real no se probó (CDN bloqueada). Sí el diagnóstico, el error cuando no hay red y la lógica con el driver simulado.
+- **Aviso de versión nueva**: lógica probada en Rust (versiones, filtrado de la release); la consulta real a la API de GitHub y el diálogo no se vieron.
+- **Recorrido completo del asistente con clics** en la ventana (subir CV, etc.): solo se vio la primera pantalla y se probó el flujo por API.
+- Windows: `CREATE_NO_WINDOW`, la codificación de la salida del backend y el origen `http://tauri.localhost` están razonados y cubiertos por tests unitarios, no probados en un Windows real.
+
+### Riesgos y decisiones para el usuario
+
+1. Hay que correr el workflow a mano una vez para sacar los hashes de Tectonic y fijarlos, antes del primer tag.
+2. La primera ejecución de la CI en Windows y macOS probablemente necesite algún ajuste.
+3. Sin firma: SmartScreen y Gatekeeper avisan. En macOS la firma ad-hoc evita que Apple Silicon mate el binario, pero no quita el aviso.
+4. Durante el arranque (unos segundos; más la primera vez con antivirus) no hay ventana ni pantalla de carga.
+5. Los textos nuevos (aviso de Ollama, aviso de versión, errores de arranque) están en español y no pasan por i18n; SP4 deberá integrarlos.
+6. `OllamaNotice` se monta con una línea en `SetupWizard.tsx` (archivo compartido con SP4).
+7. La CSP lleva `'unsafe-inline'` en scripts por el export de Next; no se pudo comprobar si Tauri lo sustituye por hashes.
+8. Un scraper en marcha al cerrar la app sigue hasta su tiempo límite.
+9. `origin/main` no tenía commits nuevos al cerrar: no hubo nada que fusionar. Si SP4 aterriza antes del merge, conviene volver a correr las suites.
