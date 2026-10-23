@@ -76,6 +76,10 @@ Esquema completo: personal (incluye `dni_nie`, `birth_date` — usados por el ha
 
 Copia tus CVs a `data/cv/` con los nombres que indica `profile.json` (por ejemplo `cv_ia_path`, `cv_sap_path`, `cv_sap_modules`, según las claves de `cv:` de cada track).
 
+## App de escritorio
+
+Si prefieres no usar el terminal, la [app de escritorio](desktop/README.md) trae el dashboard, el backend y Tectonic en un instalador (Windows, macOS y Linux). Tus datos quedan en la carpeta de datos del sistema. Los instaladores no están firmados; la guía explica los avisos del primer arranque.
+
 ## Arranque
 
 ```bash

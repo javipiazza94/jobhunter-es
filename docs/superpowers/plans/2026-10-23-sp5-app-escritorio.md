@@ -141,9 +141,9 @@ Tauri 2 (desktop/src-tauri, Rust)
 
 **Ficheros:** crear `desktop/README.md`, `docs/adr/0002-api-local-en-app-de-escritorio.md`; añadir una línea en `README.md`/`README.es.md`.
 
-- [ ] Instalación, primer arranque (avisos de macOS/Windows), dónde están los datos, cómo compilar en local, cómo se publica una release.
-- [ ] ADR-0002: puerto dinámico, orígenes de Tauri, qué protecciones se mantienen y cuáles cambian.
-- [ ] Commit `docs(desktop): guía de la app de escritorio y ADR de la API local`.
+- [x] Instalación, primer arranque (avisos de macOS/Windows), dónde están los datos, cómo compilar en local, cómo se publica una release.
+- [x] ADR-0002: puerto dinámico, orígenes de Tauri, qué protecciones se mantienen y cuáles cambian.
+- [x] Commit `docs(desktop): guía de la app de escritorio y ADR de la API local`.
 
 ### Tarea 11: Cierre
 

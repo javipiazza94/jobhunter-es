@@ -87,6 +87,10 @@ cp backend/profile.example.json data/profile.json
 
 ---
 
+## Desktop app
+
+If you'd rather not use a terminal, the [desktop app](desktop/README.md) bundles the dashboard, the backend and Tectonic in one installer (Windows, macOS, Linux). Your data lives in the system data folder. Installers are unsigned; the guide explains the first-launch warnings.
+
 ## Running Locally
 
 In separate terminal tabs:
