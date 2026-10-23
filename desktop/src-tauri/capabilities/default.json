@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permisos mínimos de la ventana principal (la API del backend no pasa por Tauri).",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

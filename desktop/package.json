@@ -1,0 +1,17 @@
+{
+  "name": "jobhunter-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "App de escritorio de JobHunter (Tauri 2)",
+  "scripts": {
+    "tauri": "tauri",
+    "build:frontend": "node scripts/build-frontend.mjs",
+    "build:backend": "python scripts/freeze_backend.py",
+    "build:tectonic": "python scripts/fetch_tectonic.py",
+    "build": "tauri build",
+    "dev": "tauri dev"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}

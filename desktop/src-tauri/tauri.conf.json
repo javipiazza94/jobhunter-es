@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "JobHunter",
+  "version": "0.1.0",
+  "identifier": "es.jobhunter.desktop",
+  "build": {
+    "frontendDist": "../../frontend/out",
+    "devUrl": "http://localhost:3010",
+    "beforeBuildCommand": "node scripts/build-frontend.mjs",
+    "beforeDevCommand": "node scripts/dev-frontend.mjs"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "appimage", "msi", "nsis", "dmg"],
+    "category": "Business",
+    "shortDescription": "Automatiza tus candidaturas tech en España",
+    "longDescription": "JobHunter busca ofertas, las puntúa según tu perfil y prepara candidaturas que tú revisas antes de enviar. Todo se guarda en tu equipo.",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "resources": {
+      "resources/jobhunter-api/": "jobhunter-api/",
+      "resources/bin/": "bin/"
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": "-"
+    },
+    "linux": {
+      "deb": { "depends": [] }
+    }
+  }
+}

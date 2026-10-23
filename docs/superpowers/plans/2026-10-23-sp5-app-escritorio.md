@@ -113,12 +113,12 @@ Tauri 2 (desktop/src-tauri, Rust)
 
 **Ficheros:** crear `desktop/package.json`, `desktop/src-tauri/{Cargo.toml,build.rs,tauri.conf.json,capabilities/default.json,src/main.rs,src/lib.rs,src/sidecar.rs,src/update.rs,icons/}`, `desktop/scripts/build_frontend.mjs`.
 
-- [ ] `sidecar.rs`: localizar el ejecutable (recurso), lanzarlo con el entorno de escritorio, leer `JH_READY port=N` con tiempo límite, mantener stdin abierto, matar al salir. Lógica de parseo en funciones puras con tests (`cargo test`).
-- [ ] `lib.rs`: crear la ventana **después** de tener el puerto, con `initialization_script` que fija `window.__JH_API_URL__` y `window.__JH_DESKTOP__`; comando `open_external` con lista blanca (https, hosts permitidos); `on_navigation` que impide salir de la app; parada del backend en `RunEvent::Exit`; página de error si el backend no arranca.
-- [ ] `update.rs`: comparación de versiones y lectura de `releases/latest` (puro y con tests), diálogo nativo con enlace.
-- [ ] `tauri.conf.json`: CSP con `connect-src` solo a `http://127.0.0.1:*`/`http://localhost:*`, `bundle.targets` (`deb`, `appimage`, `msi`, `nsis`, `dmg`), recursos (backend + Tectonic), `frontendDist` → `../../frontend/out`, `signingIdentity: "-"` en macOS.
-- [ ] `cargo check` y `cargo test` en Linux (si crates.io y las librerías GTK/WebKit lo permiten).
-- [ ] Commit `feat(desktop): proyecto Tauri 2 con el backend como proceso hijo`.
+- [x] `sidecar.rs`: localizar el ejecutable (recurso), lanzarlo con el entorno de escritorio, leer `JH_READY port=N` con tiempo límite, mantener stdin abierto, matar al salir. Lógica de parseo en funciones puras con tests (`cargo test`).
+- [x] `lib.rs`: crear la ventana **después** de tener el puerto, con `initialization_script` que fija `window.__JH_API_URL__` y `window.__JH_DESKTOP__`; comando `open_external` con lista blanca (https, hosts permitidos); `on_navigation` que impide salir de la app; parada del backend en `RunEvent::Exit`; página de error si el backend no arranca.
+- [x] `update.rs`: comparación de versiones y lectura de `releases/latest` (puro y con tests), diálogo nativo con enlace.
+- [x] `tauri.conf.json`: CSP con `connect-src` solo a `http://127.0.0.1:*`/`http://localhost:*`, `bundle.targets` (`deb`, `appimage`, `msi`, `nsis`, `dmg`), recursos (backend + Tectonic), `frontendDist` → `../../frontend/out`, `signingIdentity: "-"` en macOS.
+- [x] `cargo check` y `cargo test` en Linux (si crates.io y las librerías GTK/WebKit lo permiten).
+- [x] Commit `feat(desktop): proyecto Tauri 2 con el backend como proceso hijo`.
 
 ### Tarea 8: Tectonic incluido
 

@@ -1,5 +1,5 @@
-src-tauri/resources/jobhunter-api/
-src-tauri/resources/bin/
+src-tauri/resources/*/*
+!src-tauri/resources/*/.gitkeep
 src-tauri/target/
 src-tauri/gen/
 node_modules/
