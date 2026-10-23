@@ -93,8 +93,9 @@ export async function fetchSetupStatus(): Promise<SetupStatus> {
   return checked(await request(`${BASE}/api/setup/status`));
 }
 
-export async function fetchMarkets(): Promise<Record<string, MarketSource[]>> {
-  return checked(await request(`${BASE}/api/setup/markets`));
+export async function fetchMarkets(lang?: string): Promise<Record<string, MarketSource[]>> {
+  const query = lang ? `?lang=${encodeURIComponent(lang)}` : "";
+  return checked(await request(`${BASE}/api/setup/markets${query}`));
 }
 
 /** Sube el CV (PDF/DOCX) en el campo `file`; fetch pone el Content-Type multipart y el Content-Length.

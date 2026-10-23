@@ -253,11 +253,19 @@ class SetupStatusOut(_Out):
     has_config: bool
 
 
+class AttributionOut(_Out):
+    name: str
+    url: str
+    required: bool = False
+
+
 class MarketSourceOut(_Out):
     id: str
     label: str
     requires_ack: bool = False
+    ack_warning: str = ""
     default_on: bool = False
+    attribution: AttributionOut | None = None
 
 
 class SetupProposalOut(_Out):
@@ -281,12 +289,20 @@ class SourceSettingOut(_Out):
     requires_ack: bool
     enabled: bool
     acknowledged: bool
+    country: str | None = None
+    locations: list[str] = Field(default_factory=list)
+
+
+class SourceParamIn(BaseModel):
+    country: str | None = None
+    locations: list[str] = Field(default_factory=list)
 
 
 class SourcesIn(BaseModel):
     """PUT /api/settings/sources: fuentes activadas y fuentes `requires_ack` cuyo aviso aceptó el usuario."""
     enabled: list[str] = Field(default_factory=list, max_length=50)
     acknowledged: list[str] = Field(default_factory=list, max_length=50)
+    params: dict[str, SourceParamIn] = Field(default_factory=dict)
 
 
 class FollowedCompanyIn(BaseModel):

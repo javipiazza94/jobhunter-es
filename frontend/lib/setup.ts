@@ -1,6 +1,7 @@
 // Lógica pura del asistente de primer arranque y de la pestaña Perfil (sin React ni red, se prueba con bun test).
 import type {
   AISettings,
+  Attribution,
   MarketSource,
   ProfileDraft,
   SecretSource,
@@ -23,6 +24,10 @@ export interface WizardState {
   followedCompanies: string[];
   /** IA que se guarda al aplicar (y la que usa el paso 1 para leer el CV). */
   ai: AISettings;
+  /** Idioma de la interfaz elegido en el asistente. */
+  uiLanguage: "es" | "en";
+  /** Parámetros específicos por fuente (p. ej. país de Computrabajo). */
+  sourceParams: Record<string, { country?: string; location?: string; locations?: string[] }>;
 }
 
 /** Una fuente tal como se muestra en el paso 3. */
@@ -30,7 +35,10 @@ export interface SuggestedSource {
   id: string;
   label: string;
   requires_ack: boolean;
+  ack_warning?: string;
+  default_on: boolean;
   checked: boolean;
+  attribution?: Attribution | null;
 }
 
 /** Mismo default que `AISettings.timeout_seconds` del backend. */
@@ -67,6 +75,8 @@ export function emptyWizardState(): WizardState {
     acknowledged: {},
     followedCompanies: [],
     ai: suggestedAI(),
+    uiLanguage: "es",
+    sourceParams: {},
   };
 }
 
@@ -109,9 +119,19 @@ export function suggestedSources(
       const prev = byId.get(s.id);
       if (prev) {
         prev.requires_ack = prev.requires_ack || s.requires_ack;
+        prev.ack_warning = prev.ack_warning || s.ack_warning;
+        prev.attribution = prev.attribution || s.attribution;
         continue;
       }
-      byId.set(s.id, { id: s.id, label: s.label, requires_ack: s.requires_ack, checked: s.default_on });
+      byId.set(s.id, {
+        id: s.id,
+        label: s.label,
+        requires_ack: s.requires_ack,
+        ack_warning: s.ack_warning,
+        default_on: s.default_on,
+        checked: s.default_on,
+        attribution: s.attribution,
+      });
     }
   }
   return [...byId.values()].map(s => ({
@@ -151,8 +171,9 @@ export function toAnswers(state: WizardState, markets: Record<string, MarketSour
     acknowledged_sources: selected.filter(s => s.requires_ack && state.acknowledged[s.id]).map(s => s.id),
     followed_companies: state.followedCompanies.map(c => c.trim()).filter(Boolean),
     ai: state.ai,
-    ui_language: "es",
+    ui_language: state.uiLanguage ?? "es",
     cv_path: state.cvPath,
+    source_params: state.sourceParams,
   };
 }
 
@@ -171,6 +192,8 @@ export function answersToState(answers: SetupAnswers, markets: Record<string, Ma
     acknowledged: Object.fromEntries(answers.acknowledged_sources.map(id => [id, true])),
     followedCompanies: answers.followed_companies,
     ai: answers.ai ?? suggestedAI(),
+    uiLanguage: answers.ui_language ?? "es",
+    sourceParams: answers.source_params ?? {},
   };
 }
 
@@ -291,3 +314,7 @@ export function formToProfile(profile: StoredProfile, form: ProfileForm): Stored
       .map(l => ({ language: l.language.trim(), level: l.level })),
   };
 }
+
+export const COMPUTRABAJO_COUNTRIES = [
+  "es", "mx", "co", "ar", "pe", "cl", "uy", "ec", "ve", "cr", "pa", "gt", "do"
+] as const;

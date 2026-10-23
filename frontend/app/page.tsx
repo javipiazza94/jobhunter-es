@@ -5,7 +5,7 @@ import { Building2, Briefcase, Send, Users, Play, Check, ChevronRight, Sparkles,
 import { fetchStats, fetchCompanies, fetchOffers, fetchTracks, fetchContacts, fetchApplications, triggerScraper, fetchPendingApplications, createDrafts, markOfferSent, unmarkOfferSent, updateApplicationStatus, discardOffer, fetchFollowups, fetchStaleApplications, fetchSetupStatus, ApiError, type PendingApplication } from "@/lib/api";
 import type { Application, Company, Contact, JobOffer, OfferEvaluation, QuietApplication, Stats, Track } from "@/lib/types";
 import { failureMessage, isObject, settle, type Failures } from "@/lib/safeLoad";
-import { MODALITY_BADGE, SOURCE_COLORS, STATUS_COLORS, parseReviewFlags, trackBadge, trackTabs } from "@/lib/ui";
+import { MODALITY_BADGE, SOURCE_COLORS, STATUS_COLORS, parseReviewFlags, trackTabs } from "@/lib/ui";
 import { useInboxSync } from "@/app/hooks/useInboxSync";
 import { InboxBanner } from "@/app/components/InboxBanner";
 import { SetupBanner } from "@/app/components/SetupBanner";
@@ -533,8 +533,23 @@ export default function Dashboard() {
                 <span className={`px-3 py-1 rounded-lg text-sm font-bold tracking-wide border ${selectedOffer.relevance_score >= 0.8 ? "bg-green-500/10 text-green-400 border-green-500/20" : selectedOffer.relevance_score >= 0.65 ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" : "bg-gray-500/10 text-gray-400 border-gray-500/20"}`}>
                   {t("offers.score_label")} {(selectedOffer.relevance_score * 100).toFixed(0)}%
                 </span>
-                {selectedOffer.cv_profile && <span className={`text-xs uppercase font-bold tracking-wider px-3 py-1 rounded-lg flex items-center ${trackBadge(selectedOffer.cv_profile, tracks).className}`}>{t("offers.profile_label")} {trackBadge(selectedOffer.cv_profile, tracks).label}</span>}
-                {selectedOffer.source && <span className={`text-xs uppercase font-bold tracking-wider px-3 py-1 rounded-lg flex items-center border border-current ${SOURCE_COLORS[selectedOffer.source] || SOURCE_COLORS.seed}`}>{selectedOffer.source}</span>}
+                {selectedOffer.source && (
+                  selectedOffer.url ? (
+                    <a
+                      href={selectedOffer.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={t("offers.view_source", { source: selectedOffer.source })}
+                      className={`text-xs uppercase font-bold tracking-wider px-3 py-1 rounded-lg flex items-center border border-current hover:opacity-80 transition-opacity ${SOURCE_COLORS[selectedOffer.source] || SOURCE_COLORS.seed}`}
+                    >
+                      {selectedOffer.source}
+                    </a>
+                  ) : (
+                    <span className={`text-xs uppercase font-bold tracking-wider px-3 py-1 rounded-lg flex items-center border border-current ${SOURCE_COLORS[selectedOffer.source] || SOURCE_COLORS.seed}`}>
+                      {selectedOffer.source}
+                    </span>
+                  )
+                )}
               </div>
 
               <OfferEvaluationPanel key={selectedOffer.id} offerId={selectedOffer.id} onEvaluated={handleOfferEvaluated} />

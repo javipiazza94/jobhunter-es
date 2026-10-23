@@ -841,8 +841,8 @@ def setup_status():
 
 
 @app.get("/api/setup/markets", response_model=dict[str, list[MarketSourceOut]])
-def setup_markets():
-    return setup_builder.load_markets()
+def setup_markets(lang: str = "es"):
+    return setup_builder.load_markets(lang=lang)
 
 
 @app.post("/api/setup/cv", response_model=SetupProposalOut)
@@ -1077,7 +1077,8 @@ def put_sources_settings(body: SourcesIn):
     `acknowledged` (si no, 422); las que siguen activas conservan sus ajustes."""
     _require_user_config()
     try:
-        cfg = setup_builder.update_sources(body.enabled, body.acknowledged, get_config())
+        params = {k: v.model_dump() for k, v in body.params.items()} if body.params else None
+        cfg = setup_builder.update_sources(body.enabled, body.acknowledged, params, get_config())
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
     try:

@@ -291,7 +291,14 @@
   "setup.progress": "Progreso del asistente",
   "setup.finish": "Buscar ofertas",
   "setup.finishing": "Guardando y lanzando la búsqueda…",
+  "setup.computrabajo_country": "País de Computrabajo",
+  "setup.ui_language": "Idioma de la aplicación",
 
+  "profile.source_country": "País",
+  "profile.source_locations": "Ubicaciones (separadas por coma)",
+  "profile.source_locations_placeholder": "ej: Madrid, Remoto",
+
+  "offers.view_source": "Ver en {source}",
   "offers.search_placeholder": "Buscar por título, empresa, descripción...",
   "offers.filter_all": "Todos",
   "offers.sort_by": "Ordenar por",
@@ -505,5 +512,19 @@
   "errors.missing_content_length": "Falta la cabecera Content-Length",
   "errors.rate_limited": "Demasiadas peticiones: espera un momento",
   "errors.source_blocked": "Fuente omitida: el sitio no permite su acceso automatizado",
-  "errors.with_code": "{message} ({status})"
+  "errors.with_code": "{message} ({status})",
+
+  "country.es": "España",
+  "country.mx": "México",
+  "country.co": "Colombia",
+  "country.ar": "Argentina",
+  "country.pe": "Perú",
+  "country.cl": "Chile",
+  "country.uy": "Uruguay",
+  "country.ec": "Ecuador",
+  "country.ve": "Venezuela",
+  "country.cr": "Costa Rica",
+  "country.pa": "Panamá",
+  "country.gt": "Guatemala",
+  "country.do": "República Dominicana"
 }

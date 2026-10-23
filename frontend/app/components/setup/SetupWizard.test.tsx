@@ -128,3 +128,34 @@ test("el asistente completo: paso 3 con «Buscar ofertas»; solo se puede cerrar
   expect(again).toContain(T.stepNames[1]);
   expect(again).toContain(T.close);
 });
+
+test("paso 3: muestra atribución y selector de país de Computrabajo", () => {
+  const marketsWithAttrs: Record<string, MarketSource[]> = {
+    spain: [
+      {
+        id: "computrabajo",
+        label: "Computrabajo",
+        requires_ack: false,
+        default_on: true,
+        attribution: { name: "Computrabajo", url: "https://www.computrabajo.es", required: false },
+      },
+      {
+        id: "remotive",
+        label: "Remotive",
+        requires_ack: false,
+        default_on: true,
+        attribution: { name: "Remotive", url: "https://remotive.com", required: true },
+      },
+    ],
+  };
+  const s = state({
+    markets: ["spain"],
+    sources: { computrabajo: true, remotive: true },
+    sourceParams: { computrabajo: { country: "ar" } },
+  });
+  const h = renderToStaticMarkup(<StepSources state={s} markets={marketsWithAttrs} onChange={noop} />);
+  expect(h).toContain("computrabajo-country");
+  expect(h).toContain('value="ar"');
+  expect(h).toContain("https://remotive.com");
+  expect(h).toContain("https://www.computrabajo.es");
+});

@@ -16,6 +16,7 @@ import {
   summarizeRuns,
   toAnswers,
   validateStep,
+  COMPUTRABAJO_COUNTRIES,
   type RunSummary,
   type WizardState,
   type WizardStep,
@@ -31,6 +32,7 @@ import type {
   WorkModality,
 } from "@/lib/types";
 import { t, useLocale } from "@/lib/i18n";
+import { LanguageSelector } from "@/app/components/LanguageSelector";
 
 // Textos de la interfaz en un solo sitio traducidos con getters i18n.
 export const T = {
@@ -480,20 +482,58 @@ export function StepSources({ state, markets, onChange }: {
             const warningId = `warn-${src.id}`;
             return (
               <li key={src.id} className={src.requires_ack ? "rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2" : ""}>
-                <label className="inline-flex items-center gap-2 text-sm text-gray-200">
-                  <input
-                    type="checkbox"
-                    name={`source-${src.id}`}
-                    checked={src.checked}
-                    aria-describedby={src.requires_ack ? warningId : undefined}
-                    onChange={e => { const on = e.target.checked; onChange(s => ({ ...s, sources: { ...s.sources, [src.id]: on } })); }}
-                  />
-                  {src.label}
-                </label>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-200">
+                    <input
+                      type="checkbox"
+                      name={`source-${src.id}`}
+                      checked={src.checked}
+                      aria-describedby={src.requires_ack ? warningId : undefined}
+                      onChange={e => { const on = e.target.checked; onChange(s => ({ ...s, sources: { ...s.sources, [src.id]: on } })); }}
+                    />
+                    {src.label}
+                  </label>
+                  {src.attribution && (
+                    <a
+                      href={src.attribution.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-indigo-400 hover:underline"
+                    >
+                      {src.attribution.name}
+                    </a>
+                  )}
+                </div>
+                {src.id === "computrabajo" && src.checked && (
+                  <div className="ml-6 mt-1 flex items-center gap-2 text-xs text-gray-300">
+                    <span>{t("setup.computrabajo_country")}:</span>
+                    <select
+                      name="computrabajo-country"
+                      value={state.sourceParams?.computrabajo?.country || "es"}
+                      onChange={e => {
+                        const c = e.target.value;
+                        onChange(s => ({
+                          ...s,
+                          sourceParams: {
+                            ...s.sourceParams,
+                            computrabajo: { ...s.sourceParams?.computrabajo, country: c },
+                          },
+                        }));
+                      }}
+                      className="bg-[#16161f] border border-white/10 text-gray-300 rounded px-2 py-1 text-xs outline-none"
+                    >
+                      {COMPUTRABAJO_COUNTRIES.map(c => (
+                        <option key={c} value={c}>
+                          {t(`country.${c}`)} ({c})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 {src.requires_ack && (
                   <>
                     <p id={warningId} className="flex items-start gap-2 text-xs text-amber-300">
-                      <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden /> {T.ackWarning(src.label)}
+                      <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden /> {src.ack_warning || T.ackWarning(src.label)}
                     </p>
                     <label className="inline-flex items-center gap-2 text-xs text-gray-300">
                       <input
@@ -656,11 +696,14 @@ export function SetupWizard({ initialState, initialStep = 1, initialMarkets, pre
             </h2>
             <p className="text-sm text-gray-500">{T.subtitle}</p>
           </div>
-          {onCancel && (
-            <button className={ghostBtn} aria-label={T.close} onClick={onCancel}>
-              <X className="w-4 h-4" />
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            <LanguageSelector />
+            {onCancel && (
+              <button className={ghostBtn} aria-label={T.close} onClick={onCancel}>
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </header>
 
         <ol className="flex gap-2" aria-label={T.progress}>

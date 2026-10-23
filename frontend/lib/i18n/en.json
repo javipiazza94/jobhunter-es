@@ -291,7 +291,14 @@
   "setup.progress": "Wizard progress",
   "setup.finish": "Find jobs",
   "setup.finishing": "Saving and launching search…",
+  "setup.computrabajo_country": "Computrabajo country",
+  "setup.ui_language": "Application language",
 
+  "profile.source_country": "Country",
+  "profile.source_locations": "Locations (comma-separated)",
+  "profile.source_locations_placeholder": "e.g. Madrid, Remote",
+
+  "offers.view_source": "View on {source}",
   "offers.search_placeholder": "Search by title, company, description...",
   "offers.filter_all": "All",
   "offers.sort_by": "Sort by",
@@ -505,5 +512,19 @@
   "errors.missing_content_length": "Missing Content-Length header",
   "errors.rate_limited": "Too many requests: please wait a moment",
   "errors.source_blocked": "Source skipped: site disallows automated access",
-  "errors.with_code": "{message} ({status})"
+  "errors.with_code": "{message} ({status})",
+
+  "country.es": "Spain",
+  "country.mx": "Mexico",
+  "country.co": "Colombia",
+  "country.ar": "Argentina",
+  "country.pe": "Peru",
+  "country.cl": "Chile",
+  "country.uy": "Uruguay",
+  "country.ec": "Ecuador",
+  "country.ve": "Venezuela",
+  "country.cr": "Costa Rica",
+  "country.pa": "Panama",
+  "country.gt": "Guatemala",
+  "country.do": "Dominican Republic"
 }

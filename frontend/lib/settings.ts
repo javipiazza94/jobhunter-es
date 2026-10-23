@@ -94,7 +94,20 @@ export function emailFormDirty(view: EmailSettingsView, form: EmailForm): boolea
 /** Cuerpo de PUT /api/settings/sources: solo cuentan como aceptadas las `requires_ack` activadas y aceptadas. */
 export function sourcesUpdate(list: SourceSetting[]): SourcesUpdate {
   const on = list.filter(s => s.enabled);
-  return { enabled: on.map(s => s.id), acknowledged: on.filter(s => s.requires_ack && s.acknowledged).map(s => s.id) };
+  const params: Record<string, { country?: string | null; locations?: string[] }> = {};
+  for (const s of on) {
+    if (s.country || (s.locations && s.locations.length > 0)) {
+      params[s.id] = {
+        country: s.country ?? null,
+        locations: s.locations ?? [],
+      };
+    }
+  }
+  return {
+    enabled: on.map(s => s.id),
+    acknowledged: on.filter(s => s.requires_ack && s.acknowledged).map(s => s.id),
+    ...(Object.keys(params).length ? { params } : {}),
+  };
 }
 
 export function sourcesErrors(list: SourceSetting[]): string[] {

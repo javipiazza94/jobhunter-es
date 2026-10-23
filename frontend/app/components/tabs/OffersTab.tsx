@@ -228,7 +228,22 @@ export function OffersTab({ offers, tracks, filters, selectedIds, onToggleSelect
                     </button>
                     <div className="flex items-center gap-2">
                       {o.is_applied ? <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20">{t("offers.candidate_badge")}</span> : null}
-                      {o.source && <span className={`text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded ${SOURCE_COLORS[o.source] || SOURCE_COLORS.seed}`}>{o.source}</span>}
+                      {o.source && (
+                        o.url ? (
+                          <a
+                            href={o.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={t("offers.view_source", { source: o.source })}
+                            className={`text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded hover:underline ${SOURCE_COLORS[o.source] || SOURCE_COLORS.seed}`}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            {o.source}
+                          </a>
+                        ) : (
+                          <span className={`text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded ${SOURCE_COLORS[o.source] || SOURCE_COLORS.seed}`}>{o.source}</span>
+                        )
+                      )}
                       {o.experience_level && <span className="text-xs text-gray-500 font-mono capitalize">{o.experience_level}</span>}
                     </div>
                   </div>

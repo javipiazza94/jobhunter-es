@@ -39,6 +39,7 @@ import {
   type EmailForm,
 } from "@/lib/settings";
 import { t, useLocale } from "@/lib/i18n";
+import { COMPUTRABAJO_COUNTRIES } from "@/lib/setup";
 import type { AIProviderId, AISettingsView, CheckResult, EmailSettingsView, FollowedCompanySetting, SourceSetting } from "@/lib/types";
 
 // Textos de la interfaz traducidos vía i18n (con getters para retrocompatibilidad).
@@ -484,7 +485,7 @@ function SourcesSection({ initial, onRerunWizard }: { initial: SourceSetting[]; 
         {list.map(src => {
           const warningId = `p-warn-${src.id}`;
           return (
-            <li key={src.id} className={src.requires_ack ? "rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2" : ""}>
+            <li key={src.id} className={src.requires_ack ? "rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2" : "space-y-2"}>
               <label className="inline-flex items-center gap-2 text-sm text-gray-200">
                 <input
                   type="checkbox"
@@ -495,6 +496,38 @@ function SourcesSection({ initial, onRerunWizard }: { initial: SourceSetting[]; 
                 />
                 {src.label}
               </label>
+              {src.id === "computrabajo" && src.enabled && (
+                <div className="ml-6 flex items-center gap-2 text-xs text-gray-300">
+                  <span>{t("profile.source_country")}:</span>
+                  <select
+                    id={`p-country-${src.id}`}
+                    name={`p-country-${src.id}`}
+                    value={src.country || "es"}
+                    onChange={e => patch(src.id, { country: e.target.value })}
+                    className="bg-[#16161f] border border-white/10 text-gray-300 rounded px-2 py-1 text-xs outline-none"
+                  >
+                    {COMPUTRABAJO_COUNTRIES.map(c => (
+                      <option key={c} value={c}>
+                        {t(`country.${c}`)} ({c})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {(src.id === "tecnoempleo" || src.id === "indeed" || src.id === "computrabajo") && src.enabled && (
+                <div className="ml-6 flex items-center gap-2 text-xs text-gray-300">
+                  <span>{t("profile.source_locations")}:</span>
+                  <input
+                    id={`p-locations-${src.id}`}
+                    name={`p-locations-${src.id}`}
+                    type="text"
+                    placeholder={t("profile.source_locations_placeholder")}
+                    value={(src.locations || []).join(", ")}
+                    onChange={e => patch(src.id, { locations: e.target.value.split(",").map(x => x.trim()).filter(Boolean) })}
+                    className="bg-[#16161f] border border-white/10 text-gray-300 rounded px-2 py-1 text-xs outline-none flex-1 max-w-xs"
+                  />
+                </div>
+              )}
               {src.requires_ack && (
                 <>
                   <p id={warningId} className="flex items-start gap-2 text-xs text-amber-300">

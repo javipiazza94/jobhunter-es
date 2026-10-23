@@ -292,8 +292,16 @@ def test_mercados_del_asistente():
     import setup_builder
 
     markets = setup_builder.load_markets()
-    assert markets == MARKETS
+    base_markets = {
+        m: [{k: s[k] for k in ("id", "label", "requires_ack", "default_on")} for s in sources]
+        for m, sources in markets.items()
+    }
+    assert base_markets == MARKETS
     assert list(markets) == ["spain", "latam", "remote", "global"]
+    for sources in markets.values():
+        for s in sources:
+            assert "ack_warning" in s
+            assert "attribution" in s
 
 
 def test_catalogo_y_vista_de_fuentes():
@@ -312,7 +320,11 @@ def test_catalogo_y_vista_de_fuentes():
         "indeed": ("Indeed (requiere SCRAPERAPI_KEY)", False),
     }
     view = setup_builder.sources_view()
-    assert view == [
+    base_view = [
+        {k: s[k] for k in ("id", "label", "markets", "requires_ack", "enabled", "acknowledged")}
+        for s in view
+    ]
+    assert base_view == [
         {"id": "tecnoempleo", "label": "Tecnoempleo", "markets": ["spain", "remote"], "requires_ack": False,
          "enabled": True, "acknowledged": False},
         {"id": "infojobs", "label": "InfoJobs", "markets": ["spain"], "requires_ack": True, "enabled": True,
@@ -336,6 +348,9 @@ def test_catalogo_y_vista_de_fuentes():
         {"id": "company_direct", "label": "company_direct", "markets": [], "requires_ack": False,
          "enabled": True, "acknowledged": False},
     ]
+    for s in view:
+        assert "country" in s
+        assert "locations" in s
 
 
 # ── URLs que construyen los portales con la config existente (sin `country`) ────
