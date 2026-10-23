@@ -2,17 +2,18 @@ import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import type { Application, JobOffer } from "@/lib/types";
 import { SOURCE_COLORS, STATUS_COLORS, TIER_BADGE } from "@/lib/ui";
+import { t, useLocale } from "@/lib/i18n";
 
 function TierAndLabel({ tier, label }: { tier: number | null; label: string | null }) {
   return (
     <div className="flex gap-2">
       {tier != null && (
         <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md ${TIER_BADGE[tier]?.className ?? ""}`}>
-          {TIER_BADGE[tier]?.label ?? `Tier ${tier}`}
+          {TIER_BADGE[tier]?.label ?? t("track.tier_label", { tier })}
         </span>
       )}
       <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-white/5 text-gray-400 border border-white/10">
-        {label || "Otro"}
+        {label || t("track.tag_other")}
       </span>
     </div>
   );
@@ -28,13 +29,13 @@ export interface ClassificationColumn {
 
 /** Track estándar: insignia de la empresa seguida (si la hay) y etiqueta del track. */
 export const STANDARD_COLUMN: ClassificationColumn = {
-  header: "Tier / Etiqueta",
+  get header() { return t("track.header_tier_tag"); },
   render: (o) => <TierAndLabel tier={o.followed_tier} label={o.track_tag} />,
   inTracked: true,
 };
 
 export const ISOLATED_COLUMN: ClassificationColumn = {
-  header: "Afinidad",
+  get header() { return t("track.header_affinity"); },
   render: (o) => (
     <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
       {o.generic_score != null ? o.generic_score.toFixed(2) : "—"}
@@ -71,6 +72,7 @@ export function OfferBucketTab({
   showJuniorBadge = false, showSalary = false, maxAnimationIndex = Infinity,
   onToggleSelected, onSelectMany, onSelectOffer, onSelectApplication,
 }: Props) {
+  useLocale();
   const delay = (idx: number) => ({ animationDelay: `${Math.min(idx, maxAnimationIndex) * 0.03}s` });
 
   return (
@@ -81,9 +83,9 @@ export function OfferBucketTab({
       {/* Nuevas */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-medium text-gray-200">Nuevas</h2>
+          <h2 className="text-lg font-medium text-gray-200">{t("track.new_section")}</h2>
           <span className="text-sm font-mono text-indigo-300 bg-indigo-500/10 px-3 py-1 rounded-lg border border-indigo-500/20">
-            {newOffers.length} sin candidatura
+            {t("track.untracked_count", { count: newOffers.length })}
           </span>
         </div>
         {newOffers.length === 0 ? (
@@ -101,14 +103,14 @@ export function OfferBucketTab({
                         type="checkbox"
                         checked={newOffers.length > 0 && newOffers.every(o => selectedIds.has(o.id))}
                         onChange={e => onSelectMany(newOffers.map(o => o.id), e.target.checked)}
-                        aria-label="Seleccionar todas las ofertas nuevas"
+                        aria-label={t("track.select_all_new")}
                         className="w-4 h-4 accent-indigo-500 cursor-pointer"
                       />
                     </th>
-                    <th className="px-6 py-4 font-semibold">Oferta</th>
-                    <th className="px-6 py-4 font-semibold">Empresa</th>
+                    <th className="px-6 py-4 font-semibold">{t("track.header_offer")}</th>
+                    <th className="px-6 py-4 font-semibold">{t("track.header_company")}</th>
                     <th className="px-6 py-4 font-semibold">{column.header}</th>
-                    <th className="px-6 py-4 font-semibold">Ubicación</th>
+                    <th className="px-6 py-4 font-semibold">{t("track.header_location")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -119,7 +121,7 @@ export function OfferBucketTab({
                           type="checkbox"
                           checked={selectedIds.has(o.id)}
                           onChange={() => onToggleSelected(o.id)}
-                          aria-label={`Seleccionar ${o.title}`}
+                          aria-label={t("offers.select_offer", { title: o.title })}
                           className="w-4 h-4 accent-indigo-500 cursor-pointer"
                         />
                       </td>
@@ -129,7 +131,7 @@ export function OfferBucketTab({
                         </button>
                         <div className="flex items-center gap-2 mt-1.5">
                           {o.source && <span className={`text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded ${SOURCE_COLORS[o.source] || SOURCE_COLORS.seed}`}>{o.source}</span>}
-                          {showJuniorBadge && o.open_to_junior === 1 && <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Abierto a junior</span>}
+                          {showJuniorBadge && o.open_to_junior === 1 && <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{t("track.junior_friendly")}</span>}
                           {showSalary && o.salary_text && <span className="text-xs text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 px-2 py-0.5 rounded-md font-mono">{o.salary_text}</span>}
                         </div>
                       </td>
@@ -148,14 +150,14 @@ export function OfferBucketTab({
       {/* Pendientes / Enviadas */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-medium text-gray-200">Pendientes de respuesta / Enviadas</h2>
+          <h2 className="text-lg font-medium text-gray-200">{t("track.tracked_section")}</h2>
           <span className="text-sm font-mono text-amber-400 bg-amber-400/10 px-3 py-1 rounded-lg border border-amber-400/20">
-            {trackedOffers.length} con candidatura
+            {t("track.tracked_count", { count: trackedOffers.length })}
           </span>
         </div>
         {trackedOffers.length === 0 ? (
           <div className="glass-card p-10 text-center border-dashed border-white/10 text-sm text-gray-500">
-            Ninguna de estas ofertas tiene aún candidatura registrada.
+            {t("track.empty_tracked")}
           </div>
         ) : (
           <div className="glass-card overflow-hidden">
@@ -163,10 +165,10 @@ export function OfferBucketTab({
               <table className="w-full text-sm text-left">
                 <thead className={TABLE_HEAD}>
                   <tr>
-                    <th className="px-6 py-4 font-semibold">Oferta</th>
-                    <th className="px-6 py-4 font-semibold">Empresa</th>
+                    <th className="px-6 py-4 font-semibold">{t("track.header_offer")}</th>
+                    <th className="px-6 py-4 font-semibold">{t("track.header_company")}</th>
                     {column.inTracked && <th className="px-6 py-4 font-semibold">{column.header}</th>}
-                    <th className="px-6 py-4 font-semibold">Estado</th>
+                    <th className="px-6 py-4 font-semibold">{t("track.header_status")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">

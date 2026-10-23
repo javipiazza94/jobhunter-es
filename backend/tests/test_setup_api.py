@@ -359,6 +359,17 @@ def test_perfil_put_pais_desconocido_conserva_un_codigo_puesto_a_mano():
     assert _send("PUT", "/api/profile", perfil)[1]["personal"]["country_code"] == ""
 
 
+def test_perfil_patch_guarda_preferencias_de_idioma_sin_tocar_el_resto():
+    """La interfaz persiste `preferences.ui_language` con PATCH; el resto del perfil queda igual."""
+    perfil = {"personal": {"name": "Ana Prueba"}, "languages": []}
+    assert _send("PUT", "/api/profile", perfil)[0] == 200
+    status, data = _send("PATCH", "/api/profile", {"preferences": {"ui_language": "en"}})
+    assert status == 200
+    assert data["preferences"] == {"ui_language": "en"}
+    assert data["personal"]["name"] == "Ana Prueba"
+    assert _get("/api/profile")[1]["preferences"]["ui_language"] == "en"
+
+
 def test_perfil_put_que_no_es_objeto_da_422():
     assert _send("PUT", "/api/profile", ["no", "objeto"])[0] == 422
 

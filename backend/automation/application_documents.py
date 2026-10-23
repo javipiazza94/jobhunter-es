@@ -239,6 +239,7 @@ def _generate(
     output_dir: Path,
     use_ai: bool,
     ai_requested: bool,
+    lang: str = "es",
 ) -> tuple[dict, Literal["ai", "deterministic"], list[str]]:
     """Punto de despacho entre la vía con IA y la determinista. Devuelve (resultado, origen, avisos).
 
@@ -248,7 +249,7 @@ def _generate(
     warnings: list[str] = []
     if use_ai:
         try:
-            result, ai_warnings = _generate_with_ai(profile, app, summary_key, keywords, output_dir)
+            result, ai_warnings = _generate_with_ai(profile, app, summary_key, keywords, output_dir, lang=lang)
             return result, "ai", ai_warnings
         except AIError as exc:
             warnings.append(f"{AI_UNAVAILABLE_PREFIX}{exc}")
@@ -271,13 +272,14 @@ def _generate(
         output_dir=output_dir,
         verify=True,
         offer_keywords=keywords,
+        lang=lang,
         **_page_limits(),
     )
     return result, "deterministic", warnings
 
 
 def _generate_with_ai(
-    profile: dict, app: dict, summary_key: str, keywords: list[str], output_dir: Path
+    profile: dict, app: dict, summary_key: str, keywords: list[str], output_dir: Path, lang: str = "es"
 ) -> tuple[dict, list[str]]:
     """Redactor + revisor con IA; compila sin recortar y, si algo no cabe, pide a la IA que acorte
     (una sola petición para CV y carta) y vuelve a compilar con el recorte determinista como red.
@@ -296,6 +298,7 @@ def _generate_with_ai(
         "description": clean_offer_text(app.get("description")),
         "tech_stack": app.get("tech_stack") or "",
         "keywords": keywords,
+        "language": lang,
     }
     limits = _page_limits()
     style = _style_rules(limits)
@@ -304,6 +307,7 @@ def _generate_with_ai(
     try:
         result = generate_documents_from_context(
             cv_ctx, letter_ctx, output_dir=output_dir, verify=True, offer_keywords=keywords, trim=False,
+            lang=lang,
             **limits,
         )
     except PageOverflow as overflow:
@@ -319,6 +323,7 @@ def _generate_with_ai(
                 warnings.append(f"{overflow}: la IA no pudo acortarlo ({exc}), se recorta sin IA")
         result = generate_documents_from_context(
             cv_ctx, letter_ctx, output_dir=output_dir, verify=True, offer_keywords=keywords, trim=True,
+            lang=lang,
             **limits,
         )
     return result, cap_warnings(warnings)
@@ -370,6 +375,9 @@ def _prepare(application_id: str, use_ai: bool | None) -> PreparedDocs:
     keywords = offer_keywords(app, cfg)
     profile = load_profile()
 
+    from automation.cover_letter import letter_language
+    lang = letter_language(app, profile)
+
     app_dir = application_archive.get_application_dir(application_id)
     app_dir.parent.mkdir(parents=True, exist_ok=True)
     work_dir = app_dir.with_name(f"{app_dir.name}.work")
@@ -383,6 +391,7 @@ def _prepare(application_id: str, use_ai: bool | None) -> PreparedDocs:
                 result, source, warnings = _generate(
                     profile, app, summary_key, keywords, work_dir,
                     use_ai=_resolve_use_ai(use_ai), ai_requested=use_ai is True,
+                    lang=lang,
                 )
                 warnings = [*engine_warnings, *warnings]
             except VerificationError as exc:
@@ -410,6 +419,7 @@ def _prepare(application_id: str, use_ai: bool | None) -> PreparedDocs:
                 metadata={
                     "source": source,
                     "track": track_id,
+                    "language": lang,
                     "company": app.get("company_name") or "",
                     "role": app.get("job_title") or "",
                     "offer_id": app.get("job_offer_id"),

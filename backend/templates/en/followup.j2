@@ -1,0 +1,18 @@
+{% if channel == "email" %}Subject: Following up on my application – {{ job_title or "Job Application" }}
+
+{% endif %}{% if channel == "linkedin" %}Hi {{ company_name }} team,
+I applied on {{ sent_date }}{% if job_title %} for the {{ job_title }} role{% endif %} and wanted to reiterate my interest. {% if reminder %}{{ reminder }} {% endif %}Could you let me know if there are any updates on the hiring process?
+Thank you,
+{{ first_name or name }}{% else %}Dear Hiring Team at {{ company_name }},
+
+I submitted my application on {{ sent_date }}{% if job_title %} for the {{ job_title }} position{% endif %} and wanted to confirm that it was received. I remain very enthusiastic about the opportunity.
+{% if reminder %}
+{{ reminder }}
+{% endif %}
+Could you let me know what the next steps are or if you need any additional information?
+
+Thank you very much for your time and consideration.
+
+—
+{{ name }}
+{{ email }}{% if phone %} · {{ phone }}{% endif %}{% endif %}

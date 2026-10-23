@@ -205,6 +205,7 @@ async def run_indeed(
     """Run Indeed scraper for all keyword+location combos via ScraperAPI."""
     from config import SCRAPERAPI_KEY
     from search_config import source_settings
+    from secrets_store import get_secret
 
     settings = source_settings("indeed")
     keywords = keywords or settings.get("keywords", [])
@@ -214,7 +215,8 @@ async def run_indeed(
                        "no hay nada que buscar")
         return []
 
-    if not SCRAPERAPI_KEY or SCRAPERAPI_KEY == "your_scraperapi_key_here":
+    api_key = get_secret("scraperapi_key") or SCRAPERAPI_KEY
+    if not api_key or api_key == "your_scraperapi_key_here":
         logger.error(
             "Indeed: SCRAPERAPI_KEY not set. "
             "Get a free key at https://www.scraperapi.com and set it in backend/.env"
@@ -228,7 +230,7 @@ async def run_indeed(
         for loc in locations:
             logger.info("Indeed: keyword=%s location=%s", kw, loc)
             try:
-                for offer in scrape_indeed_keyword(kw, loc, SCRAPERAPI_KEY, max_pages):
+                for offer in scrape_indeed_keyword(kw, loc, api_key, max_pages):
                     if offer.get("url") and offer["url"] not in seen:
                         seen.add(offer["url"])
                         all_offers.append(offer)

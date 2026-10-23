@@ -11,6 +11,8 @@ import {
   saveEmailSettings,
   patchProfile,
   saveSourceSettings,
+  fetchFollowedCompaniesSettings,
+  saveFollowedCompaniesSettings,
   testAI,
   testEmail,
 } from "@/lib/api";
@@ -36,78 +38,83 @@ import {
   type AIForm,
   type EmailForm,
 } from "@/lib/settings";
-import type { AIProviderId, AISettingsView, CheckResult, EmailSettingsView, SourceSetting } from "@/lib/types";
+import { t, useLocale } from "@/lib/i18n";
+import { COMPUTRABAJO_COUNTRIES } from "@/lib/setup";
+import type { AIProviderId, AISettingsView, CheckResult, EmailSettingsView, FollowedCompanySetting, SourceSetting } from "@/lib/types";
 
-// Textos de la interfaz en un solo sitio (la traducción llega en SP4).
+// Textos de la interfaz traducidos vía i18n (con getters para retrocompatibilidad).
 export const T = {
-  loading: "Cargando el perfil…",
-  save: "Guardar",
-  saved: "Guardado",
-  test: "Probar",
-  remove: "Quitar",
+  get loading() { return t("profile.loading"); },
+  get save() { return t("common.save"); },
+  get saved() { return t("common.saved"); },
+  get test() { return t("common.test"); },
+  get remove() { return t("common.remove"); },
   // Perfil
-  profile: "Perfil",
-  fullName: "Nombre completo",
-  email: "Email",
-  phone: "Teléfono",
-  city: "Ciudad",
-  country: "País",
-  languages: "Idiomas",
-  language: "Idioma",
-  level: "Nivel",
-  addLanguage: "Añadir idioma",
+  get profile() { return t("profile.title"); },
+  get fullName() { return t("profile.full_name"); },
+  get email() { return t("profile.email"); },
+  get phone() { return t("profile.phone"); },
+  get city() { return t("profile.city"); },
+  get country() { return t("profile.country"); },
+  get languages() { return t("profile.languages"); },
+  get language() { return t("profile.language"); },
+  get level() { return t("profile.level"); },
+  get addLanguage() { return t("profile.add_language"); },
   // Respuestas de cribado
-  screening: "Respuestas de cribado",
-  screeningHint: "Respuestas que reutiliza «Responder preguntas» y el relleno de formularios. Solo se usan tal cual: nunca se inventan datos.",
-  screeningQuestion: "Pregunta",
-  screeningAnswer: "Respuesta",
-  screeningAdd: "Añadir respuesta",
-  screeningEmpty: "Aún no hay respuestas guardadas.",
+  get screening() { return t("profile.screening"); },
+  get screeningHint() { return t("profile.screening_hint"); },
+  get screeningQuestion() { return t("profile.screening_question"); },
+  get screeningAnswer() { return t("profile.screening_answer"); },
+  get screeningAdd() { return t("profile.screening_add"); },
+  get screeningEmpty() { return t("profile.screening_empty"); },
   // IA
-  ai: "IA",
-  aiHint: "La IA propone tu perfil desde el CV, adapta las cartas y prepara entrevistas. La puntuación de ofertas nunca la usa.",
-  provider: "Proveedor",
-  providers: {
-    none: "Sin IA (plantillas)",
-    ollama: "Ollama (local)",
-    anthropic: "Anthropic (clave de API)",
-    openai: "OpenAI (clave de API)",
-    claude_cli: "Claude Code (CLI, tu suscripción)",
-    codex_cli: "Codex (CLI, tu suscripción)",
-  } as Record<AIProviderId, string>,
-  model: "Modelo (vacío = el predeterminado)",
-  baseUrl: "URL del servidor (opcional)",
-  baseUrlOpenAI: "Con OpenAI, la clave se envía a esta URL: úsala solo con un servidor de confianza.",
-  apiKey: "Clave de API",
-  apiKeyPlaceholder: "Escribe una clave nueva para sustituirla",
-  keyStatus: (status: string) => `Clave: ${status}`,
-  envOverrides: "La variable de entorno manda sobre lo que guardes aquí.",
-  cliHint: "Usa tu sesión de la CLI: la app nunca guarda contraseñas ni tokens de la suscripción.",
+  get ai() { return t("profile.ai"); },
+  get aiHint() { return t("profile.ai_hint"); },
+  get provider() { return t("profile.provider"); },
+  get providers() {
+    return {
+      none: t("profile.provider_none"),
+      ollama: t("profile.provider_ollama"),
+      anthropic: t("profile.provider_anthropic"),
+      openai: t("profile.provider_openai"),
+      claude_cli: t("profile.provider_claude_cli"),
+      codex_cli: t("profile.provider_codex_cli"),
+    } as Record<AIProviderId, string>;
+  },
+  get model() { return t("profile.model"); },
+  get baseUrl() { return t("profile.base_url"); },
+  get baseUrlOpenAI() { return t("profile.base_url_openai"); },
+  get apiKey() { return t("profile.api_key"); },
+  get apiKeyPlaceholder() { return t("profile.api_key_placeholder"); },
+  keyStatus: (status: string) => t("profile.key_status", { status }),
+  get envOverrides() { return t("profile.env_overrides"); },
+  get cliHint() { return t("profile.cli_hint"); },
   // Email
-  emailSection: "Email (SMTP)",
-  emailHint: "Solo se usa para enviar candidaturas que hayas aprobado. «Probar» se conecta sin enviar nada.",
-  preset: "Configuración",
-  presets: { gmail: "Gmail", custom: "Otro servidor" } as Record<EmailSettingsView["preset"], string>,
-  host: "Servidor SMTP",
-  port: "Puerto",
-  starttls: "Usar STARTTLS",
-  username: "Usuario",
-  fromName: "Nombre del remitente",
-  password: "Contraseña (de aplicación en Gmail)",
-  passwordPlaceholder: "Escribe una contraseña nueva para sustituirla",
-  passwordStatus: (status: string) => `Contraseña: ${status}`,
-  saveFirst: "Guarda los cambios antes de probar",
-  yamlRewriteNote: "Guardar reescribe jobhunter.yaml: se pierden los comentarios que tuviera.",
+  get emailSection() { return t("profile.email_section"); },
+  get emailHint() { return t("profile.email_hint"); },
+  get preset() { return t("profile.preset"); },
+  get presets() {
+    return { gmail: t("profile.preset_gmail"), custom: t("profile.preset_custom") } as Record<EmailSettingsView["preset"], string>;
+  },
+  get host() { return t("profile.host"); },
+  get port() { return t("profile.port"); },
+  get starttls() { return t("profile.starttls"); },
+  get username() { return t("profile.username"); },
+  get fromName() { return t("profile.from_name"); },
+  get password() { return t("profile.password"); },
+  get passwordPlaceholder() { return t("profile.password_placeholder"); },
+  passwordStatus: (status: string) => t("profile.password_status", { status }),
+  get saveFirst() { return t("profile.save_first"); },
+  get yamlRewriteNote() { return t("profile.yaml_note"); },
   // Búsqueda
-  search: "Búsqueda",
-  searchHint: "Fuentes de ofertas activas. Las que tienen condiciones de uso delicadas necesitan que aceptes su aviso.",
-  ackWarning: (label: string) =>
-    `${label} tiene condiciones de uso delicadas (sesión propia o términos del portal que limitan la automatización). Úsala bajo tu responsabilidad.`,
-  ackCheckbox: (label: string) => `Entiendo el aviso y quiero usar ${label}`,
-  rerunHint: "Para cambiar objetivos, mercados o empresas que sigues, vuelve a ejecutar el asistente (parte de tu configuración actual).",
-  rerun: "Volver a ejecutar el asistente",
-  loadError: (msg: string) => `No se pudo cargar: ${msg}`,
-  retry: "Reintentar",
+  get search() { return t("profile.search"); },
+  get searchHint() { return t("profile.search_hint"); },
+  ackWarning: (label: string) => t("profile.ack_warning", { label }),
+  ackCheckbox: (label: string) => t("profile.ack_checkbox", { label }),
+  get rerunHint() { return t("profile.rerun_hint"); },
+  get rerun() { return t("profile.rerun"); },
+  loadError: (msg: string) => t("profile.load_error", { message: msg }),
+  get retry() { return t("common.retry"); },
 };
 
 const LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2", "Nativo"];
@@ -478,7 +485,7 @@ function SourcesSection({ initial, onRerunWizard }: { initial: SourceSetting[]; 
         {list.map(src => {
           const warningId = `p-warn-${src.id}`;
           return (
-            <li key={src.id} className={src.requires_ack ? "rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2" : ""}>
+            <li key={src.id} className={src.requires_ack ? "rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2" : "space-y-2"}>
               <label className="inline-flex items-center gap-2 text-sm text-gray-200">
                 <input
                   type="checkbox"
@@ -489,6 +496,38 @@ function SourcesSection({ initial, onRerunWizard }: { initial: SourceSetting[]; 
                 />
                 {src.label}
               </label>
+              {src.id === "computrabajo" && src.enabled && (
+                <div className="ml-6 flex items-center gap-2 text-xs text-gray-300">
+                  <span>{t("profile.source_country")}:</span>
+                  <select
+                    id={`p-country-${src.id}`}
+                    name={`p-country-${src.id}`}
+                    value={src.country || "es"}
+                    onChange={e => patch(src.id, { country: e.target.value })}
+                    className="bg-[#16161f] border border-white/10 text-gray-300 rounded px-2 py-1 text-xs outline-none"
+                  >
+                    {COMPUTRABAJO_COUNTRIES.map(c => (
+                      <option key={c} value={c}>
+                        {t(`country.${c}`)} ({c})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {(src.id === "tecnoempleo" || src.id === "indeed" || src.id === "computrabajo") && src.enabled && (
+                <div className="ml-6 flex items-center gap-2 text-xs text-gray-300">
+                  <span>{t("profile.source_locations")}:</span>
+                  <input
+                    id={`p-locations-${src.id}`}
+                    name={`p-locations-${src.id}`}
+                    type="text"
+                    placeholder={t("profile.source_locations_placeholder")}
+                    value={(src.locations || []).join(", ")}
+                    onChange={e => patch(src.id, { locations: e.target.value.split(",").map(x => x.trim()).filter(Boolean) })}
+                    className="bg-[#16161f] border border-white/10 text-gray-300 rounded px-2 py-1 text-xs outline-none flex-1 max-w-xs"
+                  />
+                </div>
+              )}
               {src.requires_ack && (
                 <>
                   <p id={warningId} className="flex items-start gap-2 text-xs text-amber-300">
@@ -510,6 +549,7 @@ function SourcesSection({ initial, onRerunWizard }: { initial: SourceSetting[]; 
           );
         })}
       </ul>
+      <FollowedCompaniesBlock />
       <button className={primaryBtn} disabled={busy} onClick={save}>
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {T.save}
       </button>
@@ -520,6 +560,109 @@ function SourcesSection({ initial, onRerunWizard }: { initial: SourceSetting[]; 
         <Wand2 className="w-4 h-4" /> {T.rerun}
       </button>
     </section>
+  );
+}
+
+function FollowedCompaniesBlock() {
+  const [companies, setCompanies] = useState<FollowedCompanySetting[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { busy, feedback, run } = useAction();
+
+  useEffect(() => {
+    fetchFollowedCompaniesSettings()
+      .then(setCompanies)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const addCompany = () => {
+    setCompanies(prev => [...prev, { name: "", tier: 1, aliases: [] }]);
+  };
+
+  const removeCompany = (idx: number) => {
+    setCompanies(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateCompany = (idx: number, patch: Partial<FollowedCompanySetting>) => {
+    setCompanies(prev => prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)));
+  };
+
+  const save = () =>
+    run(async () => {
+      const valid = companies.filter(c => c.name.trim());
+      const saved = await saveFollowedCompaniesSettings(valid);
+      setCompanies(saved);
+      return { ok: true, message: "Empresas seguidas guardadas" };
+    });
+
+  if (loading) return null;
+
+  return (
+    <div className="pt-4 border-t border-white/5 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h4 className="text-sm font-semibold text-white">{t("profile.followed_companies_title")}</h4>
+          <p className="text-xs text-gray-500">{t("profile.followed_companies_hint")}</p>
+        </div>
+        <button
+          type="button"
+          onClick={addCompany}
+          className="text-xs text-indigo-400 hover:text-indigo-300 font-medium px-2 py-1 rounded bg-indigo-500/10 border border-indigo-500/20"
+        >
+          {t("profile.add_followed_company")}
+        </button>
+      </div>
+
+      {companies.length > 0 && (
+        <div className="space-y-2">
+          {companies.map((c, idx) => (
+            <div key={idx} className="flex flex-wrap items-center gap-2 p-2 rounded-lg bg-black/20 border border-white/5">
+              <input
+                type="text"
+                placeholder={t("profile.company_name_placeholder")}
+                value={c.name}
+                onChange={e => updateCompany(idx, { name: e.target.value })}
+                className="bg-[#16161f] border border-white/10 text-gray-300 text-xs rounded px-2.5 py-1.5 focus:ring-1 focus:ring-indigo-500 outline-none flex-1 min-w-[140px]"
+              />
+              <select
+                value={c.tier}
+                onChange={e => updateCompany(idx, { tier: Number(e.target.value) })}
+                className="bg-[#16161f] border border-white/10 text-gray-300 text-xs rounded px-2 py-1.5 focus:ring-1 focus:ring-indigo-500 outline-none"
+              >
+                <option value={1}>{t("track.tier_label", { tier: 1 })}</option>
+                <option value={2}>{t("track.tier_label", { tier: 2 })}</option>
+                <option value={3}>{t("track.tier_label", { tier: 3 })}</option>
+              </select>
+              <input
+                type="text"
+                placeholder={t("profile.company_aliases_placeholder")}
+                value={c.aliases?.join(", ") || ""}
+                onChange={e => updateCompany(idx, { aliases: e.target.value.split(",").map(a => a.trim()).filter(Boolean) })}
+                className="bg-[#16161f] border border-white/10 text-gray-300 text-xs rounded px-2.5 py-1.5 focus:ring-1 focus:ring-indigo-500 outline-none flex-1 min-w-[140px]"
+              />
+              <button
+                type="button"
+                onClick={() => removeCompany(idx)}
+                className="text-xs text-red-400 hover:text-red-300 px-2 py-1"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              className="text-xs text-white bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg flex items-center gap-1.5 disabled:opacity-50"
+              disabled={busy}
+              onClick={save}
+            >
+              {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} {t("profile.save_followed_companies")}
+            </button>
+            <FeedbackLine feedback={feedback} />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -566,6 +709,7 @@ function SlotView<T>({ slot, onRetry, children }: { slot: Slot<T>; onRetry: () =
  *  (si una falla, las demás siguen y se puede reintentar). Los secretos nunca se muestran: solo si existen y de
  *  dónde salen. `initial` (tests) evita las peticiones de las secciones que trae. */
 export function ProfileTab({ initial, onRerunWizard }: { initial?: Partial<ProfileData>; onRerunWizard: () => void }) {
+  useLocale();
   const [slots, setSlots] = useState<Slots>(() => fromInitial(initial));
 
   const loadSlot = useCallback(<K extends keyof ProfileData>(key: K) => {

@@ -4,7 +4,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 
-\rfoot{Page \thepage \hspace{0pt}}
+\rfoot{((( page_footer | default('Page') ))) \thepage \hspace{0pt}}
 \thispagestyle{empty}
 \renewcommand{\headrulewidth}{0pt}
 \begin{document}
@@ -14,7 +14,7 @@
 }
 
 \currentdate{((( current_date | latex_escape )))}
-\lettercontent{Estimado/a responsable de selección de ((( company_name | latex_escape ))),}
+\lettercontent{((( salutation | default('Estimado/a responsable de selección de ' ~ company_name ~ ',') | latex_escape )))}
 
 \lettercontent{((( opening_paragraph | latex_escape )))}
 
@@ -34,7 +34,7 @@
 
 \lettercontent{((( closing_paragraph | latex_escape )))}
 
-\lettercontent{Atentamente,\\[10pt]
+\lettercontent{((( closing | default('Atentamente,') | latex_escape )))\\[10pt]
 \textbf{((( personal.name | latex_escape )))}}
 
 \end{document}

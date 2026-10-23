@@ -158,6 +158,7 @@ class TrackCV(_Model):
 class FollowedCompany(_Model):
     name: str
     tier: int = 1
+    aliases: list[str] = []
 
 
 _LOCATION_DEFAULT_SCORES = {"capital": 1.0, "nationwide": 0.8, "province": 0.7, "unknown": 0.5}
@@ -294,6 +295,7 @@ class DocumentSettings(_Model):
 class JobHunterConfig(_Model):
     scoring: Scoring
     tracks: list[Track]
+    followed_companies: list[FollowedCompany] = []
     sources: dict[str, dict] = {}
     ai: AISettings = AISettings()
     email: EmailSettings = EmailSettings()
@@ -443,16 +445,47 @@ def normalize_company(name: str) -> str:
 
 
 def followed_tier_for(company: str, track_id: str | None, cfg: JobHunterConfig | None = None) -> int | None:
-    """Mejor tier (el más bajo) de la empresa en las empresas seguidas del track; si no, en las de todos."""
+    """Mejor tier (el más bajo) de la empresa en las empresas seguidas del track o nivel superior (con aliases)."""
     cfg = cfg or get_config()
     key = normalize_company(company)
     if not key:
         return None
 
-    def best(tracks: list[Track]) -> int | None:
-        tiers = [fc.tier for t in tracks for fc in t.followed_companies if normalize_company(fc.name) == key]
+    def matches(fc: FollowedCompany) -> bool:
+        if normalize_company(fc.name) == key:
+            return True
+        return any(normalize_company(alias) == key for alias in fc.aliases)
+
+    def best(companies: list[FollowedCompany]) -> int | None:
+        tiers = [fc.tier for fc in companies if matches(fc)]
         return min(tiers) if tiers else None
 
     track = cfg.track(track_id) if track_id else None
-    in_track = best([track]) if track else None
-    return in_track if in_track is not None else best(cfg.tracks)
+    if track:
+        in_track = best(track.followed_companies)
+        if in_track is not None:
+            return in_track
+
+    # Si no hay match en el track, busca en las empresas seguidas de nivel superior y de todos los tracks
+    all_fcs = list(cfg.followed_companies)
+    for t in cfg.tracks:
+        all_fcs.extend(t.followed_companies)
+    return best(all_fcs)
+
+
+def followed_company_queries(
+    cfg: JobHunterConfig | None = None, max_queries: int = 10
+) -> list[str]:
+    """Consultas por empresa seguida (nombre y alias) para agregadores, limitadas a max_queries."""
+    cfg = cfg or get_config()
+    queries: list[str] = []
+    seen: set[str] = set()
+    for fc in cfg.followed_companies:
+        for name in [fc.name, *fc.aliases]:
+            clean = name.strip()
+            if clean and clean.lower() not in seen:
+                seen.add(clean.lower())
+                queries.append(clean)
+                if len(queries) >= max_queries:
+                    return queries
+    return queries

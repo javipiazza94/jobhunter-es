@@ -12,6 +12,7 @@ import type {
   ExpandAcceptResult,
   ExpandProposal,
   ExpandResult,
+  FollowedCompanySetting,
   InboxReport,
   InboxStatus,
   InterviewPack,
@@ -57,10 +58,18 @@ function request(url: string, init: RequestInit = {}): Promise<Response> {
 
 /** Error de la API con su código HTTP (el mensaje es el `detail` legible; `detail` lo trae tal cual). */
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number, readonly detail: unknown = undefined) {
+  constructor(message: string, readonly status: number, readonly detail: unknown = undefined, readonly code: string | undefined = undefined) {
     super(message);
     this.name = "ApiError";
   }
+}
+
+/** Código estable de error: `{detail, code}` o `{detail: {code}}`. */
+function errorCode(body: unknown, detail: unknown): string | undefined {
+  const top = body && typeof body === "object" ? (body as { code?: unknown }).code : undefined;
+  const nested = detail && typeof detail === "object" ? (detail as { code?: unknown }).code : undefined;
+  const code = typeof top === "string" ? top : nested;
+  return typeof code === "string" && code ? code : undefined;
 }
 
 /** Respuesta JSON o `ApiError(detail)` si la API respondió con error (las funciones nuevas siempre lo comprueban). */
@@ -68,7 +77,7 @@ async function checked<T>(res: Response): Promise<T> {
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
     const detail = body && typeof body === "object" ? (body as { detail?: unknown }).detail : undefined;
-    throw new ApiError(errorDetail(body, res.status), res.status, detail);
+    throw new ApiError(errorDetail(body, res.status), res.status, detail, errorCode(body, detail));
   }
   return body as T;
 }
@@ -87,8 +96,9 @@ export async function fetchSetupStatus(): Promise<SetupStatus> {
   return checked(await request(`${BASE}/api/setup/status`));
 }
 
-export async function fetchMarkets(): Promise<Record<string, MarketSource[]>> {
-  return checked(await request(`${BASE}/api/setup/markets`));
+export async function fetchMarkets(lang?: string): Promise<Record<string, MarketSource[]>> {
+  const query = lang ? `?lang=${encodeURIComponent(lang)}` : "";
+  return checked(await request(`${BASE}/api/setup/markets${query}`));
 }
 
 /** Sube el CV (PDF/DOCX) en el campo `file`; fetch pone el Content-Type multipart y el Content-Length.
@@ -116,6 +126,14 @@ export async function fetchSourceSettings(): Promise<SourceSetting[]> {
 
 export async function saveSourceSettings(update: SourcesUpdate): Promise<SourceSetting[]> {
   return checked(await sendJson(`${BASE}/api/settings/sources`, "PUT", update));
+}
+
+export async function fetchFollowedCompaniesSettings(): Promise<FollowedCompanySetting[]> {
+  return checked(await request(`${BASE}/api/settings/followed-companies`));
+}
+
+export async function saveFollowedCompaniesSettings(companies: FollowedCompanySetting[]): Promise<FollowedCompanySetting[]> {
+  return checked(await sendJson(`${BASE}/api/settings/followed-companies`, "PUT", companies));
 }
 
 /** Guarda la clave de API en el llavero (vale antes de completar el asistente); nunca se devuelve. */

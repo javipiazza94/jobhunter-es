@@ -1,0 +1,38 @@
+{
+  "data": [
+    {
+      "slug": "senior-backend-engineer-python-3001",
+      "company_name": "Apex Software",
+      "title": "Senior Backend Engineer (Python)",
+      "description": "<p>Develop resilient microservices in Python and PostgreSQL.</p>",
+      "remote": true,
+      "url": "https://www.arbeitnow.com/view/senior-backend-engineer-python-3001",
+      "tags": ["python", "fastapi", "postgresql"],
+      "job_types": ["Full Time"],
+      "location": "Remote / Europe",
+      "created_at": 1729450000
+    },
+    {
+      "slug": "devops-cloud-architect-3002",
+      "company_name": "CloudOps Solutions",
+      "title": "DevOps Cloud Architect",
+      "description": "<p>Design and implement secure Kubernetes clusters and CI/CD pipelines.</p>",
+      "remote": true,
+      "url": "https://www.arbeitnow.com/view/devops-cloud-architect-3002",
+      "tags": ["kubernetes", "aws", "terraform"],
+      "job_types": ["Full Time"],
+      "location": "Remote",
+      "created_at": 1729460000
+    }
+  ],
+  "links": {
+    "first": "https://www.arbeitnow.com/api/job-board-api?page=1",
+    "last": "https://www.arbeitnow.com/api/job-board-api?page=1"
+  },
+  "meta": {
+    "current_page": 1,
+    "from": 1,
+    "to": 2,
+    "total": 2
+  }
+}

@@ -4,25 +4,29 @@ import { useEffect, useState } from "react";
 import { FileCheck2, Loader2 } from "lucide-react";
 import { ApiError, applicationDocumentUrl, fetchAISettings, fetchApplicationDocuments, prepareApplication } from "@/lib/api";
 import { summarizeVerification } from "@/lib/documents";
+import { t, useLocale } from "@/lib/i18n";
 import type { DocumentFile, PreparedDocs } from "@/lib/types";
 
-// Textos de la interfaz en un solo sitio (la traducción llega en SP4).
+// Textos de la interfaz traducidos vía i18n (con getters para retrocompatibilidad).
 export const T = {
-  title: "Documentos de la candidatura",
-  hint: "Genera un CV (2 páginas) y una carta (1 página) en PDF adaptados a esta oferta. Al aprobar se adjuntan estos PDFs.",
-  button: "Preparar candidatura",
-  rebuild: "Volver a preparar",
-  busy: "Preparando…",
-  withAi: "con IA",
-  aiHint: "Redacta con IA solo con datos de tu perfil",
-  source: { ai: "con IA", deterministic: "determinista" } as Record<PreparedDocs["source"], string>,
-  pages: (cv: number | null, cover: number | null) => `CV ${cv ?? "?"} pág. · Carta ${cover ?? "?"} pág.`,
-  missing: (k: string[]) => `Sin cobertura en el CV (huecos, no se inventan): ${k.join(", ")}`,
-  layoutSkipped: "Maquetación sin comprobar (Poppler no instalado)",
-  trimmed: (n: number) => `Se recortó contenido menos relevante (${n})`,
-  cv: "Abrir CV",
-  cover: "Abrir carta",
-  fallback: "Preparar con las plantillas integradas",
+  get title() { return t("prepare_docs.title"); },
+  get hint() { return t("prepare_docs.hint"); },
+  get button() { return t("prepare_docs.button"); },
+  get rebuild() { return t("prepare_docs.rebuild"); },
+  get busy() { return t("prepare_docs.busy"); },
+  get withAi() { return t("prepare_docs.with_ai"); },
+  get aiHint() { return t("prepare_docs.ai_hint"); },
+  source: {
+    get ai() { return t("prepare_docs.source_ai"); },
+    get deterministic() { return t("prepare_docs.source_deterministic"); },
+  } as Record<PreparedDocs["source"], string>,
+  pages: (cv: number | null, cover: number | null) => t("prepare_docs.pages", { cv: cv ?? "?", cover: cover ?? "?" }),
+  missing: (k: string[]) => t("prepare_docs.missing", { keywords: k.join(", ") }),
+  get layoutSkipped() { return t("prepare_docs.layout_skipped"); },
+  trimmed: (n: number) => t("prepare_docs.trimmed", { count: n }),
+  get cv() { return t("prepare_docs.cv"); },
+  get cover() { return t("prepare_docs.cover"); },
+  get fallback() { return t("prepare_docs.fallback"); },
 };
 
 /** ¿El error de /prepare viene de una plantilla propia y se puede reintentar con las integradas? */
@@ -44,6 +48,7 @@ export function PrepareDocsPanel({
   initialResult?: PreparedDocs | null;
   initialError?: string;
 }) {
+  useLocale();
   const [files, setFiles] = useState<DocumentFile[]>(initialFiles);
   const [result, setResult] = useState<PreparedDocs | null>(initialResult);
   const [error, setError] = useState(initialError);

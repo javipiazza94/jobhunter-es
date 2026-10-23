@@ -25,6 +25,7 @@ ENV_FALLBACK = {
     "anthropic_api_key": "ANTHROPIC_API_KEY",
     "openai_api_key": "OPENAI_API_KEY",
     "smtp_password": "GMAIL_APP_PASSWORD",
+    "scraperapi_key": "SCRAPERAPI_KEY",
 }
 
 

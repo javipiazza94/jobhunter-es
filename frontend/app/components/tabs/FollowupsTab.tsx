@@ -4,12 +4,7 @@ import { useMemo, useState } from "react";
 import { Check, Copy, ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import { markFollowupSent, resolveStaleApplications } from "@/lib/api";
 import type { QuietApplication } from "@/lib/types";
-
-const CHANNEL_LABEL: Record<QuietApplication["channel"], string> = {
-  email: "Email",
-  linkedin: "LinkedIn",
-  portal: "Portal",
-};
+import { t, useLocale } from "@/lib/i18n";
 
 /**
  * Pestaña «Seguimiento»: candidaturas enviadas sin respuesta.
@@ -19,12 +14,19 @@ const CHANNEL_LABEL: Record<QuietApplication["channel"], string> = {
  *   las que se marquen, con confirmación en dos pasos.
  */
 export function FollowupsTab({ followups, stale, onAction }: { followups: QuietApplication[]; stale: QuietApplication[]; onAction: () => void }) {
+  useLocale();
   const [channel, setChannel] = useState<"all" | QuietApplication["channel"]>("all");
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirming, setConfirming] = useState(false);
+
+  const channelLabel: Record<QuietApplication["channel"], string> = {
+    email: t("followups.channel_email"),
+    linkedin: t("followups.channel_linkedin"),
+    portal: t("followups.channel_portal"),
+  };
 
   const visible = useMemo(
     () => (channel === "all" ? followups : followups.filter(f => f.channel === channel)),
@@ -92,22 +94,22 @@ export function FollowupsTab({ followups, stale, onAction }: { followups: QuietA
         <section className="glass-card p-6 border border-slate-500/20">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
-              <h2 className="text-lg font-medium text-gray-200">Sin respuesta</h2>
-              <p className="text-sm text-gray-500">Llevan mucho tiempo calladas. Marca las que quieras cerrar como «sin respuesta».</p>
+              <h2 className="text-lg font-medium text-gray-200">{t("followups.stale_title")}</h2>
+              <p className="text-sm text-gray-500">{t("followups.stale_hint")}</p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => { setSelected(selected.size === stale.length ? new Set() : new Set(stale.map(s => s.id))); setConfirming(false); }}
                 className="text-xs text-gray-400 hover:text-white px-3 py-1.5 rounded-lg bg-white/5"
               >
-                {selected.size === stale.length ? "Ninguna" : "Todas"}
+                {selected.size === stale.length ? t("followups.select_none") : t("followups.select_all")}
               </button>
               <button
                 disabled={selected.size === 0 || busy === "stale"}
                 onClick={handleResolve}
                 className={`text-sm px-4 py-1.5 rounded-lg border transition-colors disabled:opacity-40 ${confirming ? "bg-red-500/20 text-red-300 border-red-500/30" : "bg-white/5 text-gray-200 border-white/10 hover:bg-white/10"}`}
               >
-                {confirming ? `¿Cerrar ${selected.size}? Pulsa otra vez` : `Cerrar seleccionadas (${selected.size})`}
+                {confirming ? t("followups.confirm_close", { count: selected.size }) : t("followups.close_selected", { count: selected.size })}
               </button>
             </div>
           </div>
@@ -127,8 +129,8 @@ export function FollowupsTab({ followups, stale, onAction }: { followups: QuietA
       <section>
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
-            <h2 className="text-lg font-medium text-gray-200">Recordatorios</h2>
-            <p className="text-sm text-gray-500">Enviadas sin respuesta. Copia el borrador, mándalo tú y márcalo como enviado (máximo 2 por candidatura).</p>
+            <h2 className="text-lg font-medium text-gray-200">{t("followups.reminders_title")}</h2>
+            <p className="text-sm text-gray-500">{t("followups.reminders_hint")}</p>
           </div>
           <div className="flex items-center gap-1 p-1 bg-white/5 rounded-xl">
             {(["all", "email", "linkedin", "portal"] as const).map(c => (
@@ -137,7 +139,7 @@ export function FollowupsTab({ followups, stale, onAction }: { followups: QuietA
                 onClick={() => setChannel(c)}
                 className={`text-xs px-3 py-1.5 rounded-lg ${channel === c ? "bg-white/10 text-white" : "text-gray-400 hover:text-gray-200"}`}
               >
-                {c === "all" ? "Todas" : CHANNEL_LABEL[c]}
+                {c === "all" ? t("followups.all_channels") : channelLabel[c]}
                 <span className="ml-1.5 text-gray-500">{c === "all" ? followups.length : followups.filter(f => f.channel === c).length}</span>
               </button>
             ))}
@@ -147,41 +149,41 @@ export function FollowupsTab({ followups, stale, onAction }: { followups: QuietA
         {visible.length === 0 ? (
           <div className="glass-card p-12 text-center border-dashed border-white/10">
             <Check className="w-8 h-8 text-gray-500 mx-auto mb-3" />
-            <p className="text-sm text-gray-400">Nada que recordar ahora mismo.</p>
+            <p className="text-sm text-gray-400">{t("followups.empty_reminders")}</p>
           </div>
         ) : (
           <div className="glass-card divide-y divide-white/5">
             {visible.map(f => (
               <div key={f.id} className="p-4">
                 <div className="flex flex-wrap items-center gap-3">
-                  <button onClick={() => setOpen(open === f.id ? null : f.id)} className="text-gray-400 hover:text-white" aria-label="Ver borrador">
+                  <button onClick={() => setOpen(open === f.id ? null : f.id)} className="text-gray-400 hover:text-white" aria-label={t("followups.view_draft")}>
                     {open === f.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                   </button>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm text-gray-200 font-medium truncate">
-                      {f.company_name ?? "—"} <span className="text-gray-500 font-normal">· {f.job_title ?? "sin puesto"}</span>
+                      {f.company_name ?? "—"} <span className="text-gray-500 font-normal">· {f.job_title ?? t("followups.no_title")}</span>
                     </div>
                     <div className="text-xs text-gray-500 flex flex-wrap gap-x-3">
-                      <span>{CHANNEL_LABEL[f.channel]}{f.method ? ` (${f.method})` : ""}</span>
+                      <span>{channelLabel[f.channel]}{f.method ? ` (${f.method})` : ""}</span>
                       {f.contact_value && <span className="font-mono">{f.contact_value}</span>}
-                      {f.followup_count > 0 && <span className="text-amber-400">{f.followup_count} recordatorio enviado</span>}
+                      {f.followup_count > 0 && <span className="text-amber-400">{t("followups.sent_reminder_count", { count: f.followup_count })}</span>}
                     </div>
                   </div>
                   <span className="font-mono text-sm text-amber-300">{f.days_quiet} d</span>
                   {f.offer_url && (
-                    <a href={f.offer_url} target="_blank" rel="noreferrer" className="p-1.5 text-gray-400 hover:text-white" aria-label="Abrir oferta">
+                    <a href={f.offer_url} target="_blank" rel="noreferrer" className="p-1.5 text-gray-400 hover:text-white" aria-label={t("followups.open_offer")}>
                       <ExternalLink className="w-4 h-4" />
                     </a>
                   )}
                   <button onClick={() => handleCopy(f)} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-white/5 text-gray-200 hover:bg-white/10">
-                    <Copy className="w-3.5 h-3.5" /> Copiar
+                    <Copy className="w-3.5 h-3.5" /> {t("common.copy")}
                   </button>
                   <button
                     disabled={busy === f.id}
                     onClick={() => handleMarkSent(f)}
                     className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 hover:bg-emerald-500/20 disabled:opacity-40"
                   >
-                    <Check className="w-3.5 h-3.5" /> Enviado
+                    <Check className="w-3.5 h-3.5" /> {t("followups.mark_sent_button")}
                   </button>
                 </div>
                 {open === f.id && (

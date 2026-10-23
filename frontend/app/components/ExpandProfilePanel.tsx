@@ -4,27 +4,28 @@ import { useState } from "react";
 import { Check, Loader2, Sparkles, Trash2, X } from "lucide-react";
 import { acceptExpansion, expandProfile, fetchProfile, patchProfile } from "@/lib/api";
 import { parseSources, safeHref } from "@/lib/report";
+import { t, useLocale } from "@/lib/i18n";
 import type { StoredProfile } from "@/lib/setup";
 import type { ExpandError, ExpandProposal } from "@/lib/types";
 
-// Textos de la interfaz en un solo sitio (la traducción llega en SP4).
+// Textos de la interfaz traducidos vía i18n (con getters para retrocompatibilidad).
 export const T = {
-  title: "Ampliar perfil",
-  hint: "Enlaza tu GitHub, portfolio o certificaciones (una URL por línea). Se leen respetando robots.txt y cada competencia nueva se propone con su fuente: solo se guarda lo que aceptes.",
-  placeholder: "https://github.com/tu-usuario\nhttps://tu-portfolio.example",
-  button: "Buscar competencias",
-  busy: "Leyendo las fuentes…",
-  empty: "Escribe al menos una URL.",
-  none: "No hay competencias nuevas en esas fuentes.",
-  accept: "Aceptar",
-  reject: "Rechazar",
-  source: "Fuente",
-  accepted: (n: number) => `${n} competencia(s) añadida(s) al perfil`,
-  skillsTitle: "Competencias añadidas",
-  skillsHint: "Las aceptadas aquí salen en el CV (también sin IA, en «Other Skills»), en lo que la IA puede usar y en las respuestas de cribado. Quita las que no quieras.",
-  noSkills: "Todavía no has añadido competencias.",
-  noSource: "sin fuente",
-  removeSkill: (name: string) => `Quitar ${name}`,
+  get title() { return t("expand_profile.title"); },
+  get hint() { return t("expand_profile.hint"); },
+  get placeholder() { return t("expand_profile.placeholder"); },
+  get button() { return t("expand_profile.button"); },
+  get busy() { return t("expand_profile.busy"); },
+  get empty() { return t("expand_profile.empty"); },
+  get none() { return t("expand_profile.none"); },
+  get accept() { return t("expand_profile.accept"); },
+  get reject() { return t("expand_profile.reject"); },
+  get source() { return t("expand_profile.source"); },
+  accepted: (n: number) => t("expand_profile.accepted", { count: n }),
+  get skillsTitle() { return t("expand_profile.skills_title"); },
+  get skillsHint() { return t("expand_profile.skills_hint"); },
+  get noSkills() { return t("expand_profile.no_skills"); },
+  get noSource() { return t("expand_profile.no_source"); },
+  removeSkill: (name: string) => t("expand_profile.remove_skill", { name }),
 };
 
 /** Competencia de `profile.skills` con su procedencia (`skills_sources`, si la tiene). */
@@ -77,6 +78,7 @@ export function ExpandProfilePanel({ initialProposals = [], initialErrors = [], 
   /** Perfil guardado: si se da, se listan las competencias añadidas con su fuente y se pueden quitar. */
   initialProfile?: StoredProfile;
 }) {
+  useLocale();
   const [skills, setSkills] = useState<AcceptedSkill[]>(() => acceptedSkills(initialProfile));
   const [text, setText] = useState(initialText);
   const [proposals, setProposals] = useState<ExpandProposal[]>(initialProposals);

@@ -1,0 +1,26 @@
+{
+  "data": [
+    {
+      "public_slug": "lead-python-developer-4001",
+      "url": "https://example.com/careers/lead-python-4001",
+      "title": "Lead Python Developer",
+      "company": "NextGen Analytics",
+      "location": "Remote",
+      "description": "<p>Lead a talented team of engineers working on high-scale data workflows.</p>",
+      "skills": ["python", "django", "redis"],
+      "posted_at": "2026-10-21T09:00:00Z",
+      "created_at": "2026-10-21T09:00:00Z"
+    },
+    {
+      "public_slug": "site-reliability-engineer-4002",
+      "url": "https://example.com/careers/sre-4002",
+      "title": "Site Reliability Engineer",
+      "company": "InfraScale Systems",
+      "location": "Madrid / Remote",
+      "description": "<p>Ensure uptime and reliability across multi-cloud infrastructure.</p>",
+      "skills": ["go", "kubernetes", "prometheus"],
+      "posted_at": "2026-10-21T10:00:00Z",
+      "created_at": "2026-10-21T10:00:00Z"
+    }
+  ]
+}

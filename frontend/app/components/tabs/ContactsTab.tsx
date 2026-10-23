@@ -1,8 +1,10 @@
 import { Users, ChevronRight } from "lucide-react";
 import type { Contact } from "@/lib/types";
+import { t, useLocale } from "@/lib/i18n";
 
 /** Pestaña «Contactos»: emails y formularios extraídos, con las ofertas relevantes de cada empresa. */
 export function ContactsTab({ contacts, onSelectContact }: { contacts: Contact[]; onSelectContact: (c: Contact) => void }) {
+  useLocale();
   return (
     <div className="glass-card overflow-hidden animate-fade-in">
       {contacts.length === 0 ? (
@@ -10,17 +12,17 @@ export function ContactsTab({ contacts, onSelectContact }: { contacts: Contact[]
           <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4">
             <Users className="w-8 h-8 text-gray-500" />
           </div>
-          <h3 className="text-lg font-medium text-gray-300 mb-2">Sin contactos aún</h3>
-          <p className="text-sm text-gray-500">Pulsa &quot;Contactos&quot; en la barra superior para extraer emails de las webs de empresas.</p>
+          <h3 className="text-lg font-medium text-gray-300 mb-2">{t("contacts.empty_title")}</h3>
+          <p className="text-sm text-gray-500">{t("contacts.empty_hint")}</p>
         </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-gray-400 uppercase bg-black/40 border-b border-white/5 tracking-wider">
               <tr>
-                <th className="px-6 py-4 font-semibold">Contacto</th>
-                <th className="px-6 py-4 font-semibold">Empresa</th>
-                <th className="px-6 py-4 font-semibold">Ofertas relevantes</th>
+                <th className="px-6 py-4 font-semibold">{t("contacts.header_contact")}</th>
+                <th className="px-6 py-4 font-semibold">{t("contacts.header_company")}</th>
+                <th className="px-6 py-4 font-semibold">{t("contacts.header_relevant_offers")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -32,11 +34,11 @@ export function ContactsTab({ contacts, onSelectContact }: { contacts: Contact[]
                   </td>
                   <td className="px-6 py-4 text-gray-400 text-sm">
                     <div className="font-medium text-gray-200 mb-1">{ct.company_name || "—"}</div>
-                    {ct.company_website && <a href={ct.company_website} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 hover:underline text-xs inline-flex items-center gap-1">Web <ChevronRight className="w-3 h-3" /></a>}
+                    {ct.company_website && <a href={ct.company_website} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 hover:underline text-xs inline-flex items-center gap-1">{t("contacts.web_link")} <ChevronRight className="w-3 h-3" /></a>}
                   </td>
                   <td className="px-6 py-4">
                     {ct.offers.length === 0 ? (
-                      <span className="text-xs text-gray-500 italic">Sin ofertas activas</span>
+                      <span className="text-xs text-gray-500 italic">{t("contacts.no_active_offers")}</span>
                     ) : (
                       <div className="flex flex-col gap-2">
                         {ct.offers.slice(0, 4).map(o => (
@@ -52,7 +54,7 @@ export function ContactsTab({ contacts, onSelectContact }: { contacts: Contact[]
                             </span>
                           </div>
                         ))}
-                        {ct.offers.length > 4 && <span className="text-xs text-indigo-400/80 font-medium ml-1">+{ct.offers.length - 4} más</span>}
+                        {ct.offers.length > 4 && <span className="text-xs text-indigo-400/80 font-medium ml-1">{t("contacts.more_offers", { count: ct.offers.length - 4 })}</span>}
                       </div>
                     )}
                   </td>

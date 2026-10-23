@@ -3,24 +3,31 @@
 import { useState } from "react";
 import { Loader2, MessageSquareText } from "lucide-react";
 import { answerScreeningQuestions } from "@/lib/api";
+import { t, useLocale } from "@/lib/i18n";
 import { parseQuestions } from "@/lib/screening";
 import type { ScreeningAnswer, ScreeningSource } from "@/lib/types";
 
-// Textos de la interfaz en un solo sitio (la traducción llega en SP4).
+// Textos de la interfaz traducidos vía i18n (con getters para retrocompatibilidad).
 export const T = {
-  title: "Responder preguntas",
-  hint: "Pega las preguntas del formulario, una por línea. Añade «(max N)» al final para limitar los caracteres.",
-  placeholder: "¿Por qué quieres trabajar con nosotros? (max 500)\n¿Cuál es tu pretensión salarial?",
-  button: "Responder preguntas",
-  busy: "Respondiendo…",
-  empty: "Escribe al menos una pregunta.",
-  copy: "Copiar",
-  copied: "Copiada",
-  noAnswer: "Sin respuesta: añade este dato en Perfil → Respuestas de cribado.",
-  suggestion: (q: string) => `Pregunta guardada parecida (no equivalente): «${q}»`,
-  truncated: "Recortada para respetar el límite",
-  chars: (n: number) => `${n} caracteres`,
-  sources: { profile: "perfil", ai: "IA", needs_input: "falta dato" } as Record<ScreeningSource, string>,
+  get title() { return t("screening.title"); },
+  get hint() { return t("screening.hint"); },
+  get placeholder() { return t("screening.placeholder"); },
+  get button() { return t("screening.button"); },
+  get busy() { return t("screening.busy"); },
+  get empty() { return t("screening.empty"); },
+  get copy() { return t("common.copy"); },
+  get copied() { return t("common.copied"); },
+  get noAnswer() { return t("screening.no_answer"); },
+  suggestion: (q: string) => t("screening.suggestion", { question: q }),
+  get truncated() { return t("screening.truncated"); },
+  chars: (n: number) => t("screening.chars", { count: n }),
+  get sources() {
+    return {
+      profile: t("screening.source_profile"),
+      ai: t("screening.source_ai"),
+      needs_input: t("screening.source_needs_input"),
+    } as Record<ScreeningSource, string>;
+  },
 };
 
 const BADGE: Record<ScreeningSource, string> = {
@@ -37,6 +44,7 @@ export function ScreeningPanel({ applicationId, initialText = "", initialAnswers
   initialAnswers?: ScreeningAnswer[];
   initialError?: string;
 }) {
+  useLocale();
   const [text, setText] = useState(initialText);
   const [answers, setAnswers] = useState<ScreeningAnswer[]>(initialAnswers);
   const [error, setError] = useState(initialError);

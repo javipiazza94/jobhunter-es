@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { GraduationCap, Loader2 } from "lucide-react";
 import { generateInterviewPack } from "@/lib/api";
+import { t, useLocale } from "@/lib/i18n";
 import type { InterviewPack } from "@/lib/types";
 
-// Textos de la interfaz en un solo sitio (la traducción llega en SP4).
+// Textos de la interfaz traducidos vía i18n (con getters para retrocompatibilidad).
 export const T = {
-  button: "Preparar entrevista",
-  busy: "Generando el pack con IA…",
-  savedAt: (path: string) => `Guardado en ${path}`,
+  get button() { return t("interview_pack.button"); },
+  get busy() { return t("interview_pack.busy"); },
+  savedAt: (path: string) => t("interview_pack.saved_at", { path }),
 };
 
 /** Pack de entrevista de una candidatura (generado con IA en el backend). Si no hay IA configurada, la API
@@ -19,6 +20,7 @@ export function InterviewPackPanel({ applicationId, initialPack = null, initialE
   initialPack?: InterviewPack | null;
   initialError?: string;
 }) {
+  useLocale();
   const [pack, setPack] = useState<InterviewPack | null>(initialPack);
   const [error, setError] = useState(initialError);
   const [busy, setBusy] = useState(false);

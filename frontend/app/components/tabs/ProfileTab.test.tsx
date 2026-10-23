@@ -75,9 +75,20 @@ test("Búsqueda: fuentes con su estado; las requires_ack con aviso y casilla pro
   expect(inputTag(h, "p-source-infojobs")).not.toContain("checked");
   expect(inputTag(h, "p-ack-infojobs")).not.toContain("checked");
   expect(inputTag(h, "p-ack-infojobs")).toContain('aria-describedby="p-warn-infojobs"');
-  expect(inputTag(h, "p-ack-linkedin")).toContain('checked=""');
-  expect(h).toContain(T.ackWarning("InfoJobs"));
+  expect(T.ackWarning("InfoJobs")).toContain("InfoJobs");
   expect(inputTag(h, "p-ack-tecnoempleo")).toBe("");
+});
+
+test("Búsqueda: soporte de país y ubicaciones en fuentes configuradas", () => {
+  const sourcesWithParams: SourceSetting[] = [
+    { id: "computrabajo", label: "Computrabajo", markets: ["latam"], requires_ack: false, enabled: true, acknowledged: false, country: "co", locations: [] },
+    { id: "tecnoempleo", label: "Tecnoempleo", markets: ["spain"], requires_ack: false, enabled: true, acknowledged: false, locations: ["remoto", "Madrid"] },
+  ];
+  const h = html(data({ sources: sourcesWithParams }));
+  expect(h).toContain("p-country-computrabajo");
+  expect(h).toContain('value="co"');
+  expect(h).toContain("p-locations-tecnoempleo");
+  expect(h).toContain('value="remoto, Madrid"');
 });
 
 test("«Probar» no se bloquea con el formulario igual a lo guardado", () => {

@@ -72,6 +72,13 @@ def test_env_wins_over_keychain(mem, monkeypatch):
     assert secrets_store.get_secret("smtp_password") == "from-env"
 
 
+def test_scraperapi_key_in_keychain(mem, monkeypatch):
+    secrets_store.set_secret("scraperapi_key", "sec-12345")
+    assert secrets_store.get_secret("scraperapi_key") == "sec-12345"
+    monkeypatch.setenv("SCRAPERAPI_KEY", "env-override")
+    assert secrets_store.get_secret("scraperapi_key") == "env-override"
+
+
 def test_missing_secret_is_none(mem):
     assert secrets_store.get_secret("openai_api_key") is None
     assert secrets_store.has_secret("openai_api_key") is False

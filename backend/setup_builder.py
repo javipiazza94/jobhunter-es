@@ -9,17 +9,16 @@ y los grupos de keywords se reparten el resto a partes iguales, sumando exactame
 """
 import re
 import unicodedata
-from functools import lru_cache
 from pathlib import Path
-from typing import Literal
 
-import yaml
 from pydantic import BaseModel, Field, field_validator
 
 from automation.language_gate import LANGUAGES, canonical_language
 from automation.profile_proposal import ProfileDraft, draft_from_dict
 from profile_store import load_profile, save_profile
 import search_config
+from scraper.computrabajo import COUNTRY_DOMAINS as COMPUTRABAJO_COUNTRIES
+from scraper import sources as source_registry
 from search_config import (
     DEFAULT_CONFIG_PATH,
     RESERVED_TRACK_IDS,
@@ -35,7 +34,6 @@ from search_config import (
     save_config,
 )
 
-MARKETS_PATH = Path(__file__).parent / "defaults" / "markets.yaml"
 TOOLS_GROUP_ID = "tools"
 _FALLBACK_ID = "target"
 _MODALITY_ES = {"remote": "remoto", "hybrid": "híbrido", "onsite": "presencial"}
@@ -73,8 +71,9 @@ class SetupAnswers(BaseModel):
     acknowledged_sources: list[str] = Field(default_factory=list)
     followed_companies: list[str] = Field(default_factory=list)
     ai: AISettings = Field(default_factory=AISettings)
-    ui_language: Literal["es", "en"] = "es"
+    ui_language: str = "es"
     cv_path: str | None = None  # ruta relativa a JH_HOME devuelta por POST /api/setup/cv
+    source_params: dict[str, dict] = Field(default_factory=dict)
 
     @field_validator("cv_path")
     @classmethod
@@ -87,24 +86,27 @@ class SetupAnswers(BaseModel):
 # ── Mercados y fuentes ──────────────────────────────────────────────────────────
 
 
-@lru_cache(maxsize=1)
-def _load_markets_cached() -> dict[str, list[dict]]:
-    raw = yaml.safe_load(MARKETS_PATH.read_text(encoding="utf-8")) or {}
-    return raw.get("markets") or {}
+_MARKET_SOURCE_KEYS = ("id", "label", "requires_ack", "ack_warning", "default_on", "attribution")
 
 
-def load_markets() -> dict[str, list[dict]]:
-    """Mercados → fuentes sugeridas `[{id, label, requires_ack, default_on}]` (copia, se puede modificar)."""
-    return {m: [dict(s) for s in sources] for m, sources in _load_markets_cached().items()}
+def load_markets(lang: str = "es") -> dict[str, list[dict]]:
+    """Mercados → fuentes sugeridas `[{id, label, requires_ack, ack_warning, default_on, attribution}]`, generado del registro de fuentes
+    (scraper/sources; antes defaults/markets.yaml). Copia: se puede modificar."""
+    return {m: [{k: s[k] for k in _MARKET_SOURCE_KEYS if k in s} for s in sources]
+            for m, sources in source_registry.market_catalog(lang).items()}
 
 
 def source_catalog() -> dict[str, dict]:
-    """Fuentes conocidas por el asistente (id → ficha); una fuente es `requires_ack` si lo es en algún mercado."""
+    """Fuentes conocidas por el asistente (id → ficha): las del registro que se sugieren en algún mercado;
+    obtiene `requires_ack` directamente de la ficha de la fuente en el registro."""
     catalog: dict[str, dict] = {}
-    for sources in _load_markets_cached().values():
+    reg = source_registry.registry()
+    for sources in load_markets().values():
         for s in sources:
-            entry = catalog.setdefault(s["id"], dict(s))
-            entry["requires_ack"] = bool(entry.get("requires_ack")) or bool(s.get("requires_ack"))
+            if s["id"] not in catalog:
+                spec = reg.get(s["id"])
+                req_ack = spec.requires_ack if spec else bool(s.get("requires_ack"))
+                catalog[s["id"]] = {**s, "requires_ack": req_ack}
     return catalog
 
 
@@ -311,14 +313,29 @@ def _source_settings(source_id: str, keywords: list[str], tracks: list[Track], a
     wants_remote = not d.modality or "remote" in d.modality
     wants_local = bool(city) and any(m in d.modality for m in ("hybrid", "onsite"))
     settings: dict = {"keywords": list(keywords)}
+    custom = answers.source_params.get(source_id, {})
     if source_id == "tecnoempleo":
-        settings["locations"] = (["remoto"] if wants_remote else []) + ([city] if wants_local else [])
+        settings["locations"] = custom.get("locations") or ((["remoto"] if wants_remote else []) + ([city] if wants_local else []))
     elif source_id == "indeed":
-        settings["locations"] = (["Remoto"] if wants_remote else []) + ([city] if wants_local else [])
-    elif source_id == "computrabajo" and wants_local:
-        settings["location"] = city
+        settings["locations"] = custom.get("locations") or ((["Remoto"] if wants_remote else []) + ([city] if wants_local else []))
+    elif source_id == "computrabajo":
+        if custom.get("location"):
+            settings["location"] = custom["location"]
+        elif wants_local:
+            settings["location"] = city
+        if custom.get("country"):
+            c = custom["country"].strip().lower()
+            if c not in COMPUTRABAJO_COUNTRIES:
+                raise ValueError(f"País de Computrabajo no soportado: {custom['country']!r}")
+            settings["country"] = c
+        else:
+            code = country_code(d.country)
+            if code and code.lower() in ("mx", "co", "ar", "pe", "cl", "uy", "ve", "ec", "cr", "pa", "gt", "sv", "hn", "ni", "do"):
+                settings["country"] = code.lower()
+            elif "latam" in answers.markets and "spain" not in answers.markets:
+                settings["country"] = "mx"
     elif source_id == "linkedin":
-        location = (city if wants_local else "") or d.country.strip() or "Remote"
+        location = custom.get("location") or ((city if wants_local else "") or d.country.strip() or "Remote")
         settings["searches"] = [
             {"keywords": kw, "location": location, "track": t.id}
             for t in tracks
@@ -549,6 +566,11 @@ def sources_view(cfg: JobHunterConfig | None = None) -> list[dict]:
     for sid in [*catalog, *(s for s in cfg.sources if s not in catalog)]:
         entry = catalog.get(sid, {"label": sid, "requires_ack": False})
         enabled = sid in cfg.sources
+        source_cfg = (cfg.sources.get(sid) or {}) if enabled else {}
+        country = source_cfg.get("country")
+        locations = source_cfg.get("locations")
+        if not locations and source_cfg.get("location"):
+            locations = [source_cfg["location"]]
         out.append({
             "id": sid,
             "label": entry["label"],
@@ -556,17 +578,25 @@ def sources_view(cfg: JobHunterConfig | None = None) -> list[dict]:
             "requires_ack": bool(entry["requires_ack"]),
             "enabled": enabled,
             "acknowledged": enabled and bool(entry["requires_ack"]),
+            "country": country,
+            "locations": list(locations or []),
         })
     return out
 
 
-def update_sources(enabled: list[str], acknowledged: list[str], cfg: JobHunterConfig | None = None) -> JobHunterConfig:
+def update_sources(
+    enabled: list[str],
+    acknowledged: list[str],
+    params: dict[str, dict] | None = None,
+    cfg: JobHunterConfig | None = None,
+) -> JobHunterConfig:
     """Config con la sección `sources` reescrita. Las fuentes que siguen activas conservan sus ajustes; las nuevas
     reciben los del asistente (keywords de los tracks, ciudad y modalidad del perfil). Lanza `ValueError` si una
     fuente es desconocida o es `requires_ack` sin aceptar."""
     cfg = cfg or search_config.get_config()
     catalog = source_catalog()
     acked = set(acknowledged)
+    params = params or {}
     for sid in enabled:
         if sid not in catalog and sid not in cfg.sources:
             raise ValueError(f"fuente desconocida: {sid}")
@@ -575,8 +605,14 @@ def update_sources(enabled: list[str], acknowledged: list[str], cfg: JobHunterCo
     answers = current_answers(cfg)
     tracks = [t for t in cfg.tracks if t.kind == "standard"]
     union = _clean([kw for t in tracks for kw in t.search_keywords])
-    sources = {
-        sid: cfg.sources[sid] if sid in cfg.sources else _source_settings(sid, union, tracks, answers)
-        for sid in dict.fromkeys(enabled)
-    }
+    sources = {}
+    for sid in dict.fromkeys(enabled):
+        base = dict(cfg.sources[sid]) if sid in cfg.sources else _source_settings(sid, union, tracks, answers)
+        if sid in params:
+            p = params[sid]
+            if p.get("country"):
+                base["country"] = str(p["country"]).strip().lower()
+            if "locations" in p and p["locations"] is not None:
+                base["locations"] = [str(loc).strip() for loc in p["locations"] if str(loc).strip()]
+        sources[sid] = base
     return cfg.model_copy(update={"sources": sources})

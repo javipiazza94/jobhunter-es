@@ -3,23 +3,27 @@
 import { useEffect, useState } from "react";
 import { Building2, Loader2 } from "lucide-react";
 import { fetchCompanyResearch, researchCompany } from "@/lib/api";
+import { t, useLocale } from "@/lib/i18n";
 import type { CompanyResearch } from "@/lib/types";
 
-// Textos de la interfaz en un solo sitio (la traducción llega en SP4).
+// Textos de la interfaz traducidos vía i18n (con getters para retrocompatibilidad).
 export const T = {
-  title: "Investigación de la empresa",
-  button: "Investigar empresa",
-  refresh: "Volver a investigar",
-  busy: "Investigando la empresa…",
-  products: "Productos y servicios",
-  culture: "Cultura",
-  tech: "Tecnologías",
-  size: "Tamaño",
-  sources: "Fuentes",
-  noSources: "Sin web leída: resumen hecho solo con el texto de la oferta.",
-  fetched: (date: string, age: number) =>
-    `Investigada el ${date}${age > 0 ? ` (hace ${age} día${age === 1 ? "" : "s"})` : ""}`,
-  shared: "Se comparte con la carta, la evaluación y el pack de entrevista; caduca a los 30 días.",
+  get title() { return t("research.title"); },
+  get button() { return t("research.button"); },
+  get refresh() { return t("research.refresh"); },
+  get busy() { return t("research.busy"); },
+  get products() { return t("research.products"); },
+  get culture() { return t("research.culture"); },
+  get tech() { return t("research.tech"); },
+  get size() { return t("research.size"); },
+  get sources() { return t("research.sources"); },
+  get noSources() { return t("research.no_sources"); },
+  fetched: (date: string, age: number) => {
+    if (age === 1) return t("research.fetched_with_day", { date });
+    if (age > 1) return t("research.fetched_with_days", { date, age });
+    return t("research.fetched", { date });
+  },
+  get shared() { return t("research.shared"); },
 };
 
 /** Investigación de una empresa con IA (web + oferta) guardada 30 días. Si no hay IA configurada o faltan
@@ -29,6 +33,7 @@ export function CompanyResearchPanel({ company, initialResearch, initialError = 
   initialResearch?: CompanyResearch | null;
   initialError?: string;
 }) {
+  useLocale();
   const [research, setResearch] = useState<CompanyResearch | null>(initialResearch ?? null);
   const [error, setError] = useState(initialError);
   const [busy, setBusy] = useState(false);

@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "bun scripts/gen-i18n-index.ts",
     "dev": "next dev --port 3010 --hostname 127.0.0.1",
+    "prebuild": "bun scripts/gen-i18n-index.ts",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1",
     "lint": "eslint",
+    "i18n:gen": "bun scripts/gen-i18n-index.ts",
     "test": "bun test"
   },
   "dependencies": {

@@ -228,6 +228,26 @@ frontend/
 └── lib/api.ts                   Cliente API tipado
 ```
 
+## Fuentes de Empleo Soportadas
+
+JobHunter ES cuenta con un registro extensible y autodescubierto de fuentes (`docs/sources.md`):
+
+| Fuente | Mercados | Tipo | Requiere Consentimiento (`ack`) | Atribución Obligatoria | Notas |
+|---|---|---|---|---|---|
+| **Tecnoempleo** | España, Remoto | HTML | No | No | Filtro de provincias y ofertas en remoto. |
+| **InfoJobs** | España | HTML | **Sí** | No | Requiere aceptación explícita de condiciones. Desactivada por defecto. |
+| **Manfred** | España, Remoto | JSON API | No | No | Portal de empleo tech con salarios transparentes. |
+| **Computrabajo** | España, LATAM | HTML | No | No | Soporte por país (`country`: `es`, `mx`, `co`, `ar`, `pe`, `cl`...) y localidades. |
+| **LinkedIn** | LATAM, Remoto, Global | HTML | **Sí** | No | Requiere aceptación explícita de condiciones de automatización. Desactivada por defecto. |
+| **Remotive** | Remoto, Global | JSON API | No | **Sí** | API pública de empleo remoto. Enlaza siempre a la oferta original. |
+| **RemoteOK** | Remoto, Global | JSON API | No | **Sí** | API pública de empleo remoto. Enlaza siempre a la oferta original. |
+| **Arbeitnow** | Remoto, Global | JSON API | No | No | Ofertas europeas y remotas con etiquetas de visado patrocinado. |
+| **Freehire** | Remoto, Global | JSON API | No | No | Puestos remotos directos y sin intermediarios. |
+| **Indeed** | Global | HTML/API | No | No | Opcional, requiere clave `SCRAPERAPI_KEY` en llavero o entorno. |
+| **Empresas Directas** | Track directo | HTML | No | No | Web de empleo directa y monitorización de empresas seguidas sobre agregadores. |
+
+Para especificaciones técnicas y parámetros detallados, consulta [docs/sources.md](docs/sources.md).
+
 ## Tuning
 
 Umbrales, pesos, keywords, tracks y parámetros de los scrapers viven en `jobhunter.yaml` (`min_relevance`, `keyword_groups`, `tracks`, `sources`…). Los límites de operación (`MAX_EMAILS_PER_DAY`, `RECONTACT_COOLDOWN_DAYS`…) siguen en `backend/config.py`. Para lanzar el buscador de un track: `python -m scraper.runner --track <id>`. Guía de ajuste del scoring: `CLAUDE.md`.

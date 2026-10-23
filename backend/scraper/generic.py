@@ -73,12 +73,20 @@ def _save(conn, offers: list[dict], source_name: str, dry_run: bool, track_id: s
 async def run_generic_source(dry_run: bool, max_pages: int, sources: list[str],
                              max_indeed_credits: int) -> None:
     """Búsqueda puente de cada track aislado de la configuración."""
+    from scraper import sources as source_registry
+
+    reg = source_registry.registry()
+    valid_sources = [s for s in sources if s in reg]
+    for s in sources:
+        if s not in reg:
+            logger.warning("Generic: la fuente '%s' no está registrada y se omite", s)
+
     tracks = get_config().isolated_tracks()
     if not tracks:
         logger.warning("No hay ningún track aislado (kind: isolated) en jobhunter.yaml; no hay búsqueda puente que hacer")
         return
     for track in tracks:
-        await _run_track(track, dry_run, max_pages, sources, max_indeed_credits)
+        await _run_track(track, dry_run, max_pages, valid_sources, max_indeed_credits)
 
 
 async def _run_track(track: Track, dry_run: bool, max_pages: int, sources: list[str],
@@ -121,8 +129,11 @@ async def _run_track(track: Track, dry_run: bool, max_pages: int, sources: list[
         elif "indeed" in sources:
             from config import SCRAPERAPI_KEY
             from scraper.indeed import run_indeed
+            from secrets_store import get_secret
+
+            api_key = get_secret("scraperapi_key") or SCRAPERAPI_KEY
             estimate = indeed_credit_estimate(max_pages, len(indeed_locations), len(keywords))
-            credits = scraperapi_credits(SCRAPERAPI_KEY) if SCRAPERAPI_KEY else None
+            credits = scraperapi_credits(api_key) if api_key else None
             logger.info("Indeed: estimación %d créditos ScraperAPI (tope %d). Saldo: %s",
                         estimate, max_indeed_credits, credits)
             if estimate > max_indeed_credits:
@@ -139,8 +150,8 @@ async def _run_track(track: Track, dry_run: bool, max_pages: int, sources: list[
                 logger.info("Indeed: %d recogidas, %d pasan el filtro puente", len(raw), len(kept))
                 if not raw:
                     logger.error("Indeed: 0 ofertas recogidas — posible bloqueo/créditos agotados "
-                                 "(saldo: %s), NO es 'sin resultados'", scraperapi_credits(SCRAPERAPI_KEY))
+                                 "(saldo: %s), NO es 'sin resultados'", scraperapi_credits(api_key))
                 _save(conn, kept, f"Indeed-{track.id}", dry_run, track.id)
-                logger.info("Saldo ScraperAPI tras la pasada: %s", scraperapi_credits(SCRAPERAPI_KEY))
+                logger.info("Saldo ScraperAPI tras la pasada: %s", scraperapi_credits(api_key))
     finally:
         conn.close()

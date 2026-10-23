@@ -15,6 +15,13 @@ def test_is_sap_offer_case_insensitive():
     assert _is_sap_offer("sap fiori consultant", "") is True
     assert _is_sap_offer("Consultor SAP MM", "") is True
 
+
+def test_is_relevant_offer_with_custom_keywords():
+    from scraper.company_direct import _is_relevant_offer
+    assert _is_relevant_offer("Senior Python Engineer", "", keywords=["python", "django"]) is True
+    assert _is_relevant_offer("Frontend React Developer", "", keywords=["python", "django"]) is False
+    assert _is_relevant_offer("Any role", "We use Django for our API", keywords=["python", "django"]) is True
+
 def test_parse_job_links_filters_by_hint():
     from scraper.company_direct import _parse_job_links
     html = """

@@ -150,12 +150,20 @@ export interface SetupStatus {
   has_config: boolean;
 }
 
+export interface Attribution {
+  name: string;
+  url: string;
+  required?: boolean;
+}
+
 /** Una fuente sugerida para un mercado (GET /api/setup/markets → Record<mercado, MarketSource[]>). */
 export interface MarketSource {
   id: string;
   label: string;
   requires_ack: boolean;
+  ack_warning?: string;
   default_on: boolean;
+  attribution?: Attribution | null;
 }
 
 export interface TargetDraft {
@@ -221,8 +229,9 @@ export interface SetupAnswers {
   acknowledged_sources: string[];
   followed_companies: string[];
   ai?: AISettings;
-  ui_language?: "es" | "en";
+  ui_language?: string;
   cv_path?: string | null;
+  source_params?: Record<string, { country?: string; locations?: string[] }>;
 }
 
 /** Respuesta de POST /api/setup/apply. */
@@ -346,6 +355,11 @@ export interface TemplateInfo {
   trusted: boolean;
 }
 
+export interface SourceParam {
+  country?: string | null;
+  locations?: string[];
+}
+
 /** GET/PUT /api/settings/sources: una fuente de ofertas y su estado en jobhunter.yaml. */
 export interface SourceSetting {
   id: string;
@@ -354,12 +368,15 @@ export interface SourceSetting {
   requires_ack: boolean;
   enabled: boolean;
   acknowledged: boolean;
+  country?: string | null;
+  locations?: string[];
 }
 
 /** Cuerpo de PUT /api/settings/sources. Una fuente `requires_ack` solo se activa si viene en `acknowledged`. */
 export interface SourcesUpdate {
   enabled: string[];
   acknowledged: string[];
+  params?: Record<string, SourceParam>;
 }
 
 /** Cuerpo de POST /api/settings/ai/key (la clave va al llavero y nunca se devuelve). */
@@ -521,4 +538,10 @@ export interface ExpandAcceptRequest {
 export interface ExpandAcceptResult {
   added: string[];
   skipped: string[];
+}
+
+export interface FollowedCompanySetting {
+  name: string;
+  tier: number;
+  aliases: string[];
 }

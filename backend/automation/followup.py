@@ -19,7 +19,7 @@ from datetime import date, datetime
 from jinja2 import Environment, FileSystemLoader
 
 from automation.filter_engine import classify_track
-from config import FOLLOWUP_MAX, FOLLOWUP_MIN_DAYS, PROFILE_PATH, STALE_DAYS, TEMPLATES_DIR
+from config import FOLLOWUP_MAX, FOLLOWUP_MIN_DAYS, PROFILE_PATH, STALE_DAYS
 from search_config import get_config
 
 # method de la candidatura → canal del recordatorio
@@ -61,7 +61,7 @@ def _profile() -> dict:
         return {}
 
 
-def _reminder(profile: dict, cv_profile: str | None, job_title: str | None) -> str:
+def _reminder(profile: dict, cv_profile: str | None, job_title: str | None, lang: str = "es") -> str:
     cfg = get_config()
     if cfg.track(cv_profile or "") is None and job_title:
         cv_profile = classify_track({"title": job_title})[0]
@@ -69,30 +69,42 @@ def _reminder(profile: dict, cv_profile: str | None, job_title: str | None) -> s
     key = track.summary_key if track else None
     summary = (profile.get("summary") or {}).get(key, "") if key else ""
     first = re.split(r"(?<=\.)\s", summary.strip(), maxsplit=1)[0] if summary else ""
-    return f"Les recuerdo brevemente mi perfil: {first}" if first else ""
+    if not first:
+        return ""
+    if lang == "en":
+        return f"To briefly recap my background: {first}"
+    return f"Les recuerdo brevemente mi perfil: {first}"
 
 
-def _fmt_date(value: str | None) -> str:
+def _fmt_date(value: str | None, lang: str = "es") -> str:
     try:
-        return datetime.fromisoformat((value or "")[:10]).strftime("%d/%m/%Y")
+        dt = datetime.fromisoformat((value or "")[:10])
+        if lang == "en":
+            return dt.strftime("%B %d, %Y")
+        return dt.strftime("%d/%m/%Y")
     except (TypeError, ValueError):
         return value or ""
 
 
-def draft_followup(app: dict, profile: dict | None = None) -> str:
+def draft_followup(app: dict, profile: dict | None = None, lang: str | None = None) -> str:
     """Borrador del recordatorio (texto plano) para una fila de list_followups."""
+    from automation.cover_letter import letter_language, template_search_dirs
+
     profile = profile if profile is not None else _profile()
+    lang = lang or letter_language(app, profile)
     personal = profile.get("personal", {})
     title = app.get("job_title")
     if title and _PLACEHOLDER_TITLE.match(title):
         title = None  # "(ver Gmail)", "(por confirmar)": relleno del inbox, no un puesto
-    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), keep_trailing_newline=False)
+    search_dirs = template_search_dirs(lang)
+    env = Environment(loader=FileSystemLoader([str(p) for p in search_dirs]), keep_trailing_newline=False)
+    default_company = "the company" if lang == "en" else "la empresa"
     return env.get_template("followup.j2").render(
         channel=channel_for(app.get("method")),
-        company_name=app.get("company_name") or "la empresa",
+        company_name=app.get("company_name") or default_company,
         job_title=title,
-        sent_date=_fmt_date(app.get("sent_at")),
-        reminder=_reminder(profile, app.get("cv_profile"), title),
+        sent_date=_fmt_date(app.get("sent_at"), lang=lang),
+        reminder=_reminder(profile, app.get("cv_profile"), title, lang=lang),
         name=personal.get("name", ""),
         first_name=personal.get("first_name", ""),
         email=personal.get("email", ""),

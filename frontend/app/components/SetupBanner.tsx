@@ -1,9 +1,10 @@
 import { Sparkles, X } from "lucide-react";
+import { t, useLocale } from "@/lib/i18n";
 
 export const T = {
-  message: "Configura tu búsqueda con el asistente: tus objetivos, idiomas y fuentes en tres pasos.",
-  open: "Abrir el asistente",
-  dismiss: "Descartar el aviso",
+  get message() { return t("setup_banner.message"); },
+  get open() { return t("setup_banner.open"); },
+  get dismiss() { return t("setup_banner.dismiss"); },
 };
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
 
 /** Aviso para instalaciones con profile.json pero sin jobhunter.yaml propio: el asistente es opcional. */
 export function SetupBanner({ onOpen, onDismiss }: Props) {
+  useLocale();
   return (
     <div className="mb-6 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-4 py-3 text-sm text-indigo-200" role="status">
       <div className="flex flex-wrap items-center gap-3">

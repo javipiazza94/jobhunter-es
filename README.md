@@ -188,6 +188,28 @@ JobHunter provides built-in templates based on `moderncv` (banking) for CVs and 
 
 ---
 
+## Supported Job Sources
+
+JobHunter ES uses an extensible, self-describing sources registry (`docs/sources.md`):
+
+| Source | Markets | Type | Requires Consent (`ack`) | Mandatory Attribution | Notes |
+|---|---|---|---|---|---|
+| **Tecnoempleo** | Spain, Remote | HTML | No | No | Province filter and remote flag support. |
+| **InfoJobs** | Spain | HTML | **Yes** | No | Requires user consent with site terms. Disabled by default. |
+| **Manfred** | Spain, Remote | JSON API | No | No | Transparent tech job board. |
+| **Computrabajo** | Spain, LATAM | HTML | No | No | Multi-country support (`country`: `es`, `mx`, `co`, `ar`, `pe`, `cl`...) & locations. |
+| **LinkedIn** | LATAM, Remote, Global | HTML | **Yes** | No | Requires user consent with site terms. Disabled by default. |
+| **Remotive** | Remote, Global | JSON API | No | **Yes** | Public remote jobs API. Links back to the original offer. |
+| **RemoteOK** | Remote, Global | JSON API | No | **Yes** | Public remote jobs API. Links back to the original offer. |
+| **Arbeitnow** | Remote, Global | JSON API | No | No | European and remote tech jobs with visa sponsorship tags. |
+| **Freehire** | Remote, Global | JSON API | No | No | Free curated remote jobs board. |
+| **Indeed** | Global | HTML/API | No | No | Optional, requires `SCRAPERAPI_KEY` stored in keychain or environment. |
+| **Company Direct** | Direct track | HTML | No | No | Monitor careers pages and followed companies over aggregators. |
+
+For detailed parameters and technical specifications, see [docs/sources.md](docs/sources.md).
+
+---
+
 ## Running Scrapers
 
 Search across portals using your configured tracks:
