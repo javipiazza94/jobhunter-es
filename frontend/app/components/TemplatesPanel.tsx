@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { FileUp, Loader2, Trash2 } from "lucide-react";
 import { activateTemplate, deleteTemplate, fetchTemplates, uploadTemplate } from "@/lib/api";
+import { t, useLocale } from "@/lib/i18n";
 import type { TemplateCompiler, TemplateEngine, TemplateInfo, TemplateKind } from "@/lib/types";
 
 /** Compiladores admitidos por motor (lista cerrada, igual que en el backend). */
@@ -11,33 +12,37 @@ export const COMPILERS: Record<TemplateEngine, TemplateCompiler[]> = {
   typst: ["typst"],
 };
 
-// Textos de la interfaz en un solo sitio (la traducción llega en SP4).
+// Textos de la interfaz traducidos vía i18n (con getters para retrocompatibilidad).
 export const T = {
-  title: "Plantillas de CV y carta",
-  hint: "Las integradas siempre están. Una plantilla propia (LaTeX o Typst, .zip o un único .tex.j2/.typ.j2) se compila de prueba antes de aceptarla.",
-  trust: "Una plantilla puede leer ficheros de tu equipo y meterlos en el PDF que envías. Instala solo plantillas de fuentes de confianza.",
-  trustCheck: "Confirmo que esta plantilla viene de una fuente de confianza",
-  noTrust: "Confirma que la plantilla es de una fuente de confianza.",
-  kinds: { cv: "CV", letter: "Carta" } as Record<TemplateKind, string>,
-  engines: { latex: "LaTeX", typst: "Typst" } as Record<TemplateEngine, string>,
-  builtin: "integrada",
-  active: "activa",
-  invalid: "no válida",
-  activate: "Activar",
-  remove: "Borrar",
-  upload: "Añadir plantilla",
-  uploading: "Compilando prueba…",
-  name: "Nombre (minúsculas, - o _)",
-  kind: "Tipo",
-  engine: "Motor",
-  compiler: "Compilador",
-  compilerAuto: "automático",
-  pageLimit: "Páginas máx.",
-  styleRules: "Reglas de estilo para la IA (opcional)",
-  file: "Archivo de plantilla",
-  noFile: "Elige un archivo de plantilla.",
-  noName: "Escribe un nombre.",
-  loading: "Cargando plantillas…",
+  get title() { return t("templates.title"); },
+  get hint() { return t("templates.hint"); },
+  get trust() { return t("templates.trust"); },
+  get trustCheck() { return t("templates.trust_check"); },
+  get noTrust() { return t("templates.no_trust"); },
+  get kinds() {
+    return { cv: t("templates.kind_cv"), letter: t("templates.kind_letter") } as Record<TemplateKind, string>;
+  },
+  get engines() {
+    return { latex: t("templates.engine_latex"), typst: t("templates.engine_typst") } as Record<TemplateEngine, string>;
+  },
+  get builtin() { return t("templates.builtin"); },
+  get active() { return t("templates.active"); },
+  get invalid() { return t("templates.invalid"); },
+  get activate() { return t("templates.activate"); },
+  get remove() { return t("templates.remove"); },
+  get upload() { return t("templates.upload"); },
+  get uploading() { return t("templates.uploading"); },
+  get name() { return t("templates.name"); },
+  get kind() { return t("templates.kind"); },
+  get engine() { return t("templates.engine"); },
+  get compiler() { return t("templates.compiler"); },
+  get compilerAuto() { return t("templates.compiler_auto"); },
+  get pageLimit() { return t("templates.page_limit"); },
+  get styleRules() { return t("templates.style_rules"); },
+  get file() { return t("templates.file"); },
+  get noFile() { return t("templates.no_file"); },
+  get noName() { return t("templates.no_name"); },
+  get loading() { return t("templates.loading"); },
 };
 
 /** Motor que sugiere el nombre del archivo (`.typ.j2` → Typst); null si no lo dice (p. ej. un .zip). */
@@ -55,6 +60,7 @@ export function TemplatesPanel({ initial = [], initialError = "", autoLoad = tru
   /** false (tests): no pide las plantillas al montarse. */
   autoLoad?: boolean;
 }) {
+  useLocale();
   const [templates, setTemplates] = useState<TemplateInfo[]>(initial);
   const [error, setError] = useState(initialError);
   const [busy, setBusy] = useState(false);

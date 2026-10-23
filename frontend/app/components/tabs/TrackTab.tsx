@@ -1,6 +1,7 @@
 import { OfferBucketTab, ISOLATED_COLUMN, STANDARD_COLUMN } from "@/app/components/OfferBucketTab";
 import type { Application, JobOffer, Track } from "@/lib/types";
 import { trackLabel } from "@/lib/ui";
+import { t } from "@/lib/i18n";
 
 interface Props {
   track: Track;
@@ -27,9 +28,9 @@ export function TrackTab({ track, offers, ...rest }: Props) {
       showSalary
       maxAnimationIndex={isolated ? 30 : undefined}
       intro={isolated
-        ? `${label}: ofertas ordenadas por afinidad. No entran en candidaturas automáticas.`
+        ? t("track.isolated_intro", { label })
         : undefined}
-      emptyNew={`No hay ofertas nuevas de «${label}» pendientes de revisar.`}
+      emptyNew={t("track.empty_new", { label })}
     />
   );
 }

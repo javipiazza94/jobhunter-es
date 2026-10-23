@@ -25,7 +25,7 @@ import { InterviewPackPanel } from "@/app/components/InterviewPackPanel";
 import { CompanyResearchPanel } from "@/app/components/CompanyResearchPanel";
 import { OfferEvaluationPanel, T as EVAL_T, runBatchEvaluation } from "@/app/components/OfferEvaluationPanel";
 import { LanguageSelector } from "@/app/components/LanguageSelector";
-import { useT } from "@/lib/i18n";
+import { formatDate, useT } from "@/lib/i18n";
 import { setupPrompt, type RunSummary } from "@/lib/setup";
 
 // Matches the `valid` set in backend/main.py::update_application_status
@@ -367,27 +367,27 @@ export default function Dashboard() {
         {stats && (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
             <StatCard
-              icon={Building2} label="Empresas" value={stats.companies} colorClass="text-blue-400 bg-blue-500"
+              icon={Building2} label={t("stats.companies")} value={stats.companies} colorClass="text-blue-400 bg-blue-500"
               active={tab === "companies"}
               onClick={() => handleStatClick("companies")}
             />
             <StatCard
-              icon={Briefcase} label="Ofertas Totales" value={stats.job_offers} colorClass="text-purple-400 bg-purple-500"
+              icon={Briefcase} label={t("stats.offers")} value={stats.job_offers} colorClass="text-purple-400 bg-purple-500"
               active={tab === "offers" && includeApplied && minScore === 0}
               onClick={() => handleStatClick("offers")}
             />
             <StatCard
-              icon={Check} label="Relevantes (>55%)" value={stats.relevant_offers} colorClass="text-green-400 bg-green-500"
+              icon={Check} label={t("stats.relevant")} value={stats.relevant_offers} colorClass="text-green-400 bg-green-500"
               active={tab === "offers" && minScore === 0.55}
               onClick={() => handleStatClick("relevant")}
             />
             <StatCard
-              icon={Send} label="Enviadas" value={stats.applications_sent} colorClass="text-orange-400 bg-orange-500"
+              icon={Send} label={t("stats.sent")} value={stats.applications_sent} colorClass="text-orange-400 bg-orange-500"
               active={tab === "applications" && applicationStatusFilter === "sent"}
               onClick={() => handleStatClick("sent")}
             />
             <StatCard
-              icon={Users} label="Contactos Extraídos" value={stats.contacts_found} colorClass="text-teal-400 bg-teal-500"
+              icon={Users} label={t("stats.contacts")} value={stats.contacts_found} colorClass="text-teal-400 bg-teal-500"
               active={tab === "contacts"}
               onClick={() => handleStatClick("contacts")}
             />
@@ -472,20 +472,20 @@ export default function Dashboard() {
 
         {selectedIds.size > 0 && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-xl border border-indigo-500/40 bg-[#16161f] px-4 py-2.5 shadow-xl">
-            <span className="text-sm font-medium text-indigo-300">{selectedIds.size} seleccionadas</span>
+            <span className="text-sm font-medium text-indigo-300">{t("offers.selected_count", { count: selectedIds.size })}</span>
             <button onClick={handleBulkMarkSent} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg bg-green-500/15 px-3 py-1.5 text-sm font-medium text-green-300 border border-green-500/30 hover:bg-green-500/25 disabled:opacity-40">
-              <Check className="w-4 h-4" /> Poner como candidatura
+              <Check className="w-4 h-4" /> {t("offers.bulk_mark_sent")}
             </button>
             <button onClick={handleBulkUnmarkSent} disabled={loading} className="rounded-lg px-3 py-1.5 text-sm text-gray-300 border border-white/10 hover:bg-white/5 disabled:opacity-40">
-              Quitar candidatura
+              {t("offers.bulk_unmark_sent")}
             </button>
             <button onClick={handleBulkEvaluate} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-500/15 px-3 py-1.5 text-sm font-medium text-indigo-200 border border-indigo-500/30 hover:bg-indigo-500/25 disabled:opacity-40">
               <Sparkles className="w-4 h-4" /> {EVAL_T.button}
             </button>
             <button onClick={handleBulkDiscard} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg bg-red-500/15 px-3 py-1.5 text-sm font-medium text-red-300 border border-red-500/30 hover:bg-red-500/25 disabled:opacity-40">
-              <Trash2 className="w-4 h-4" /> Eliminar
+              <Trash2 className="w-4 h-4" /> {t("offers.bulk_delete")}
             </button>
-            <button onClick={() => setSelectedIds(new Set())} className="text-sm text-gray-500 hover:text-gray-300">Cancelar</button>
+            <button onClick={() => setSelectedIds(new Set())} className="text-sm text-gray-500 hover:text-gray-300">{t("common.cancel")}</button>
           </div>
         )}
 
@@ -531,9 +531,9 @@ export default function Dashboard() {
             <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
               <div className="flex gap-2 mb-6">
                 <span className={`px-3 py-1 rounded-lg text-sm font-bold tracking-wide border ${selectedOffer.relevance_score >= 0.8 ? "bg-green-500/10 text-green-400 border-green-500/20" : selectedOffer.relevance_score >= 0.65 ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" : "bg-gray-500/10 text-gray-400 border-gray-500/20"}`}>
-                  Score: {(selectedOffer.relevance_score * 100).toFixed(0)}%
+                  {t("offers.score_label")} {(selectedOffer.relevance_score * 100).toFixed(0)}%
                 </span>
-                {selectedOffer.cv_profile && <span className={`text-xs uppercase font-bold tracking-wider px-3 py-1 rounded-lg flex items-center ${trackBadge(selectedOffer.cv_profile, tracks).className}`}>Perfil: {trackBadge(selectedOffer.cv_profile, tracks).label}</span>}
+                {selectedOffer.cv_profile && <span className={`text-xs uppercase font-bold tracking-wider px-3 py-1 rounded-lg flex items-center ${trackBadge(selectedOffer.cv_profile, tracks).className}`}>{t("offers.profile_label")} {trackBadge(selectedOffer.cv_profile, tracks).label}</span>}
                 {selectedOffer.source && <span className={`text-xs uppercase font-bold tracking-wider px-3 py-1 rounded-lg flex items-center border border-current ${SOURCE_COLORS[selectedOffer.source] || SOURCE_COLORS.seed}`}>{selectedOffer.source}</span>}
               </div>
 
@@ -545,7 +545,7 @@ export default function Dashboard() {
 
               {parseReviewFlags(selectedOffer.review_flags).length > 0 && (
                 <div className="mb-6 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
-                  <h3 className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">Avisos de revisión</h3>
+                  <h3 className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">{t("offers.review_warnings_title")}</h3>
                   <ul className="text-sm text-amber-200/80 space-y-1 list-disc list-inside">
                     {parseReviewFlags(selectedOffer.review_flags).map(f => <li key={f}>{f}</li>)}
                   </ul>
@@ -553,13 +553,13 @@ export default function Dashboard() {
               )}
 
               <div>
-                <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4 border-b border-white/5 pb-2">Descripción del Puesto</h3>
+                <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4 border-b border-white/5 pb-2">{t("offers.job_description_title")}</h3>
                 {selectedOffer.description ? (
                   <div className="text-sm text-gray-400 leading-relaxed whitespace-pre-wrap font-sans">
                     {selectedOffer.description}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500 italic">No hay descripción disponible para esta oferta.</p>
+                  <p className="text-sm text-gray-500 italic">{t("offers.no_description")}</p>
                 )}
               </div>
             </div>
@@ -570,15 +570,15 @@ export default function Dashboard() {
                 disabled={togglingIds.has(selectedOffer.id)}
                 className="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl transition-colors disabled:opacity-40 flex items-center gap-2"
               >
-                <Trash2 className="w-4 h-4" /> Descartar oferta
+                <Trash2 className="w-4 h-4" /> {t("offers.discard_offer")}
               </button>
               <div className="flex gap-3">
                 <button onClick={() => setSelectedOffer(null)} className="px-5 py-2 text-sm font-medium text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl transition-colors">
-                  Cerrar
+                  {t("common.close")}
                 </button>
                 {selectedOffer.url && (
                   <a href={selectedOffer.url} target="_blank" rel="noopener noreferrer" className="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all flex items-center gap-2">
-                    Abrir Oferta Original <ChevronRight className="w-4 h-4" />
+                    {t("offers.open_original")} <ChevronRight className="w-4 h-4" />
                   </a>
                 )}
               </div>
@@ -603,28 +603,28 @@ export default function Dashboard() {
             </div>
             <div className="p-6 grid grid-cols-2 gap-3 text-sm">
               <div className="bg-white/5 rounded-lg p-3">
-                <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">País</div>
+                <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t("offers.modal_country")}</div>
                 <div className="text-gray-300">{selectedCompany.country || "—"}</div>
               </div>
               <div className="bg-white/5 rounded-lg p-3">
-                <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Modalidad</div>
+                <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t("offers.modal_modality")}</div>
                 <div className="text-gray-300">{selectedCompany.remote_policy || "—"}</div>
               </div>
               <div className="bg-white/5 rounded-lg p-3">
-                <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Ofertas</div>
+                <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t("offers.modal_offers")}</div>
                 <div className="text-gray-300 font-mono font-bold">{selectedCompany.offer_count}</div>
               </div>
               <div className="bg-white/5 rounded-lg p-3">
-                <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Enviadas</div>
+                <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t("offers.modal_sent")}</div>
                 <div className={`font-mono font-bold ${selectedCompany.application_count > 0 ? "text-emerald-400" : "text-gray-500"}`}>{selectedCompany.application_count}</div>
               </div>
             </div>
             <div className="px-6 pb-6 flex gap-2">
               {selectedCompany.website && (
-                <a href={selectedCompany.website} target="_blank" rel="noopener noreferrer" className="flex-1 text-center px-4 py-2 text-sm font-medium text-gray-300 bg-white/5 hover:bg-white/10 rounded-xl transition-colors">Web</a>
+                <a href={selectedCompany.website} target="_blank" rel="noopener noreferrer" className="flex-1 text-center px-4 py-2 text-sm font-medium text-gray-300 bg-white/5 hover:bg-white/10 rounded-xl transition-colors">{t("offers.modal_web")}</a>
               )}
               {selectedCompany.careers_url && (
-                <a href={selectedCompany.careers_url} target="_blank" rel="noopener noreferrer" className="flex-1 text-center px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-colors flex items-center justify-center gap-1">Empleos <ChevronRight className="w-4 h-4"/></a>
+                <a href={selectedCompany.careers_url} target="_blank" rel="noopener noreferrer" className="flex-1 text-center px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-colors flex items-center justify-center gap-1">{t("offers.modal_jobs")} <ChevronRight className="w-4 h-4"/></a>
               )}
             </div>
           </div>
@@ -639,7 +639,7 @@ export default function Dashboard() {
             <div className="p-6 border-b border-white/5 bg-white/5 flex items-start justify-between">
               <div>
                 <div className="font-mono text-indigo-400 font-semibold mb-1">{selectedContact.value}</div>
-                <p className="text-sm text-gray-400">{selectedContact.company_name || "Empresa desconocida"}</p>
+                <p className="text-sm text-gray-400">{selectedContact.company_name || t("contacts.unknown_company")}</p>
               </div>
               <button onClick={() => setSelectedContact(null)} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -652,7 +652,7 @@ export default function Dashboard() {
               </div>
               {selectedContact.offers.length > 0 && (
                 <div>
-                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">Ofertas asociadas</div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-3">{t("offers.modal_associated_offers")}</div>
                   <div className="flex flex-col gap-2">
                     {selectedContact.offers.map(o => (
                       <div key={o.id} className="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
@@ -673,7 +673,7 @@ export default function Dashboard() {
             </div>
             {selectedContact.company_website && (
               <div className="px-6 pb-6">
-                <a href={selectedContact.company_website} target="_blank" rel="noopener noreferrer" className="w-full text-center block px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-colors">Ver empresa</a>
+                <a href={selectedContact.company_website} target="_blank" rel="noopener noreferrer" className="w-full text-center block px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-colors">{t("offers.modal_view_company")}</a>
               </div>
             )}
           </div>
@@ -687,7 +687,7 @@ export default function Dashboard() {
           <div className="relative w-full max-w-lg bg-[#16161f] border border-white/10 rounded-2xl shadow-[0_0_40px_rgba(0,0,0,0.5)] max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-white/5 bg-white/5 flex items-start justify-between">
               <div>
-                <h2 className="text-lg font-bold text-white mb-1">{selectedApplication.job_title || "Candidatura espontánea"}</h2>
+                <h2 className="text-lg font-bold text-white mb-1">{selectedApplication.job_title || t("applications.spontaneous")}</h2>
                 <p className="text-sm text-indigo-400 font-medium">{selectedApplication.company_name}</p>
               </div>
               <button onClick={() => setSelectedApplication(null)} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
@@ -718,15 +718,15 @@ export default function Dashboard() {
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="bg-white/5 rounded-lg p-3">
-                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Ubicación</div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t("offers.modal_location")}</div>
                   <div className="text-gray-300">{selectedApplication.offer_location || "—"}</div>
                 </div>
                 <div className="bg-white/5 rounded-lg p-3">
-                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Enviada</div>
-                  <div className="text-gray-300 font-mono">{selectedApplication.sent_at ? new Date(selectedApplication.sent_at).toLocaleDateString("es-ES") : "—"}</div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t("offers.modal_sent_at")}</div>
+                  <div className="text-gray-300 font-mono">{selectedApplication.sent_at ? formatDate(selectedApplication.sent_at) : "—"}</div>
                 </div>
                 <div className="bg-white/5 rounded-lg p-3">
-                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Método</div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t("offers.modal_method")}</div>
                   <div className="text-gray-300 capitalize">{selectedApplication.method}</div>
                 </div>
               </div>
@@ -747,16 +747,16 @@ export default function Dashboard() {
                   }}
                   className="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl transition-colors"
                 >
-                  Desmarcar como enviada
+                  {t("offers.modal_unmark_sent")}
                 </button>
               )}
               <div className="flex gap-2 ml-auto">
                 <button onClick={() => setSelectedApplication(null)} className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl transition-colors">
-                  Cerrar
+                  {t("common.close")}
                 </button>
                 {selectedApplication.offer_url && (
                   <a href={selectedApplication.offer_url} target="_blank" rel="noopener noreferrer" className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all flex items-center gap-2">
-                    Ver oferta <ChevronRight className="w-4 h-4" />
+                    {t("offers.modal_view_offer")} <ChevronRight className="w-4 h-4" />
                   </a>
                 )}
               </div>

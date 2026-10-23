@@ -1,22 +1,23 @@
 import type { Application, JobOffer } from "@/lib/types";
+import { t } from "@/lib/i18n";
 
 export type ApplicationSortKey = "date" | "company" | "location" | "score";
 export type SortDirection = "asc" | "desc";
 
 export const APPLICATION_SORT_LABELS: Record<ApplicationSortKey, string> = {
-  date: "Fecha",
-  company: "Empresa (A-Z)",
-  location: "Ubicación",
-  score: "Score",
+  get date() { return t("sort.date"); },
+  get company() { return t("sort.company"); },
+  get location() { return t("sort.location"); },
+  get score() { return t("sort.score"); },
 };
 
 export type OfferSortKey = "score" | "company" | "title" | "location";
 
 export const OFFER_SORT_LABELS: Record<OfferSortKey, string> = {
-  score: "Score",
-  company: "Empresa (A-Z)",
-  title: "Título (A-Z)",
-  location: "Ubicación",
+  get score() { return t("sort.score"); },
+  get company() { return t("sort.company"); },
+  get title() { return t("sort.title"); },
+  get location() { return t("sort.location"); },
 };
 
 /** Dirección con la que arranca cada criterio: texto de la A a la Z, score de mayor a menor. */

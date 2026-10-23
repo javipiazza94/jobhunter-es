@@ -3,6 +3,7 @@ import { SOURCE_COLORS, STATUS_COLORS } from "@/lib/ui";
 import type { Application } from "@/lib/types";
 import { APPLICATION_SORT_LABELS, defaultDirection, sortApplications, type ApplicationSortKey } from "@/lib/sort";
 import type { ApplicationFilters } from "@/app/hooks/useApplicationFilters";
+import { formatDate, t, useLocale } from "@/lib/i18n";
 
 interface Props {
   applications: Application[];
@@ -12,6 +13,7 @@ interface Props {
 
 /** Pestaña «Candidaturas»: filtro por estado, orden y tabla. */
 export function ApplicationsTab({ applications, filters, onSelectApplication }: Props) {
+  useLocale();
   const {
     applicationStatusFilter, setApplicationStatusFilter,
     applicationSortKey, setApplicationSortKey, applicationSortDir, setApplicationSortDir,
@@ -27,19 +29,19 @@ export function ApplicationsTab({ applications, filters, onSelectApplication }: 
     <div className="glass-card overflow-hidden animate-fade-in">
       <div className="p-4 border-b border-white/5 bg-black/20 flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium uppercase tracking-wider text-gray-500">Estado</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-gray-500">{t("applications.status_header")}</span>
           <select
             value={applicationStatusFilter} onChange={e => setApplicationStatusFilter(e.target.value)}
             className="bg-[#16161f] border border-white/10 text-gray-300 text-sm rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500/50 outline-none capitalize"
           >
-            <option value="all">Todos</option>
+            <option value="all">{t("applications.all_statuses")}</option>
             {applicationStatuses.map(s => (
               <option key={s} value={s} className="capitalize">{s}</option>
             ))}
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium uppercase tracking-wider text-gray-500">Ordenar por</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-gray-500">{t("applications.sort_by")}</span>
           <select
             value={applicationSortKey} onChange={e => {
               const key = e.target.value as ApplicationSortKey;
@@ -55,16 +57,16 @@ export function ApplicationsTab({ applications, filters, onSelectApplication }: 
           </select>
           <button
             onClick={() => setApplicationSortDir(d => d === "asc" ? "desc" : "asc")}
-            title={applicationSortDir === "asc" ? "Ascendente" : "Descendente"}
-            aria-label="Invertir el orden"
+            title={applicationSortDir === "asc" ? t("applications.sort_asc") : t("applications.sort_desc")}
+            aria-label={t("applications.invert_order")}
             className="bg-[#16161f] border border-white/10 text-gray-300 text-sm rounded-lg px-3 py-1.5 hover:border-indigo-500/50"
           >
-            {applicationSortDir === "asc" ? "↑ Asc" : "↓ Desc"}
+            {applicationSortDir === "asc" ? t("applications.sort_asc") : t("applications.sort_desc")}
           </button>
         </div>
         <div className="ml-auto">
           <span className="text-sm font-medium text-indigo-300/80 bg-indigo-500/10 px-3 py-1 rounded-lg border border-indigo-500/20">
-            {filteredApplications.length} / {applications.length} candidaturas
+            {t("applications.count", { filtered: filteredApplications.length, total: applications.length })}
           </span>
         </div>
       </div>
@@ -73,23 +75,23 @@ export function ApplicationsTab({ applications, filters, onSelectApplication }: 
           <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4">
             <Send className="w-8 h-8 text-gray-500" />
           </div>
-          <h3 className="text-lg font-medium text-gray-300 mb-2">Aún no hay candidaturas enviadas</h3>
-          <p className="text-sm text-gray-500">Marca ofertas como enviadas o usa el motor de candidaturas.</p>
+          <h3 className="text-lg font-medium text-gray-300 mb-2">{t("applications.empty_title")}</h3>
+          <p className="text-sm text-gray-500">{t("applications.empty_hint")}</p>
         </div>
       ) : filteredApplications.length === 0 ? (
         <div className="p-16 text-center border-dashed border-white/10">
-          <p className="text-sm text-gray-500">Ninguna candidatura coincide con el filtro de estado seleccionado.</p>
+          <p className="text-sm text-gray-500">{t("applications.filter_empty")}</p>
         </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-gray-400 uppercase bg-black/40 border-b border-white/5 tracking-wider">
               <tr>
-                <th className="px-6 py-4 font-semibold">Oferta</th>
-                <th className="px-6 py-4 font-semibold">Empresa</th>
-                <th className="px-6 py-4 font-semibold">Ubicación</th>
-                <th className="px-6 py-4 font-semibold">Estado</th>
-                <th className="px-6 py-4 font-semibold text-right">Score / Fecha</th>
+                <th className="px-6 py-4 font-semibold">{t("applications.offer_header")}</th>
+                <th className="px-6 py-4 font-semibold">{t("applications.company_header")}</th>
+                <th className="px-6 py-4 font-semibold">{t("applications.location_header")}</th>
+                <th className="px-6 py-4 font-semibold">{t("applications.status_header")}</th>
+                <th className="px-6 py-4 font-semibold text-right">{t("applications.score_date_header")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -103,7 +105,7 @@ export function ApplicationsTab({ applications, filters, onSelectApplication }: 
                   <td className="px-6 py-4">
                     <div className="flex flex-col gap-1">
                       <span className="font-semibold text-gray-200 hover:text-indigo-400 transition-colors">
-                        {a.job_title || "Candidatura espontánea"}
+                        {a.job_title || t("applications.spontaneous")}
                       </span>
                       {a.offer_source && (
                         <span className={`text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded w-fit ${SOURCE_COLORS[a.offer_source] || SOURCE_COLORS.seed}`}>
@@ -127,7 +129,7 @@ export function ApplicationsTab({ applications, filters, onSelectApplication }: 
                         </span>
                       )}
                       <span className="text-xs text-gray-500 font-mono">
-                        {a.sent_at ? new Date(a.sent_at).toLocaleDateString("es-ES") : "—"}
+                        {a.sent_at ? formatDate(a.sent_at) : "—"}
                       </span>
                     </div>
                   </td>

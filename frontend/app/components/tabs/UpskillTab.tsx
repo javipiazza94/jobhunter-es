@@ -3,21 +3,28 @@
 import { useState } from "react";
 import { GraduationCap, Loader2 } from "lucide-react";
 import { runUpskill } from "@/lib/api";
+import { t, useLocale } from "@/lib/i18n";
 import { parseReport } from "@/lib/report";
 import type { UpskillReport, UpskillScope } from "@/lib/types";
 
-// Textos de la interfaz en un solo sitio (la traducción llega en SP4).
+// Textos de la interfaz traducidos vía i18n (con getters para retrocompatibilidad).
 export const T = {
-  title: "Upskill",
-  hint: "Mapa de huecos: qué piden tus ofertas que tu perfil aún no respalda, con un plan de estudio si hay IA. Los recursos que sugiere la IA no están verificados.",
-  scope: "Ofertas a analizar",
-  scopes: { saved: "Guardadas (relevantes)", evaluated: "Evaluadas con IA", applied: "Con candidatura" } as Record<string, string>,
-  button: "Generar mapa de huecos",
-  forOffer: "Upskill para esta oferta",
-  forOfferHint: "Qué pide esta oferta que tu perfil aún no respalda (se guarda en JH_HOME/reports/).",
-  busy: "Analizando ofertas…",
-  saved: (path: string) => `Informe guardado en ${path}`,
-  analyzed: (n: number) => `${n} oferta(s) analizadas`,
+  get title() { return t("upskill.title"); },
+  get hint() { return t("upskill.hint"); },
+  get scope() { return t("upskill.scope"); },
+  get scopes() {
+    return {
+      saved: t("upskill.scope_saved"),
+      evaluated: t("upskill.scope_evaluated"),
+      applied: t("upskill.scope_applied"),
+    } as Record<string, string>;
+  },
+  get button() { return t("upskill.button"); },
+  get forOffer() { return t("upskill.for_offer"); },
+  get forOfferHint() { return t("upskill.for_offer_hint"); },
+  get busy() { return t("upskill.busy"); },
+  saved: (path: string) => t("upskill.saved", { path }),
+  analyzed: (n: number) => t("upskill.analyzed", { count: n }),
 };
 
 const SCOPES: UpskillScope[] = ["saved", "evaluated", "applied"];
@@ -29,6 +36,7 @@ export function UpskillTab({ initialReport = null, initialError = "", offerId }:
   initialError?: string;
   offerId?: string;
 }) {
+  useLocale();
   const [scope, setScope] = useState<UpskillScope>("saved");
   const [report, setReport] = useState<UpskillReport | null>(initialReport);
   const [error, setError] = useState(initialError);

@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import type { Company } from "@/lib/types";
+import { t, useLocale } from "@/lib/i18n";
 
 interface Props {
   companies: Company[];
@@ -12,19 +13,20 @@ const COUNTRY_NAMES: Record<string, string> = { ES: "España", US: "USA", UK: "U
 
 /** Pestaña «Empresas». */
 export function CompaniesTab({ companies, countryFilter, onCountryFilterChange, onSelectCompany }: Props) {
+  useLocale();
   // Los países del desplegable salen de los datos: antes solo se podía elegir ES, US y UK.
   const countries = Array.from(new Set(companies.map(c => c.country).filter(Boolean))).sort();
   const visible = countryFilter ? companies.filter(c => c.country === countryFilter) : companies;
   return (
     <div className="glass-card overflow-hidden animate-fade-in">
       <div className="p-4 border-b border-white/5 bg-black/20 flex items-center gap-3">
-        <span className="text-sm font-medium text-gray-500 uppercase tracking-wider">País:</span>
+        <span className="text-sm font-medium text-gray-500 uppercase tracking-wider">{t("companies.country_label")}</span>
         <select
           value={countryFilter}
           onChange={(e) => onCountryFilterChange(e.target.value)}
           className="bg-[#16161f] border border-white/10 text-gray-300 text-sm rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500/50 outline-none"
         >
-          <option value="">Todos</option>
+          <option value="">{t("companies.select_all_countries")}</option>
           {countries.map(code => (
             <option key={code} value={code}>{COUNTRY_NAMES[code] ?? code}</option>
           ))}
@@ -34,12 +36,12 @@ export function CompaniesTab({ companies, countryFilter, onCountryFilterChange, 
         <table className="w-full text-sm text-left">
           <thead className="text-xs text-gray-400 uppercase bg-black/40 border-b border-white/5 tracking-wider">
             <tr>
-              <th className="px-6 py-4 font-semibold">Empresa</th>
-              <th className="px-6 py-4 font-semibold">Sector</th>
-              <th className="px-6 py-4 font-semibold">País</th>
-              <th className="px-6 py-4 font-semibold text-right">Ofertas</th>
-              <th className="px-6 py-4 font-semibold text-right">Enviadas</th>
-              <th className="px-6 py-4 font-semibold">Empleos</th>
+              <th className="px-6 py-4 font-semibold">{t("companies.header_company")}</th>
+              <th className="px-6 py-4 font-semibold">{t("companies.header_sector")}</th>
+              <th className="px-6 py-4 font-semibold">{t("companies.header_country")}</th>
+              <th className="px-6 py-4 font-semibold text-right">{t("companies.header_offers")}</th>
+              <th className="px-6 py-4 font-semibold text-right">{t("companies.header_sent")}</th>
+              <th className="px-6 py-4 font-semibold">{t("companies.header_careers")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -59,7 +61,7 @@ export function CompaniesTab({ companies, countryFilter, onCountryFilterChange, 
                 <td className="px-6 py-4">
                   {c.careers_url && (
                     <a href={c.careers_url} target="_blank" rel="noopener noreferrer"
-                      className="text-indigo-400 hover:text-indigo-300 hover:underline text-xs font-medium inline-flex items-center gap-1">Ver <ChevronRight className="w-3 h-3" /></a>
+                      className="text-indigo-400 hover:text-indigo-300 hover:underline text-xs font-medium inline-flex items-center gap-1">{t("companies.view_link")} <ChevronRight className="w-3 h-3" /></a>
                   )}
                 </td>
               </tr>

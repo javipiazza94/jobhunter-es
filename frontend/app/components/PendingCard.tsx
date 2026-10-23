@@ -8,6 +8,7 @@ import { ScreeningPanel } from "@/app/components/ScreeningPanel";
 import { attachmentsLabel } from "@/lib/documents";
 import { trackBadge } from "@/lib/ui";
 import { approveApplication, rejectApplication, updateCoverLetter, markApplicationSentManual, type PendingApplication } from "@/lib/api";
+import { t, useLocale } from "@/lib/i18n";
 
 interface PendingCardProps {
   app: PendingApplication;
@@ -16,6 +17,7 @@ interface PendingCardProps {
 }
 
 export function PendingCard({ app, tracks, onAction }: PendingCardProps) {
+  useLocale();
   const currentLetter = app.cover_letter_edited ?? app.cover_letter_used ?? "";
   const [body, setBody] = useState(currentLetter);
   const [saved, setSaved] = useState(true);
@@ -139,7 +141,7 @@ export function PendingCard({ app, tracks, onAction }: PendingCardProps) {
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Carta de presentación
+            {t("pending.cover_letter_title")}
           </span>
           {!saved && (
             <button
@@ -147,11 +149,11 @@ export function PendingCard({ app, tracks, onAction }: PendingCardProps) {
               disabled={busy}
               className="text-xs text-indigo-400 hover:text-indigo-300 disabled:opacity-40 font-medium transition-colors"
             >
-              Guardar cambios
+              {t("pending.save_changes")}
             </button>
           )}
           {saved && body !== currentLetter && (
-            <span className="text-xs text-emerald-400 font-medium">Guardado</span>
+            <span className="text-xs text-emerald-400 font-medium">{t("common.saved")}</span>
           )}
         </div>
         <textarea
@@ -169,24 +171,19 @@ export function PendingCard({ app, tracks, onAction }: PendingCardProps) {
 
       {hasContact && !manualSendStarted && (
         <p className="text-xs text-gray-500">
-          Al aprobar se adjuntará: <span className="font-mono text-gray-400">{attachments}</span>
+          {t("pending.attached_on_approve")} <span className="font-mono text-gray-400">{attachments}</span>
         </p>
       )}
 
       {isEmailContact && !manualSendStarted && (
         <p className="text-xs text-gray-500">
-          &quot;Enviar manualmente&quot; copia la carta al portapapeles y abre tu cliente de correo con el
-          destinatario y asunto ya rellenos — pega la carta y adjunta{" "}
-          <span className="font-mono text-gray-400">{attachments}</span> a mano antes de darle a enviar.
+          {t("pending.manual_send_hint", { file: attachments })}
         </p>
       )}
 
       {!hasContact && !manualSendStarted && (
         <p className="text-xs text-gray-500">
-          No se encontró email de contacto para esta empresa — no se puede usar &quot;Aprobar y
-          enviar&quot;. Abre la oferta, aplica desde el propio portal (adjuntando{" "}
-          <span className="font-mono text-gray-400">{cvFile}</span> y pegando la carta de arriba) y
-          luego márcala como enviada.
+          {t("pending.no_contact_email_hint", { file: cvFile })}
         </p>
       )}
 
@@ -207,7 +204,7 @@ export function PendingCard({ app, tracks, onAction }: PendingCardProps) {
               disabled={busy}
               className="px-3 py-1 text-xs font-medium text-gray-400 hover:text-gray-200 disabled:opacity-40"
             >
-              Todavía no
+              {t("pending.not_yet")}
             </button>
             <button
               onClick={handleConfirmManualSent}
@@ -226,7 +223,7 @@ export function PendingCard({ app, tracks, onAction }: PendingCardProps) {
           disabled={busy}
           className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-400 border border-red-500/20 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-40"
         >
-          <X className="w-4 h-4" /> Rechazar
+          <X className="w-4 h-4" /> {t("pending.reject")}
         </button>
         {isEmailContact && (
           <button
@@ -235,7 +232,7 @@ export function PendingCard({ app, tracks, onAction }: PendingCardProps) {
             title="Copia la carta y abre tu cliente de correo — no marca nada como enviado todavía"
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-sky-400 border border-sky-500/20 hover:bg-sky-500/10 rounded-lg transition-colors disabled:opacity-40"
           >
-            <Mail className="w-4 h-4" /> Enviar manualmente
+            <Mail className="w-4 h-4" /> {t("pending.send_manually")}
           </button>
         )}
         {hasContact ? (
@@ -253,7 +250,7 @@ export function PendingCard({ app, tracks, onAction }: PendingCardProps) {
             title={app.job_url ?? "Sin URL de oferta guardada"}
             className="flex items-center gap-1.5 px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all disabled:opacity-40"
           >
-            <ExternalLink className="w-4 h-4" /> Ver oferta y aplicar
+            <ExternalLink className="w-4 h-4" /> {t("pending.view_and_apply")}
           </button>
         )}
       </div>

@@ -30,95 +30,112 @@ import type {
   SetupProposal,
   WorkModality,
 } from "@/lib/types";
+import { t, useLocale } from "@/lib/i18n";
 
-// Textos de la interfaz en un solo sitio (la traducción llega en SP4).
+// Textos de la interfaz en un solo sitio traducidos con getters i18n.
 export const T = {
-  title: "Configura tu búsqueda",
-  subtitle: "Tres pasos y empezamos a buscar ofertas para ti.",
-  stepNames: { 1: "Tu CV", 2: "Revisa lo que hemos entendido", 3: "Dónde buscar" } as Record<WizardStep, string>,
-  stepOf: (n: number) => `Paso ${n} de 3`,
-  close: "Cerrar el asistente",
-  back: "Atrás",
-  next: "Siguiente",
+  get title() { return t("setup.title"); },
+  get subtitle() { return t("setup.subtitle"); },
+  get stepNames() {
+    return { 1: t("setup.step1"), 2: t("setup.step2"), 3: t("setup.step3") } as Record<WizardStep, string>;
+  },
+  stepOf: (n: number) => t("setup.step_of", { step: n }),
+  get close() { return t("setup.close"); },
+  get back() { return t("common.back"); },
+  get next() { return t("common.next"); },
   // Paso 1
-  cvIntro: "Sube tu CV (PDF o DOCX). El texto se extrae en tu equipo; si tienes una IA configurada, propone tu perfil.",
-  cvUpload: "Subir CV",
-  cvUploading: "Leyendo el CV…",
-  pasteLabel: "¿Prefieres pegar el texto del CV?",
-  pasteButton: "Analizar texto",
-  manual: "Rellenar a mano",
-  manualHint: "Sin CV ni IA también funciona: completas el perfil en el siguiente paso.",
-  emptyProposal: "No hemos podido interpretar el CV automáticamente (sin IA o sin respuesta). Rellena los campos a mano.",
-  aiProposal: "Esto es lo que ha entendido la IA. Revísalo y corrige lo que haga falta.",
+  get cvIntro() { return t("setup.cv_intro"); },
+  get cvUpload() { return t("setup.cv_upload"); },
+  get cvUploading() { return t("setup.cv_uploading"); },
+  get pasteLabel() { return t("setup.paste_label"); },
+  get pasteButton() { return t("setup.paste_button"); },
+  get manual() { return t("setup.manual"); },
+  get manualHint() { return t("setup.manual_hint"); },
+  get emptyProposal() { return t("setup.empty_proposal"); },
+  get aiProposal() { return t("setup.ai_proposal"); },
   // Paso 2
-  personal: "Datos personales",
-  fullName: "Nombre completo",
-  email: "Email",
-  phone: "Teléfono",
-  city: "Ciudad",
-  country: "País",
-  targets: "Objetivos profesionales",
-  targetsHint: "Cada objetivo es una pestaña del panel. Las palabras clave afinan la búsqueda.",
-  targetTitle: "Puesto buscado",
-  targetKeywords: "Palabras clave (separadas por comas)",
-  addTarget: "Añadir objetivo",
-  remove: "Quitar",
-  yearsExperience: "Años de experiencia",
-  experience: "Experiencia",
-  company: "Empresa",
-  role: "Puesto",
-  start: "Inicio",
-  end: "Fin",
-  addExperience: "Añadir experiencia",
-  tools: "Herramientas y tecnologías (separadas por comas)",
-  languages: "Idiomas",
-  language: "Idioma",
-  level: "Nivel",
-  addLanguage: "Añadir idioma",
-  modality: "Modalidad",
-  modalities: { remote: "Remoto", hybrid: "Híbrido", onsite: "Presencial" } as Record<WorkModality, string>,
-  eligibility: "Elegibilidad",
-  workPermit: "Países donde puedes trabajar (separados por comas)",
-  sponsorship: "¿Necesitas patrocinio de visado?",
-  drivingLicense: "¿Tienes carné de conducir?",
-  unknown: "Sin indicar",
-  yes: "Sí",
-  no: "No",
+  get personal() { return t("setup.personal"); },
+  get fullName() { return t("profile.full_name"); },
+  get email() { return t("profile.email"); },
+  get phone() { return t("profile.phone"); },
+  get city() { return t("profile.city"); },
+  get country() { return t("profile.country"); },
+  get targets() { return t("setup.targets"); },
+  get targetsHint() { return t("setup.targets_hint"); },
+  get targetTitle() { return t("setup.target_title"); },
+  get targetKeywords() { return t("setup.target_keywords"); },
+  get addTarget() { return t("setup.add_target"); },
+  get remove() { return t("common.remove"); },
+  get yearsExperience() { return t("setup.years_experience"); },
+  get experience() { return t("setup.experience"); },
+  get company() { return t("setup.company"); },
+  get role() { return t("setup.role"); },
+  get start() { return t("setup.start"); },
+  get end() { return t("setup.end"); },
+  get addExperience() { return t("setup.add_experience"); },
+  get tools() { return t("setup.tools"); },
+  get languages() { return t("profile.languages"); },
+  get language() { return t("profile.language"); },
+  get level() { return t("profile.level"); },
+  get addLanguage() { return t("profile.add_language"); },
+  get modality() { return t("setup.modality"); },
+  get modalities() {
+    return {
+      remote: t("setup.modality_remote"),
+      hybrid: t("setup.modality_hybrid"),
+      onsite: t("setup.modality_onsite"),
+    } as Record<WorkModality, string>;
+  },
+  get eligibility() { return t("setup.eligibility"); },
+  get workPermit() { return t("setup.work_permit"); },
+  get sponsorship() { return t("setup.sponsorship"); },
+  get drivingLicense() { return t("setup.driving_license"); },
+  get unknown() { return t("setup.unknown"); },
+  get yes() { return t("common.yes"); },
+  get no() { return t("common.no"); },
   // Paso 3
-  markets: "Mercados",
-  marketNames: { spain: "España", latam: "Latinoamérica", remote: "Remoto", global: "Internacional" } as Record<string, string>,
-  sources: "Fuentes de ofertas",
-  noSources: "Elige al menos un mercado para ver sus fuentes.",
-  ackWarning: (label: string) =>
-    `${label} tiene condiciones de uso delicadas (sesión propia o términos del portal que limitan la automatización). Úsala bajo tu responsabilidad.`,
-  ackCheckbox: (label: string) => `Entiendo el aviso y quiero usar ${label}`,
-  followed: "Empresas que sigues (separadas por comas)",
-  followedHint: "Sus ofertas salen destacadas.",
-  ai: "IA para leer tu CV y adaptar las cartas",
-  aiHint: "Opcional. Ollama funciona en local y gratis. Sin IA, rellenas el perfil a mano y las cartas usan la plantilla. Se guarda al terminar el asistente.",
-  aiModel: "Modelo (vacío = el predeterminado)",
-  aiKey: "Clave de API",
-  aiKeySave: "Usar este proveedor",
-  aiKeyStatus: (status: string) => `Clave: ${status}`,
-  aiKeyHint: "La clave va al llavero del sistema; nunca se guarda en archivos ni se vuelve a mostrar.",
-  aiProviders: {
-    none: "Sin IA",
-    ollama: "Ollama (local)",
-    anthropic: "Anthropic (clave de API)",
-    openai: "OpenAI (clave de API)",
-    claude_cli: "Claude Code (CLI)",
-    codex_cli: "Codex (CLI)",
-  } as Record<AIProviderId, string>,
-  loadingCurrent: "Cargando tu configuración actual…",
-  marketsError: (msg: string) => `No se pudieron cargar los mercados: ${msg}`,
-  retry: "Reintentar",
-  progress: "Progreso del asistente",
-  finish: "Buscar ofertas",
-  finishing: "Guardando y lanzando la búsqueda…",
+  get markets() { return t("setup.markets"); },
+  get marketNames() {
+    return {
+      spain: t("setup.market_spain"),
+      latam: t("setup.market_latam"),
+      remote: t("setup.market_remote"),
+      global: t("setup.market_global"),
+    } as Record<string, string>;
+  },
+  get sources() { return t("setup.sources"); },
+  get noSources() { return t("setup.no_sources"); },
+  ackWarning: (label: string) => t("profile.ack_warning", { label }),
+  ackCheckbox: (label: string) => t("profile.ack_checkbox", { label }),
+  get followed() { return t("setup.followed"); },
+  get followedHint() { return t("setup.followed_hint"); },
+  get ai() { return t("setup.ai"); },
+  get aiHint() { return t("setup.ai_hint"); },
+  get aiModel() { return t("setup.ai_model"); },
+  get aiKey() { return t("setup.ai_key"); },
+  get aiKeySave() { return t("setup.ai_key_save"); },
+  aiKeyStatus: (status: string) => t("setup.ai_key_status", { status }),
+  get aiKeyHint() { return t("setup.ai_key_hint"); },
+  get aiProviders() {
+    return {
+      none: t("profile.provider_none"),
+      ollama: t("profile.provider_ollama"),
+      anthropic: t("profile.provider_anthropic"),
+      openai: t("profile.provider_openai"),
+      claude_cli: t("profile.provider_claude_cli"),
+      codex_cli: t("profile.provider_codex_cli"),
+    } as Record<AIProviderId, string>;
+  },
+  get loadingCurrent() { return t("setup.loading_current"); },
+  marketsError: (msg: string) => t("setup.markets_error", { message: msg }),
+  get retry() { return t("common.retry"); },
+  get progress() { return t("setup.progress"); },
+  get finish() { return t("setup.finish"); },
+  get finishing() { return t("setup.finishing"); },
 };
 
 export const CEFR_LEVELS: CefrLevel[] = ["A1", "A2", "B1", "B2", "C1", "C2", "native"];
-const LEVEL_LABEL = (l: CefrLevel) => (l === "native" ? "Nativo" : l);
+const LEVEL_LABEL = (l: CefrLevel) => (l === "native" ? t("profile.level_native") : l);
 const MODALITIES: WorkModality[] = ["remote", "hybrid", "onsite"];
 
 const input =
@@ -239,6 +256,7 @@ export function StepCv({ busy, onUpload, onPaste, onManual, aiPicker }: {
   onManual: () => void;
   aiPicker?: React.ReactNode;
 }) {
+  useLocale();
   const [text, setText] = useState("");
   return (
     <div className="space-y-5">
@@ -279,6 +297,7 @@ export function StepCv({ busy, onUpload, onPaste, onManual, aiPicker }: {
 // ── Paso 2: revisión del borrador ──────────────────────────────────────────────────────────────
 
 export function StepReview({ draft, onChange }: { draft: ProfileDraft; onChange: (d: ProfileDraft) => void }) {
+  useLocale();
   const set = <K extends keyof ProfileDraft>(key: K, value: ProfileDraft[K]) => onChange({ ...draft, [key]: value });
   const setAt = <K extends "targets" | "languages" | "experience">(key: K, i: number, patch: Partial<ProfileDraft[K][number]>) =>
     set(key, draft[key].map((item, j) => (j === i ? { ...item, ...patch } : item)) as ProfileDraft[K]);
@@ -434,6 +453,7 @@ export function StepSources({ state, markets, onChange }: {
   markets: Record<string, MarketSource[]>;
   onChange: Updater;
 }) {
+  useLocale();
   const sources = suggestedSources(markets, state.markets, state.sources);
   const toggleMarket = (m: string, on: boolean) =>
     onChange(s => ({ ...s, markets: on ? [...s.markets, m] : s.markets.filter(x => x !== m) }));
@@ -518,6 +538,7 @@ export function SetupWizard({ initialState, initialStep = 1, initialMarkets, pre
   onDone: (summary: RunSummary) => void;
   onCancel?: () => void;
 }) {
+  useLocale();
   const [step, setStep] = useState<WizardStep>(initialStep);
   const [state, setState] = useState<WizardState>(initialState ?? emptyWizardState());
   const [markets, setMarkets] = useState<Record<string, MarketSource[]>>(initialMarkets ?? {});

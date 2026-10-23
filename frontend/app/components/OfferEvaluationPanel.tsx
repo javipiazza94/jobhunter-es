@@ -3,38 +3,43 @@
 import { useEffect, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 import { evaluateOffer, evaluateOffersBatch, fetchOfferEvaluation } from "@/lib/api";
+import { t, useLocale } from "@/lib/i18n";
 import type { EvaluationBatchResult, OfferEvaluation } from "@/lib/types";
 
-// Textos de la interfaz en un solo sitio (la traducción llega en SP4).
+// Textos de la interfaz traducidos vía i18n (con getters para retrocompatibilidad).
 export const T = {
-  title: "Evaluación con IA",
-  button: "Evaluar con IA",
-  reevaluate: "Volver a evaluar",
-  busy: "Evaluando con IA…",
-  strengths: "Puntos fuertes",
-  gaps: "Huecos",
-  note: "Opinión aparte: no cambia el score de la oferta.",
-  evaluatedAt: (date: string, provider: string) => `Evaluada el ${date} con ${provider}`,
-  bulkBusy: (n: number) => `Evaluando con IA ${n} oferta${n === 1 ? "" : "s"}...`,
-  bulkEvaluated: (n: number) => `${n} evaluada${n === 1 ? "" : "s"}`,
-  bulkSkipped: (n: number) => `${n} sin evaluar (presupuesto de IA agotado; vuelve a intentarlo)`,
-  bulkFailed: (n: number) => `${n} con error`,
-  verdicts: {
-    "Strong Fit": "Encaje fuerte",
-    "Good Fit": "Buen encaje",
-    "Moderate Fit": "Encaje moderado",
-    "Weak Fit": "Encaje débil",
-    "Poor Fit": "Encaje bajo",
-  } as Record<string, string>,
-  urgency: {
-    expired: "Caducada",
-    urgent: "Cierra en menos de una semana",
-    normal: "Plazo abierto",
-    unknown: "",
-  } satisfies Record<OfferEvaluation["urgency"], string>,
+  get title() { return t("eval.title"); },
+  get button() { return t("eval.button"); },
+  get reevaluate() { return t("eval.reevaluate"); },
+  get busy() { return t("eval.busy"); },
+  get strengths() { return t("eval.strengths"); },
+  get gaps() { return t("eval.gaps"); },
+  get note() { return t("eval.note"); },
+  evaluatedAt: (date: string, provider: string) => t("eval.evaluated_at", { date, provider }),
+  bulkBusy: (n: number) => t("eval.bulk_busy", { count: n }),
+  bulkEvaluated: (n: number) => t("eval.bulk_evaluated", { count: n }),
+  bulkSkipped: (n: number) => t("eval.bulk_skipped", { count: n }),
+  bulkFailed: (n: number) => t("eval.bulk_failed", { count: n }),
+  get verdicts() {
+    return {
+      "Strong Fit": t("eval.verdict_strong"),
+      "Good Fit": t("eval.verdict_good"),
+      "Moderate Fit": t("eval.verdict_moderate"),
+      "Weak Fit": t("eval.verdict_weak"),
+      "Poor Fit": t("eval.verdict_poor"),
+    } as Record<string, string>;
+  },
+  get urgency() {
+    return {
+      expired: t("eval.urgency_expired"),
+      urgent: t("eval.urgency_urgent"),
+      normal: t("eval.urgency_normal"),
+      unknown: "",
+    } satisfies Record<OfferEvaluation["urgency"], string>;
+  },
 };
 
-/** Veredicto en español (las bandas vienen de rank_state en inglés). */
+/** Veredicto en el idioma activo (las bandas vienen de rank_state en inglés). */
 export function verdictLabel(verdict: string): string {
   return T.verdicts[verdict] ?? verdict;
 }
@@ -99,6 +104,7 @@ export function OfferEvaluationPanel({ offerId, initialEvaluation, initialError 
   initialError?: string;
   onEvaluated?: (evaluation: OfferEvaluation) => void;
 }) {
+  useLocale();
   const [evaluation, setEvaluation] = useState<OfferEvaluation | null>(initialEvaluation ?? null);
   const [error, setError] = useState(initialError);
   const [busy, setBusy] = useState(false);
