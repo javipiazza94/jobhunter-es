@@ -124,9 +124,9 @@ Tauri 2 (desktop/src-tauri, Rust)
 
 **Ficheros:** crear `desktop/scripts/fetch_tectonic.py`, `desktop/scripts/tectonic.json`, `desktop/scripts/test_fetch_tectonic.py`.
 
-- [ ] `tectonic.json`: versión, nombre de recurso y SHA-256 por triple (`x86_64-pc-windows-msvc`, `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu/musl`). Solo se escriben hashes que se hayan podido comprobar; los que no, quedan marcados y la CI falla en vez de aceptar un fichero sin verificar.
-- [ ] `fetch_tectonic.py`: descarga, verifica SHA-256, extrae a `desktop/src-tauri/resources/bin/` con permisos de ejecución. Tests con un archivo sintético (hash correcto, hash incorrecto, ruta maliciosa en el zip).
-- [ ] Commit `feat(desktop): Tectonic fijado por versión y hash e incluido en el instalador`.
+- [x] `tectonic.json`: versión, nombre de recurso y SHA-256 por triple (`x86_64-pc-windows-msvc`, `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu/musl`). Los hashes no se pudieron comprobar desde este entorno (GitHub Releases bloqueado): quedan en `null` y la descarga se rechaza hasta fijarlos; el ensayo manual de la CI los imprime.
+- [x] `fetch_tectonic.py`: descarga, verifica SHA-256, extrae a `desktop/src-tauri/resources/bin/` con permisos de ejecución. Tests con un archivo sintético (hash correcto, hash incorrecto, ruta maliciosa en el zip).
+- [x] Commit `feat(desktop): Tectonic fijado por versión y hash e incluido en el instalador`.
 
 ### Tarea 9: CI de instaladores
 
