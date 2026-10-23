@@ -229,7 +229,7 @@ export function PendingCard({ app, tracks, onAction }: PendingCardProps) {
           <button
             onClick={handleSendManually}
             disabled={busy}
-            title="Copia la carta y abre tu cliente de correo — no marca nada como enviado todavía"
+            title={t("pending.send_manually_title")}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-sky-400 border border-sky-500/20 hover:bg-sky-500/10 rounded-lg transition-colors disabled:opacity-40"
           >
             <Mail className="w-4 h-4" /> {t("pending.send_manually")}
@@ -241,13 +241,13 @@ export function PendingCard({ app, tracks, onAction }: PendingCardProps) {
             disabled={busy}
             className="flex items-center gap-1.5 px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all disabled:opacity-40"
           >
-            <Check className="w-4 h-4" /> {busy ? "Enviando…" : "Aprobar y enviar"}
+            <Check className="w-4 h-4" /> {busy ? t("pending.sending") : t("pending.approve_send")}
           </button>
         ) : (
           <button
             onClick={handleOpenOfferAndTrack}
             disabled={busy || !app.job_url}
-            title={app.job_url ?? "Sin URL de oferta guardada"}
+            title={app.job_url ?? t("pending.no_job_url")}
             className="flex items-center gap-1.5 px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all disabled:opacity-40"
           >
             <ExternalLink className="w-4 h-4" /> {t("pending.view_and_apply")}

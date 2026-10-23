@@ -10,7 +10,6 @@ y los grupos de keywords se reparten el resto a partes iguales, sumando exactame
 import re
 import unicodedata
 from pathlib import Path
-from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -18,6 +17,7 @@ from automation.language_gate import LANGUAGES, canonical_language
 from automation.profile_proposal import ProfileDraft, draft_from_dict
 from profile_store import load_profile, save_profile
 import search_config
+from scraper.computrabajo import COUNTRY_DOMAINS as COMPUTRABAJO_COUNTRIES
 from scraper import sources as source_registry
 from search_config import (
     DEFAULT_CONFIG_PATH,
@@ -71,7 +71,7 @@ class SetupAnswers(BaseModel):
     acknowledged_sources: list[str] = Field(default_factory=list)
     followed_companies: list[str] = Field(default_factory=list)
     ai: AISettings = Field(default_factory=AISettings)
-    ui_language: Literal["es", "en"] = "es"
+    ui_language: str = "es"
     cv_path: str | None = None  # ruta relativa a JH_HOME devuelta por POST /api/setup/cv
     source_params: dict[str, dict] = Field(default_factory=dict)
 
@@ -324,7 +324,10 @@ def _source_settings(source_id: str, keywords: list[str], tracks: list[Track], a
         elif wants_local:
             settings["location"] = city
         if custom.get("country"):
-            settings["country"] = custom["country"].strip().lower()
+            c = custom["country"].strip().lower()
+            if c not in COMPUTRABAJO_COUNTRIES:
+                raise ValueError(f"País de Computrabajo no soportado: {custom['country']!r}")
+            settings["country"] = c
         else:
             code = country_code(d.country)
             if code and code.lower() in ("mx", "co", "ar", "pe", "cl", "uy", "ve", "ec", "cr", "pa", "gt", "sv", "hn", "ni", "do"):

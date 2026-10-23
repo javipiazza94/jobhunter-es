@@ -25,7 +25,7 @@ export interface WizardState {
   /** IA que se guarda al aplicar (y la que usa el paso 1 para leer el CV). */
   ai: AISettings;
   /** Idioma de la interfaz elegido en el asistente. */
-  uiLanguage: "es" | "en";
+  uiLanguage: string;
   /** Parámetros específicos por fuente (p. ej. país de Computrabajo). */
   sourceParams: Record<string, { country?: string; location?: string; locations?: string[] }>;
 }

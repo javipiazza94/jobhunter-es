@@ -99,13 +99,13 @@ class SourceSpec:
         return self.start_url
 
     def label_for(self, lang: str = "es", market: str | None = None) -> str:
-        """Etiqueta en `lang` (cae a es) y, si se indica, la propia del mercado."""
+        """Etiqueta en `lang` (cae a es o en) y, si se indica, la propia del mercado."""
         labels = self.market_labels.get(market, self.label) if market else self.label
-        return labels.get(lang) or labels.get("es") or self.id
+        return labels.get(lang) or labels.get("es") or labels.get("en") or self.id
 
     def warning_for(self, lang: str = "es") -> str:
-        """Aviso legal en `lang` (cae a es si falta)."""
-        return self.ack_warning.get(lang) or self.ack_warning.get("es") or ""
+        """Aviso legal en `lang` (cae a es o en si falta)."""
+        return self.ack_warning.get(lang) or self.ack_warning.get("es") or self.ack_warning.get("en") or ""
 
 
 def validate(spec: SourceSpec) -> None:

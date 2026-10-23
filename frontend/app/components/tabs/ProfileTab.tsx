@@ -619,7 +619,7 @@ function FollowedCompaniesBlock() {
             <div key={idx} className="flex flex-wrap items-center gap-2 p-2 rounded-lg bg-black/20 border border-white/5">
               <input
                 type="text"
-                placeholder="Nombre de la empresa"
+                placeholder={t("profile.company_name_placeholder")}
                 value={c.name}
                 onChange={e => updateCompany(idx, { name: e.target.value })}
                 className="bg-[#16161f] border border-white/10 text-gray-300 text-xs rounded px-2.5 py-1.5 focus:ring-1 focus:ring-indigo-500 outline-none flex-1 min-w-[140px]"
@@ -635,7 +635,7 @@ function FollowedCompaniesBlock() {
               </select>
               <input
                 type="text"
-                placeholder="Alias (separados por coma)"
+                placeholder={t("profile.company_aliases_placeholder")}
                 value={c.aliases?.join(", ") || ""}
                 onChange={e => updateCompany(idx, { aliases: e.target.value.split(",").map(a => a.trim()).filter(Boolean) })}
                 className="bg-[#16161f] border border-white/10 text-gray-300 text-xs rounded px-2.5 py-1.5 focus:ring-1 focus:ring-indigo-500 outline-none flex-1 min-w-[140px]"

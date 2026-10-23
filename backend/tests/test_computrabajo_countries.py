@@ -19,10 +19,33 @@ def test_country_base_url_building():
     assert computrabajo.country_base_url("ar") == "https://ar.computrabajo.com"
     assert computrabajo.country_base_url("pe") == "https://pe.computrabajo.com"
     assert computrabajo.country_base_url("cl") == "https://cl.computrabajo.com"
-    # Fallback para país no listado expresamente
     assert computrabajo.country_base_url("uy") == "https://uy.computrabajo.com"
     assert computrabajo.country_base_url("") == "https://www.computrabajo.es"
     assert computrabajo.country_base_url(None) == "https://www.computrabajo.es"
+
+    for invalid in ["evil.com/#", "a b", "xx", "https://malicious.test"]:
+        with pytest.raises(ValueError, match="no soportado"):
+            computrabajo.country_base_url(invalid)
+
+
+def test_setup_builder_computrabajo_invalid_country():
+    import setup_builder
+    from automation.profile_proposal import ProfileDraft
+
+    draft = ProfileDraft(
+        personal={"name": "Test", "city": "Madrid", "country": "España"},
+        targets=[{"title": "Dev", "keywords": ["python"]}],
+    )
+
+    for invalid in ["evil.com/#", "a b", "xx"]:
+        answers = setup_builder.SetupAnswers(
+            draft=draft,
+            markets=["latam"],
+            sources=["computrabajo"],
+            source_params={"computrabajo": {"country": invalid}},
+        )
+        with pytest.raises(ValueError, match="no soportado"):
+            setup_builder._source_settings("computrabajo", ["python"], [], answers)
 
 
 def test_source_spec_start_url_for_country():

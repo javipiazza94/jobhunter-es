@@ -229,7 +229,7 @@ export interface SetupAnswers {
   acknowledged_sources: string[];
   followed_companies: string[];
   ai?: AISettings;
-  ui_language?: "es" | "en";
+  ui_language?: string;
   cv_path?: string | null;
   source_params?: Record<string, { country?: string; locations?: string[] }>;
 }

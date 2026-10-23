@@ -39,6 +39,8 @@ const ALLOWLIST = new Set([
 beforeEach(() => setLocale("es"));
 afterEach(() => setLocale("es"));
 
+const CHECKED_ATTRS = new Set(["title", "placeholder", "aria-label", "alt"]);
+
 test("no-hardcoded scan: ningún componente en app/ contiene texto JSX en prosa sin traducir", () => {
   const files = findTsxFiles(APP_DIR);
   expect(files.length).toBeGreaterThan(15);
@@ -57,6 +59,25 @@ test("no-hardcoded scan: ningún componente en app/ contiene texto JSX en prosa 
           const { line } = sf.getLineAndCharacterOfPosition(node.getStart());
           const relPath = file.replace(FRONTEND_ROOT + "/", "");
           violations.push(`${relPath}:${line + 1}: "${text}"`);
+        }
+      } else if (ts.isJsxAttribute(node)) {
+        const attrName = node.name.text;
+        if (CHECKED_ATTRS.has(attrName) && node.initializer) {
+          let text: string | null = null;
+          if (ts.isStringLiteral(node.initializer)) {
+            text = node.initializer.text.trim();
+          } else if (
+            ts.isJsxExpression(node.initializer) &&
+            node.initializer.expression &&
+            ts.isStringLiteral(node.initializer.expression)
+          ) {
+            text = node.initializer.expression.text.trim();
+          }
+          if (text && !ALLOWLIST.has(text) && /[a-zA-ZáéíóúÁÉÍÓÚñÑ]/.test(text)) {
+            const { line } = sf.getLineAndCharacterOfPosition(node.getStart());
+            const relPath = file.replace(FRONTEND_ROOT + "/", "");
+            violations.push(`${relPath}:${line + 1}: [${attrName}] "${text}"`);
+          }
         }
       }
       ts.forEachChild(node, walk);

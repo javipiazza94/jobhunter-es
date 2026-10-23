@@ -14,14 +14,27 @@ import config
 from scraper import sources as source_registry
 
 
+SOURCE_TESTS: dict[str, tuple[str, str]] = {
+    "tecnoempleo": ("test_source_characterisation.py", "test_cli_source_tecnoempleo_indeed_manfred"),
+    "infojobs": ("test_infojobs.py", "test_parse_card_returns_expected_fields"),
+    "computrabajo": ("test_computrabajo_countries.py", "test_parse_cards_per_country"),
+    "manfred": ("test_source_characterisation.py", "test_cli_source_tecnoempleo_indeed_manfred"),
+    "linkedin": ("test_linkedin_jobs.py", "test_is_checkpoint_detects_authwall"),
+    "indeed": ("test_source_characterisation.py", "test_cli_source_tecnoempleo_indeed_manfred"),
+    "remotive": ("test_sources_remote.py", "test_parsing_and_keyword_filter"),
+    "remoteok": ("test_sources_remote.py", "test_parsing_and_keyword_filter"),
+    "arbeitnow": ("test_sources_remote.py", "test_parsing_and_keyword_filter"),
+    "freehire": ("test_sources_remote.py", "test_parsing_and_keyword_filter"),
+    "company_direct": ("test_company_direct.py", "test_is_relevant_offer_with_custom_keywords"),
+}
+
+
 def test_meta_all_registered_sources_have_specs_and_tests():
-    """Cada fuente registrada en scraper.sources tiene especificación completa y tests asociados."""
+    """Cada fuente registrada en scraper.sources tiene especificación completa y un test propio que la ejecuta."""
     reg = source_registry.registry()
     assert len(reg) >= 10, f"Se esperaban al menos 10 fuentes registradas, encontradas {len(reg)}"
 
     tests_dir = Path(__file__).parent
-    test_files = list(tests_dir.glob("test_*.py"))
-    all_test_content = "\n".join(f.read_text(encoding="utf-8") for f in test_files)
 
     for sid, spec in reg.items():
         # Verificación de ficha
@@ -33,32 +46,57 @@ def test_meta_all_registered_sources_have_specs_and_tests():
             assert spec.attribution.url, f"Fuente {sid} carece de attribution.url"
         assert len(spec.markets) >= 1 or sid == "company_direct", f"Fuente {sid} no declara mercados"
 
-        # Verificación de que la fuente está probada en los tests
-        assert sid in all_test_content, f"La fuente registrada '{sid}' no está referenciada en ningún test de backend"
+        # Verificación de test propio dedicado
+        assert sid in SOURCE_TESTS, f"La fuente registrada '{sid}' no tiene un test propio asignado en SOURCE_TESTS"
+        test_file, test_fn = SOURCE_TESTS[sid]
+        target_path = tests_dir / test_file
+        assert target_path.exists(), f"El archivo de test '{test_file}' para la fuente '{sid}' no existe"
+        file_content = target_path.read_text(encoding="utf-8")
+        assert test_fn in file_content, f"La función de test '{test_fn}' no se encontró en '{test_file}' para la fuente '{sid}'"
 
 
 def test_add_new_language_without_code_changes(tmp_path, monkeypatch):
-    """Añadir un idioma nuevo (directorio de plantillas 'xx' y etiquetas) funciona sin tocar código."""
+    """Añadir un idioma nuevo (directorio de plantillas 'xx', ui_language y etiquetas) funciona sin tocar código."""
+    import setup_builder
+    from automation.profile_proposal import ProfileDraft
+
+    # 1. El modelo de respuestas del asistente y perfil acepta el nuevo idioma 'xx'
+    draft = ProfileDraft(
+        personal={"name": "Carlos Dev", "city": "Madrid", "country": "España"},
+        targets=[{"title": "Dev", "keywords": ["python"]}],
+    )
+    answers = setup_builder.SetupAnswers(draft=draft, ui_language="xx")
+    assert answers.ui_language == "xx"
+
+    # 2. Las fuentes del registro resuelven etiquetas y avisos para 'xx' cayendo a es/en sin fallar
+    for spec in source_registry.registry().values():
+        label_xx = spec.label_for("xx")
+        assert label_xx, f"La fuente {spec.id} devolvió una etiqueta vacía para el idioma 'xx'"
+        assert label_xx in (spec.label.get("es"), spec.label.get("en"), spec.id)
+
+    # 3. El catálogo de mercados del asistente y setup_builder funciona con 'xx'
+    catalog_xx = source_registry.market_catalog("xx")
+    assert set(catalog_xx.keys()) == set(source_registry.MARKETS)
+    markets_xx = setup_builder.load_markets("xx")
+    assert "spain" in markets_xx and len(markets_xx["spain"]) > 0
+
+    # 4. Plantillas y generación de cartas en el nuevo idioma
     custom_templates_dir = tmp_path / "custom_templates"
     xx_dir = custom_templates_dir / "xx"
     xx_dir.mkdir(parents=True)
 
-    # 1. Crear plantilla de carta en el nuevo idioma
     (xx_dir / "cover_letter_base.j2").write_text(
         "Guten Tag {{ company_name }}. Mein Name ist {{ name }}.\n", encoding="utf-8"
     )
 
     monkeypatch.setattr(config, "TEMPLATES_OVERRIDE_DIR", custom_templates_dir)
 
-    # 2. Descubrimiento automático del nuevo idioma
     avail = available_template_languages()
     assert "xx" in avail, "El idioma 'xx' no fue descubierto automáticamente"
 
-    # 3. Resolución del idioma de la oferta
     offer = {"title": "Software Engineer", "company_name": "Acme Corp", "language": "xx"}
     assert letter_language(offer, {}) == "xx"
 
-    # 4. Generación de carta en el nuevo idioma sin modificar código
     letter = generate(company_name="Acme Corp", job_title="Software Engineer", lang="xx")
     assert "Guten Tag Acme Corp." in letter
 

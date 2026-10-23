@@ -38,7 +38,9 @@ COUNTRY_DOMAINS: dict[str, str] = {
 
 def country_base_url(country: str = "es") -> str:
     c = (country or "es").strip().lower()
-    return COUNTRY_DOMAINS.get(c, f"https://{c}.computrabajo.com")
+    if c not in COUNTRY_DOMAINS:
+        raise ValueError(f"País de Computrabajo no soportado: {country!r}")
+    return COUNTRY_DOMAINS[c]
 
 
 def _slugify(text: str) -> str:
