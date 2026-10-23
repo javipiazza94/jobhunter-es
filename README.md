@@ -49,7 +49,8 @@ Job Portals / Direct Companies / Inbox Files
 - **Python 3.11+**
 - **Node.js 18+** and **[Bun](https://bun.sh/)**
 - **Playwright Chromium:** `playwright install chromium`
-- Optional for local PDF compilation: **[Tectonic](https://tectonic-typesetting.github.io/)**
+- Optional for local PDF compilation: **[Tectonic](https://tectonic-typesetting.github.io/)** (bundled in the desktop app) or `xelatex` plus Poppler
+- Optional to build the desktop app yourself: Rust (stable) and the Tauri system libraries; see [desktop/README.md](desktop/README.md)
 
 ---
 
@@ -89,7 +90,15 @@ cp backend/profile.example.json data/profile.json
 
 ## Desktop app
 
-If you'd rather not use a terminal, the [desktop app](desktop/README.md) bundles the dashboard, the backend and Tectonic in one installer (Windows, macOS, Linux). Your data lives in the system data folder. Installers are unsigned; the guide explains the first-launch warnings.
+If you'd rather not use a terminal, the [desktop app](desktop/README.md) bundles the dashboard, the backend and Tectonic in one installer, so JobHunter ES runs like any other program.
+
+- **Installers:** Windows (`.msi`/`.exe`), macOS (`.dmg`, Apple Silicon and Intel) and Linux (`.deb`, `.AppImage`), built by the `Desktop` GitHub Actions workflow.
+- **Your data** (profile, database, CVs, applications) lives in the system data folder (`~/.local/share/jobhunter`, `%APPDATA%\jobhunter`, `~/Library/Application Support/jobhunter`), never in the install folder.
+- **Local only:** the bundled backend listens on `127.0.0.1` on a free port and keeps the API protections described in [docs/adr/](docs/adr/).
+- **On demand:** Chromium (form filling) is downloaded the first time it is needed. Ollama is not bundled: the app detects it and offers to install it or to choose another AI provider.
+- **Unsigned, no auto-update:** the system warns the first time you open it (the guide explains how to proceed) and the app only tells you when a newer version exists.
+
+> **Status:** CI builds the installers on every version tag and on manual runs, but no release has been published yet. The Linux `.deb` has been installed and opened end to end; the Windows and macOS builds are produced and pass the backend smoke test but have had little real-world testing, so treat them as experimental.
 
 ## Running Locally
 
@@ -188,6 +197,14 @@ JobHunter provides built-in templates based on `moderncv` (banking) for CVs and 
 
 ---
 
+## Languages
+
+- **Interface:** Spanish and English, with a language selector in the app. The first launch follows your profile or browser language; your choice is remembered.
+- **Documents:** cover letters and follow-ups are written in the language of the offer when a template exists for it, otherwise in your default language. The language gate also recognises offers in German, French, Italian and Portuguese.
+- **Adding a language** (`de`, `fr`, `it`…) needs no core code changes: a dictionary, a few templates and a labels file. See [Adding a Language](CONTRIBUTING.md#adding-a-language).
+
+---
+
 ## Supported Job Sources
 
 JobHunter ES uses an extensible, self-describing sources registry (`docs/sources.md`):
@@ -249,7 +266,13 @@ cd ../frontend
 bun run test
 bunx tsc --noEmit -p .
 bun run lint
+
+# Desktop packaging scripts
+cd ..
+python -m pytest -q desktop/scripts
 ```
+
+The document tests compile real PDFs, so they need a LaTeX engine and Poppler. On Debian/Ubuntu: `sudo apt-get install texlive-xetex texlive-latex-extra texlive-fonts-recommended texlive-fonts-extra poppler-utils` (the CI installs the same packages), or install Tectonic.
 
 ---
 
@@ -264,7 +287,10 @@ jobhunter-es/
 │   ├── templates/          # Jinja2 and LaTeX templates
 │   ├── tests/              # Comprehensive test suite with neutral fixtures
 │   └── main.py             # FastAPI backend application
-├── frontend/               # Next.js review and management dashboard
+├── frontend/               # Next.js review and management dashboard (es/en dictionaries in lib/i18n)
+├── desktop/                # Tauri 2 desktop app: packaging scripts and installer config
+├── templates/              # LaTeX templates (CV, cover letter) and per-language labels
+├── .github/workflows/      # CI (tests) and desktop installers
 ├── docs/                   # Guides, inbox sync format, and ADRs
 ├── seeds/                  # Seed datasets (e.g. companies with public salaries)
 ├── scripts/                # Helper utilities and data loaders

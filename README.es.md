@@ -37,6 +37,8 @@ Dashboard "Pendientes"       editar carta + aprobar o rechazar
 - Python 3.11+, Node.js 18+, [Bun](https://bun.sh/)
 - Gmail con [App Password](https://myaccount.google.com/apppasswords) activada
 - Playwright: `playwright install chromium`
+- Opcional para compilar PDF en local: [Tectonic](https://tectonic-typesetting.github.io/) (incluido en la app de escritorio) o `xelatex` más Poppler
+- Opcional para compilar la app de escritorio tú mismo: Rust (estable) y las librerías de sistema de Tauri; ver [desktop/README.md](desktop/README.md)
 
 ## Instalación
 
@@ -78,7 +80,15 @@ Copia tus CVs a `data/cv/` con los nombres que indica `profile.json` (por ejempl
 
 ## App de escritorio
 
-Si prefieres no usar el terminal, la [app de escritorio](desktop/README.md) trae el dashboard, el backend y Tectonic en un instalador (Windows, macOS y Linux). Tus datos quedan en la carpeta de datos del sistema. Los instaladores no están firmados; la guía explica los avisos del primer arranque.
+Si prefieres no usar el terminal, la [app de escritorio](desktop/README.md) trae el dashboard, el backend y Tectonic en un instalador, y se usa como cualquier otro programa.
+
+- **Instaladores:** Windows (`.msi`/`.exe`), macOS (`.dmg`, Apple Silicon e Intel) y Linux (`.deb`, `.AppImage`), generados por el workflow `Desktop` de GitHub Actions.
+- **Tus datos** (perfil, base de datos, CVs, candidaturas) están en la carpeta de datos del sistema (`~/.local/share/jobhunter`, `%APPDATA%\jobhunter`, `~/Library/Application Support/jobhunter`), nunca en la carpeta de instalación.
+- **Solo en local:** el backend incluido escucha en `127.0.0.1` en un puerto libre y mantiene las protecciones de la API descritas en [docs/adr/](docs/adr/).
+- **Bajo demanda:** Chromium (relleno de formularios) se descarga la primera vez que hace falta. Ollama no va incluido: la app lo detecta y ofrece instalarlo o elegir otro proveedor de IA.
+- **Sin firmar y sin actualización automática:** el sistema avisa la primera vez que la abres (la guía explica cómo continuar) y la app solo te dice cuándo hay una versión nueva.
+
+> **Estado:** la CI genera los instaladores con cada tag de versión y en ejecuciones manuales, pero todavía no hay ninguna release publicada. El `.deb` de Linux se ha instalado y abierto de punta a punta; los de Windows y macOS se generan y pasan la prueba de humo del backend, pero se han probado poco en un equipo real: considéralos experimentales.
 
 ## Arranque
 
@@ -178,6 +188,12 @@ JobHunter incluye por defecto plantillas integradas basadas en `moderncv` (banki
 
 ---
 
+## Idiomas
+
+- **Interfaz:** español e inglés, con selector de idioma en la app. El primer arranque sigue el idioma de tu perfil o del navegador y tu elección se recuerda.
+- **Documentos:** las cartas y los seguimientos se escriben en el idioma de la oferta si hay plantilla para él y, si no, en tu idioma por defecto. El filtro de idiomas también reconoce ofertas en alemán, francés, italiano y portugués.
+- **Añadir un idioma** (`de`, `fr`, `it`…) no requiere cambios en el código del núcleo: un diccionario, unas plantillas y un fichero de etiquetas. Ver [Adding a Language](CONTRIBUTING.md#adding-a-language).
+
 ## Uso
 
 Flujo completo (seed → scraping → contactos → borradores → formularios → envío tras aprobación en el dashboard) y comandos: skill `run-pipeline` (`.claude/skills/run-pipeline/SKILL.md`). Ofertas y candidaturas dejadas en el inbox: `docs/inbox.md`.
@@ -197,6 +213,7 @@ backend/
 ├── scraper/
 │   ├── runner.py                CLI (--source seed|tecnoempleo|indeed|manfred|contacts|generic|… · --track <id>)
 │   ├── persist.py               Puntúa y guarda ofertas scrapeadas (punto único)
+│   ├── sources/                 Registro de fuentes autodescubierto: un fichero por fuente (ver docs/sources.md)
 │   ├── tecnoempleo.py · infojobs.py · computrabajo.py · linkedin_jobs.py · manfred.py · company_direct.py
 │   ├── generic.py               Trabajos puente (InfoJobs/Indeed)
 │   ├── seed_loader.py           50 empresas con salario público
@@ -225,7 +242,11 @@ frontend/
 ├── app/components/OfferBucketTab.tsx  Una pestaña por track (generadas desde `GET /api/tracks`)
 ├── app/hooks/                   Filtros de Ofertas y de Candidaturas
 ├── app/components/PendingCard.tsx  Tarjeta de revisión con textarea editable
+├── lib/i18n/                    Diccionarios es/en (añadir un idioma = un JSON más)
 └── lib/api.ts                   Cliente API tipado
+
+desktop/                         App de escritorio (Tauri 2): scripts de empaquetado y configuración de instaladores
+templates/                       Plantillas LaTeX (CV y carta) y etiquetas por idioma
 ```
 
 ## Fuentes de Empleo Soportadas
@@ -270,6 +291,9 @@ SQLite en `data/job_hunter.db` (dentro de `JH_HOME`, ignorada por git; `JH_DB_PA
 - [x] Form filler con Playwright — SuccessFactors + genérico, probados contra formularios reales (`fill-forms`, nunca auto-envía)
 - [x] Form filler: cobertura Workday / Greenhouse / Lever — mismo principio de no auto-enviar, pero sin probar aún contra un formulario real de cada uno (a diferencia de SuccessFactors/genérico). Si sale un falso negativo, hay que ajustar los selectores.
 - [x] Integración de herramientas upstream `ai-job-search` (posting guard, robots.txt, compilação LaTeX, verificación PDF/layout, caché de investigación y triage)
+- [x] Internacionalización: interfaz es/en, documentos en el idioma de la oferta, fuentes remotas (Remotive, RemoteOK, Arbeitnow, freehire) y Computrabajo por país
+- [x] App de escritorio (Tauri): instaladores generados por la CI (Linux probado; Windows y macOS, experimentales)
+- [ ] Publicar la primera versión (tag) y probar los instaladores de Windows y macOS en equipos reales
 - [ ] Hunter.io API para más emails
 - [ ] Notificaciones cuando responden (Gmail polling)
 
