@@ -26,7 +26,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from ai import AIError, get_provider
+from ai import AIError, get_provider, warn_ai_unavailable
 from automation import application_archive, templates_registry
 from automation.ai_documents import AI_DEADLINE_SECONDS, cap_warnings, run_ai_flow, shorten_documents
 from automation.document_generator import (
@@ -199,7 +199,8 @@ def _resolve_use_ai(use_ai: bool | None) -> bool:
         from search_config import get_config
 
         return get_config().ai.provider != "none"
-    except Exception:  # noqa: BLE001 — configuración ilegible: sin IA
+    except Exception as exc:  # noqa: BLE001 — configuración ilegible: sin IA
+        warn_ai_unavailable("generar los documentos", exc)
         return False
 
 

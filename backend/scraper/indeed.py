@@ -215,17 +215,19 @@ async def run_indeed(
                        "no hay nada que buscar")
         return []
 
+    from scraper.base import SourceUnavailable, raise_if_all_failed
+
     api_key = get_secret("scraperapi_key") or SCRAPERAPI_KEY
     if not api_key or api_key == "your_scraperapi_key_here":
-        logger.error(
-            "Indeed: SCRAPERAPI_KEY not set. "
-            "Get a free key at https://www.scraperapi.com and set it in backend/.env"
+        raise SourceUnavailable(
+            "Indeed: SCRAPERAPI_KEY no configurada. "
+            "Consigue una clave gratuita en https://www.scraperapi.com y ponla en backend/.env"
         )
-        return []
 
     seen: set[str] = set()
     all_offers: list[dict] = []
 
+    failures = 0
     for kw in keywords:
         for loc in locations:
             logger.info("Indeed: keyword=%s location=%s", kw, loc)
@@ -235,7 +237,9 @@ async def run_indeed(
                         seen.add(offer["url"])
                         all_offers.append(offer)
             except Exception as e:
+                failures += 1
                 logger.error("Indeed keyword '%s' @ '%s' failed: %s", kw, loc, e)
 
+    raise_if_all_failed("Indeed", len(keywords) * len(locations), failures)
     logger.info("Indeed total: %d unique offers", len(all_offers))
     return all_offers

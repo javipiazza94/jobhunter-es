@@ -109,13 +109,23 @@ async def run_contacts_source(dry_run: bool):
     logger.info("Contacts extraction complete: %d contacts found", found)
 
 
-async def _isolated(label: str, step) -> None:
-    """Ejecuta una fuente; si falla se registra y las demás siguen."""
+class SourcesFailed(Exception):
+    """Alguna fuente de un track falló. Las demás se ejecutaron igualmente; `labels` son las que no funcionaron."""
+
+    def __init__(self, labels: list[str]):
+        super().__init__(f"Fuentes con error: {', '.join(labels)}")
+        self.labels = labels
+
+
+async def _isolated(label: str, step) -> bool:
+    """Ejecuta una fuente; si falla se registra y las demás siguen. Devuelve False si falló."""
     logger.info("── %s ──", label)
     try:
         await step()
     except Exception as e:
         logger.error("%s failed: %s", label, e)
+        return False
+    return True
 
 
 async def run_track_source(track_id: str, dry_run: bool, max_pages: int, only_sources: set[str] | None = None):
@@ -138,6 +148,7 @@ async def run_track_source(track_id: str, dry_run: bool, max_pages: int, only_so
         logger.warning("Track '%s': sources.tecnoempleo.locations vacío en jobhunter.yaml; "
                        "Tecnoempleo no buscará nada", track_id)
 
+    failed_sources: list[str] = []
     for spec in source_registry.track_pipeline():
         label = spec.label_for("es")
         if only_sources is not None and not spec.track_always and spec.id not in only_sources:
@@ -166,7 +177,11 @@ async def run_track_source(track_id: str, dry_run: bool, max_pages: int, only_so
             if not spec.persists_itself:
                 _save_source(label, offers, track_id, dry_run)
 
-        await _isolated(label, step)
+        if not await _isolated(label, step):
+            failed_sources.append(label)
+
+    if failed_sources:
+        raise SourcesFailed(failed_sources)
 
 
 def print_stats():
@@ -286,7 +301,11 @@ def main():
 
     if args.track:
         logger.info("── Track %s (multi-portal) ──", args.track)
-        asyncio.run(run_track_source(args.track, args.dry_run, args.max_pages))
+        try:
+            asyncio.run(run_track_source(args.track, args.dry_run, args.max_pages))
+        except SourcesFailed as exc:
+            print_stats()
+            raise SystemExit(str(exc)) from exc
         print_stats()
         return
 

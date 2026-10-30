@@ -15,7 +15,7 @@ import time
 import unicodedata
 from pathlib import Path
 
-from ai import AIError, AIUnavailable, Provider, get_provider
+from ai import AIError, AIUnavailable, Provider, get_provider, warn_ai_unavailable
 from automation.ai_documents import _research_block
 from automation.company_researcher import RESEARCH_BUDGET_SECONDS, get_or_research
 from database import get_conn
@@ -139,7 +139,8 @@ def adapt_cover_letter(
     """
     try:
         provider = provider or get_provider()
-    except Exception:  # noqa: BLE001 — configuración inválida: se sigue con la plantilla
+    except Exception as exc:  # noqa: BLE001 — configuración inválida: se sigue con la plantilla
+        warn_ai_unavailable("adaptar la carta", exc)
         return template_letter, "template"
     if getattr(provider, "name", "") == "none":
         return template_letter, "template"

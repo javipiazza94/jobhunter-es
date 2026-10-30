@@ -24,7 +24,7 @@ from typing import Any
 
 import config
 import search_config
-from ai import AIError, Provider, get_provider
+from ai import AIError, Provider, get_provider, warn_ai_unavailable
 from automation.ai_documents import _allowed_skills
 from automation.ai_writing import _profile_facts, _untrusted
 
@@ -182,7 +182,8 @@ def _resolve_provider(provider: Provider | None) -> Provider | None:
     """Proveedor usable o None (sin IA o configuración inválida: el informe sale sin plan)."""
     try:
         provider = provider or get_provider()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        warn_ai_unavailable("el plan de estudio", exc)
         return None
     return None if getattr(provider, "name", "") == "none" else provider
 

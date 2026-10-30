@@ -434,6 +434,11 @@ export async function createDrafts(limit?: number): Promise<{ drafts_created: nu
   return res.json();
 }
 
+/** Cierra una candidatura atascada en «enviando»: `sent` = el email salió (true) o no (false). */
+export async function resolveSendingApplication(id: string, sent: boolean): Promise<{ id: string; status: string }> {
+  return checked(await request(`${BASE}/api/applications/${encodeURIComponent(id)}/resolve-sending?sent=${sent}`, { method: "POST" }));
+}
+
 export async function fetchPendingApplications(): Promise<PendingApplication[]> {
   const res = await request(`${BASE}/api/applications/pending`);
   return res.json();

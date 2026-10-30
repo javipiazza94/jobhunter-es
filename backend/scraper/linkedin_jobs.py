@@ -17,7 +17,7 @@ from urllib.parse import urlencode
 from playwright.async_api import async_playwright, Page
 
 from automation.browser_install import ensure_chromium_async
-from scraper.base import USER_AGENTS
+from scraper.base import USER_AGENTS, SourceUnavailable
 from config import LINKEDIN_SESSION_PATH
 from search_config import source_settings
 
@@ -182,8 +182,10 @@ async def run_linkedin_jobs(max_per_search: int = 25, track: str | None = None) 
         await asyncio.sleep(random.uniform(3, 5))
         html = await page.content()
         if _is_checkpoint(page.url, html):
-            logger.warning("LinkedIn checkpoint at feed — re-run: python -m scraper.runner --source linkedin-login")
-            return []
+            raise SourceUnavailable(
+                "LinkedIn: sesión caducada (checkpoint en el feed); vuelve a iniciar sesión: "
+                "python -m scraper.runner --source linkedin-login"
+            )
         logger.info("LinkedIn: session active, starting searches")
 
         for search in linkedin_searches(track):

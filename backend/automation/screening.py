@@ -26,7 +26,7 @@ import unicodedata
 from datetime import date
 from typing import Any
 
-from ai import AIError, AIUnavailable, Provider, get_provider
+from ai import AIError, AIUnavailable, Provider, get_provider, warn_ai_unavailable
 from automation.ai_writing import _offer_block, _profile_facts, _untrusted
 from automation.language_gate import canonical_language
 from database import get_conn
@@ -490,7 +490,8 @@ def answer_for_application(application_id: str, questions: list[dict]) -> list[d
         raise ApplicationNotFound(application_id)
     try:
         provider: Provider | None = get_provider()
-    except Exception:  # noqa: BLE001 — configuración de IA inválida: solo perfil
+    except Exception as exc:  # noqa: BLE001 — configuración de IA inválida: solo perfil
+        warn_ai_unavailable("responder preguntas de cribado", exc)
         provider = None
     from profile_store import load_profile
 

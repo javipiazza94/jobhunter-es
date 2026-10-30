@@ -22,6 +22,14 @@ from secrets_store import get_secret
 logger = logging.getLogger(__name__)
 
 
+class EmailSendError(Exception):
+    """El email no salió. `reason` es apto para guardar y mostrar: nunca incluye credenciales."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
 def smtp_settings() -> tuple[str, int, bool, str, str, str]:
     """(host, port, starttls, usuario, contraseña, cabecera From) resueltos en este momento.
 
@@ -52,8 +60,11 @@ def _build_message(to: str, subject: str, body: str, attachments: list[Path], fr
     msg.attach(MIMEText(body, "plain", "utf-8"))
 
     for path in attachments:
-        if not path or not path.exists():
-            continue
+        if not path:
+            continue  # adjunto no solicitado
+        if not path.exists():
+            # Un CV o carta pedidos pero ausentes no se omiten: la candidatura saldría incompleta y marcada como enviada.
+            raise FileNotFoundError(f"adjunto no encontrado: {path.name}")
         with path.open("rb") as f:
             part = MIMEBase("application", "octet-stream")
             part.set_payload(f.read())
@@ -61,6 +72,46 @@ def _build_message(to: str, subject: str, body: str, attachments: list[Path], fr
         part.add_header("Content-Disposition", f"attachment; filename={path.name}")
         msg.attach(part)
     return msg
+
+
+def _configured_smtp_settings() -> tuple[str, int, bool, str, str, str]:
+    """smtp_settings() exigiendo usuario y contraseña; EmailSendError si faltan."""
+    settings = smtp_settings()
+    _host, _port, _starttls, username, password, _from_header = settings
+    if not username or not password:
+        raise EmailSendError("SMTP sin configurar: falta usuario (email.username / GMAIL_USER) o contraseña")
+    return settings
+
+
+def deliver_email(
+    to: str,
+    subject: str,
+    body: str,
+    cv_path: Path | None = None,
+    cover_letter_path: Path | None = None,
+) -> str:
+    """Envía el email con CV y carta adjuntos y devuelve su Message-ID.
+
+    Lanza EmailSendError (con el motivo, sin credenciales) si no sale; los adjuntos se comprueban antes de conectar."""
+    host, port, starttls, username, password, from_header = _configured_smtp_settings()
+
+    try:
+        msg = _build_message(to, subject, body, [cv_path, cover_letter_path], from_header)
+    except FileNotFoundError as e:
+        raise EmailSendError(str(e)) from e
+
+    message_id = msg["Message-ID"]
+    try:
+        with _connect(host, port) as server:
+            server.ehlo()
+            if starttls and port != 465:
+                server.starttls()
+            server.login(username, password)
+            server.sendmail(username, to, msg.as_string())
+    except Exception as e:  # noqa: BLE001 — solo se conserva el tipo: el detalle puede citar credenciales
+        raise EmailSendError(type(e).__name__) from e
+    logger.info("Email sent to %s (id=%s)", to, message_id)
+    return message_id
 
 
 def send_email(
@@ -71,30 +122,18 @@ def send_email(
     cover_letter_path: Path | None = None,
     dry_run: bool = False,
 ) -> tuple[bool, str | None]:
-    """Send email with CV and (optionally) a cover letter file attached. Returns (success, message_id)."""
-    host, port, starttls, username, password, from_header = smtp_settings()
-    if not username or not password:
-        logger.error("SMTP sin configurar: falta usuario (email.username / GMAIL_USER) o contraseña.")
-        return False, None
+    """Send email with CV and (optionally) a cover letter file attached. Returns (success, message_id).
 
-    if dry_run:
-        dry_id = f"<dry-run-{uuid.uuid4()}@jobhunter>"
-        logger.info("[DRY-RUN] Would send email to %s: %s", to, subject)
-        return True, dry_id
-
+    Para saber por qué falla un envío, usar deliver_email()."""
     try:
-        msg = _build_message(to, subject, body, [cv_path, cover_letter_path], from_header)
-        message_id = msg["Message-ID"]
-        with _connect(host, port) as server:
-            server.ehlo()
-            if starttls and port != 465:
-                server.starttls()
-            server.login(username, password)
-            server.sendmail(username, to, msg.as_string())
-        logger.info("Email sent to %s (id=%s)", to, message_id)
-        return True, message_id
-    except Exception as e:
-        logger.error("Failed to send email to %s: %s", to, type(e).__name__)
+        if dry_run:
+            _configured_smtp_settings()  # un dry-run también avisa de un SMTP sin configurar
+            dry_id = f"<dry-run-{uuid.uuid4()}@jobhunter>"
+            logger.info("[DRY-RUN] Would send email to %s: %s", to, subject)
+            return True, dry_id
+        return True, deliver_email(to, subject, body, cv_path, cover_letter_path)
+    except EmailSendError as e:
+        logger.error("Failed to send email to %s: %s", to, e.reason)
         return False, None
 
 

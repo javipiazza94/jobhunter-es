@@ -21,6 +21,16 @@ USER_AGENTS = [
 ACCEPT_LANGUAGES = ["es-ES,es;q=0.9,en;q=0.8", "es-ES,es;q=0.8", "es;q=0.9,en-US;q=0.8"]
 
 
+class SourceUnavailable(Exception):
+    """La fuente no pudo buscar nada (sesión caducada, clave ausente, portal caído): no equivale a «0 ofertas»."""
+
+
+def raise_if_all_failed(source: str, attempts: int, failures: int) -> None:
+    """Un fallo parcial (una palabra clave) se tolera; si fallaron todas las búsquedas, la fuente no ha funcionado."""
+    if attempts and failures == attempts:
+        raise SourceUnavailable(f"{source}: fallaron las {attempts} búsquedas")
+
+
 class BaseScraper:
     def __init__(self, delay_min: float = 3.0, delay_max: float = 8.0, headless: bool = True):
         self.delay_min = delay_min

@@ -9,7 +9,7 @@ import re
 import logging
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
-from scraper.base import BaseScraper
+from scraper.base import BaseScraper, raise_if_all_failed
 from search_config import source_settings
 
 logger = logging.getLogger(__name__)
@@ -140,6 +140,7 @@ async def run_computrabajo(
     if not keywords:
         logger.warning("Computrabajo: sin keywords (search_keywords del track en jobhunter.yaml); "
                        "no hay nada que buscar")
+    failures = 0
     for kw in keywords:
         logger.info("Computrabajo keyword: %s", kw)
         try:
@@ -148,6 +149,8 @@ async def run_computrabajo(
                     seen.add(offer["url"])
                     all_offers.append(offer)
         except Exception as e:
+            failures += 1
             logger.error("Computrabajo keyword '%s' failed: %s", kw, e)
+    raise_if_all_failed("Computrabajo", len(keywords), failures)
     logger.info("Computrabajo total: %d unique offers", len(all_offers))
     return all_offers

@@ -605,6 +605,17 @@ def approve_application(app_id: str):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/api/applications/{app_id}/resolve-sending")
+def resolve_sending_application(app_id: str, sent: bool):
+    """Cierra una candidatura atascada en 'sending': `?sent=true` si el email salió, `?sent=false` si no."""
+    from automation.application_engine import resolve_unconfirmed_send
+    try:
+        status = resolve_unconfirmed_send(app_id, was_sent=sent)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"id": app_id, "status": status}
+
+
 @app.post("/api/applications/{app_id}/mark-sent-manual")
 def mark_application_sent_manual(app_id: str):
     from automation.application_engine import mark_sent_manual

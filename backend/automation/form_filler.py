@@ -38,6 +38,11 @@ async def _run_fill(
     handler = getattr(importlib.import_module(module_name), func_name)
     logger.info("Form filler: ATS=%s URL=%s headless=%s", ats, form_url, headless)
 
+    # Sin CV los handlers rellenan el resto, pero el formulario no puede darse por completo.
+    has_cv = bool(cv_path and cv_path.exists())
+    if not has_cv:
+        logger.warning("Sin CV para %s: se rellena el resto del formulario y habrá que adjuntarlo a mano.", form_url)
+
     system_chromium = shutil.which("chromium") or shutil.which("chromium-browser")
     launch_kwargs: dict = {
         "headless": headless,
@@ -68,12 +73,14 @@ async def _run_fill(
         if pause_for_review and result and not headless:
             # Never auto-submits: the browser window stays open with the filled
             # form until the human reviews it and confirms here in the terminal.
+            missing_cv_notice = "" if has_cv else ">>> ATENCIÓN: no se ha adjuntado el CV. Adjúntalo tú a mano antes de enviar.\n"
             input(
                 "\n>>> Formulario rellenado. Revisa la ventana del navegador y, si todo "
                 "está bien, pulsa Enviar tú mismo/a.\n"
+                f"{missing_cv_notice}"
                 ">>> Pulsa Enter aquí cuando hayas terminado para cerrar el navegador... "
             )
-        return result
+        return result and has_cv
     except Exception as e:
         logger.error("Form filler error (%s): %s", ats, e)
         return False

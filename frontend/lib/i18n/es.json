@@ -538,5 +538,11 @@
   "ollama_notice.install": "Descargar Ollama",
   "ollama_notice.stopped": "Ollama está instalado pero no está en marcha. Ábrelo y pulsa «Comprobar de nuevo».",
   "ollama_notice.no_models": "Ollama responde pero no tiene ningún modelo descargado. Descarga uno desde la aplicación de Ollama o elige otro proveedor.",
-  "ollama_notice.recheck": "Comprobar de nuevo"
+  "ollama_notice.recheck": "Comprobar de nuevo",
+  "stuck.title_one": "1 candidatura quedó en «enviando»: el email pudo salir sin registrarse.",
+  "stuck.title_other": "{count} candidaturas quedaron en «enviando»: el email pudo salir sin registrarse.",
+  "stuck.hint": "Comprueba tu carpeta de enviados y confirma qué pasó. No se reenvían solas.",
+  "stuck.sent": "Sí, salió",
+  "stuck.not_sent": "No salió, volver a pendiente",
+  "stuck.failed": "No se pudo actualizar la candidatura."
 }

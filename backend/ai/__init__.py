@@ -4,6 +4,8 @@ ai — Capa de proveedores de IA (ollama, anthropic, openai, claude_cli, codex_c
 Uso: `get_provider().generate_json(prompt, schema)`. Con `none` lanza `AIUnavailable` y los
 llamadores caen a su alternativa sin IA.
 """
+import logging
+
 from search_config import AISettings, get_config
 
 from .base import AIError, AIHTTPError, AIUnavailable, NoneProvider, Provider
@@ -18,7 +20,19 @@ _PROVIDERS = {
     "codex_cli": CodexCliProvider,
 }
 
-__all__ = ["AIError", "AIHTTPError", "AIUnavailable", "Provider", "get_provider"]
+__all__ = ["AIError", "AIHTTPError", "AIUnavailable", "Provider", "get_provider", "warn_ai_unavailable"]
+
+logger = logging.getLogger(__name__)
+
+
+def warn_ai_unavailable(purpose: str, error: Exception) -> None:
+    """La configuración de IA no es válida y se sigue sin IA. Elegir `none` a propósito NO pasa por aquí.
+
+    Solo se registra el tipo de error: el detalle puede citar claves o rutas."""
+    logger.warning(
+        "IA no disponible para %s: configuración inválida (%s). Se continúa sin IA (plantillas / solo perfil).",
+        purpose, type(error).__name__,
+    )
 
 
 def get_provider(settings: AISettings | None = None) -> Provider:

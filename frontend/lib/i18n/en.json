@@ -538,5 +538,11 @@
   "ollama_notice.install": "Download Ollama",
   "ollama_notice.stopped": "Ollama is installed but not running. Open it and press \"Check again\".",
   "ollama_notice.no_models": "Ollama is running but has no models downloaded. Download one from the Ollama app or pick another provider.",
-  "ollama_notice.recheck": "Check again"
+  "ollama_notice.recheck": "Check again",
+  "stuck.title_one": "1 application is stuck in \"sending\": the email may have gone out without being recorded.",
+  "stuck.title_other": "{count} applications are stuck in \"sending\": the email may have gone out without being recorded.",
+  "stuck.hint": "Check your sent folder and confirm what happened. They are never resent automatically.",
+  "stuck.sent": "Yes, it went out",
+  "stuck.not_sent": "No, move back to pending",
+  "stuck.failed": "The application could not be updated."
 }

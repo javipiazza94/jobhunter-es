@@ -122,6 +122,7 @@ class TestApplicationArchive(unittest.TestCase):
             archived_cover.write_bytes(b"%PDF cover archived")
 
             mock_conn = MagicMock()
+            mock_conn.execute.return_value.rowcount = 1  # la reserva atómica pending_approval -> sending prospera
             mock_conn.execute.return_value.fetchone.return_value = {
                 "id": "app_1",
                 "status": "pending_approval",
@@ -134,7 +135,7 @@ class TestApplicationArchive(unittest.TestCase):
             }
 
             with patch("automation.application_engine._emails_sent_today", return_value=0), \
-                 patch("automation.application_engine.send_email", return_value=(True, "msg_123")) as mock_send, \
+                 patch("automation.application_engine.deliver_email", return_value="msg_123") as mock_send, \
                  patch("automation.application_engine._load_profile", return_value={"personal": {"name": "Test"}}):
 
                 success = application_engine._send_approved(mock_conn, "app_1")
