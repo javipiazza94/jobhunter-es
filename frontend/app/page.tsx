@@ -8,6 +8,8 @@ import { failureMessage, isObject, settle, type Failures } from "@/lib/safeLoad"
 import { MODALITY_BADGE, SOURCE_COLORS, STATUS_COLORS, parseReviewFlags, trackTabs } from "@/lib/ui";
 import { useInboxSync } from "@/app/hooks/useInboxSync";
 import { InboxBanner } from "@/app/components/InboxBanner";
+import { StuckSendBanner } from "@/app/components/StuckSendBanner";
+import { useStuckSends } from "@/app/hooks/useStuckSends";
 import { SetupBanner } from "@/app/components/SetupBanner";
 import { useOfferFilters } from "@/app/hooks/useOfferFilters";
 import { useApplicationFilters } from "@/app/hooks/useApplicationFilters";
@@ -122,6 +124,7 @@ export default function Dashboard() {
   const load = async () => applyAll(await fetchAll());
 
   // Lo que Cowork o n8n dejan en el inbox lo carga la API sola; aquí solo se refresca el panel.
+  const stuckSends = useStuckSends();
   const inbox = useInboxSync(async report => {
     await load();
     setActionMsg(report ? `Inbox: ${report.new} nuevas, ${report.updated} actualizadas` : "Inbox cargado");
@@ -395,6 +398,7 @@ export default function Dashboard() {
         )}
 
         {setupBanner && <SetupBanner onOpen={() => setWizard("rerun")} onDismiss={() => setSetupBanner(false)} />}
+        <StuckSendBanner items={stuckSends.items} busyId={stuckSends.busyId} failed={stuckSends.failed} onResolve={stuckSends.resolve} />
         <InboxBanner status={inbox.status} syncing={inbox.syncing} onSync={inbox.sync} />
 
         {/* Navigation Tabs */}

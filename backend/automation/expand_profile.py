@@ -19,7 +19,7 @@ from collections import Counter
 from typing import Any
 from urllib.parse import urlsplit
 
-from ai import AIError, Provider, get_provider
+from ai import AIError, Provider, get_provider, warn_ai_unavailable
 from automation import fetch_page
 from automation.ai_documents import _allowed_skills
 from automation.ai_writing import _untrusted
@@ -169,7 +169,8 @@ def propose(urls: list[str], provider: Provider | None = None, profile: dict | N
     if provider is None:
         try:
             provider = get_provider()
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            warn_ai_unavailable("ampliar el perfil", exc)
             provider = None
         if provider is not None and getattr(provider, "name", "") == "none":
             provider = None

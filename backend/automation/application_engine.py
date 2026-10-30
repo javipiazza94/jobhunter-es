@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from automation.cv_selector import cover_letter_docx_for, cover_template_for, default_track_id, select_cv
-from ai import get_provider
+from ai import get_provider, warn_ai_unavailable
 from config import MAX_EMAILS_PER_DAY, RECONTACT_COOLDOWN_DAYS
 from profile_store import load_profile
 from database import (
@@ -23,7 +23,7 @@ from database import (
 from automation.application_archive import application_lock, get_application_attachments
 from automation.ai_writing import AIBudget, adapt_cover_letter
 from automation.cover_letter import generate as generate_letter
-from automation.email_sender import send_email
+from automation.email_sender import EmailSendError, deliver_email
 from automation.filter_engine import classify_track
 from automation.form_filler import fill_form
 from automation.salary import profile_for_offer
@@ -76,7 +76,8 @@ def _letter_provider():
     """Proveedor de IA para adaptar cartas; `None` con `none` o config inválida (cartas con plantilla)."""
     try:
         provider = get_provider()
-    except Exception:  # noqa: BLE001 — sin IA válida se sigue con plantillas
+    except Exception as exc:  # noqa: BLE001 — sin IA válida se sigue con plantillas
+        warn_ai_unavailable("adaptar cartas", exc)
         return None
     return None if getattr(provider, "name", "none") == "none" else provider
 
@@ -304,43 +305,116 @@ def _send_approved(conn, application_id: str) -> bool:
         else f"Candidatura — {personal.get('name', '')}"
     )
 
-    # Si existen documentos archivados en JH_HOME/applications/<id>/, se usan preferentemente.
-    # Con el cerrojo de la candidatura: nunca se adjunta durante una preparación o sustitución.
-    with application_lock(application_id):
-        archived_cv, archived_cover = get_application_attachments(application_id)
-        # (Path, no str: email_sender lee .exists()/.name de cada adjunto)
-        if archived_cv and archived_cv.is_file():
-            cv = archived_cv
-        if archived_cover and archived_cover.is_file():
-            cover_letter_docx = archived_cover
+    # Reserva atómica en la BD: vale entre procesos (cron y dashboard), a diferencia del cerrojo en memoria.
+    _reserve_for_sending(conn, application_id)
 
-        success, _message_id = send_email(
-            to=app["contact_value"],
-            subject=subject,
-            body=body,
-            cv_path=cv,
-            cover_letter_path=cover_letter_docx,
-            dry_run=False,
-        )
+    try:
+        # Si existen documentos archivados en JH_HOME/applications/<id>/, se usan preferentemente.
+        # Con el cerrojo de la candidatura: nunca se adjunta durante una preparación o sustitución.
+        with application_lock(application_id):
+            archived_cv, archived_cover = get_application_attachments(application_id)
+            # (Path, no str: email_sender lee .exists()/.name de cada adjunto)
+            if archived_cv and archived_cv.is_file():
+                cv = archived_cv
+            if archived_cover and archived_cover.is_file():
+                cover_letter_docx = archived_cover
 
-    if success:
-        now = datetime.now().isoformat()
-        conn.execute(
-            "UPDATE applications SET status='sent', sent_at=?, approved_at=? WHERE id=?",
-            (now, now, application_id),
+            message_id = deliver_email(
+                to=app["contact_value"],
+                subject=subject,
+                body=body,
+                cv_path=cv,
+                cover_letter_path=cover_letter_docx,
+            )
+    except EmailSendError as e:
+        _release_after_failed_send(conn, application_id, e.reason)
+        return False
+    except Exception as e:
+        _release_after_failed_send(conn, application_id, type(e).__name__)  # falló antes de enviar nada
+        raise
+
+    try:
+        _record_sent(conn, application_id, app, cv_profile)
+    except Exception:
+        conn.rollback()
+        # El email YA salió. La candidatura se queda en 'sending' (nunca vuelve a pending_approval) para que
+        # ningún reintento la envíe de nuevo; hay que cerrarla a mano con este message_id.
+        logger.critical(
+            "EMAIL ENVIADO pero NO REGISTRADO: application=%s destinatario=%s message_id=%s. "
+            "Marcar a mano como enviada; NO reenviar.",
+            application_id, app["contact_value"], message_id,
         )
-        domain = app["contact_value"].split("@")[-1] if "@" in (app.get("contact_value") or "") else ""
-        record_history(conn, {
-            "company_name": app.get("company_name", ""),
-            "company_domain": domain,
-            "email_used": app.get("contact_value") or "",
-            "profile_used": cv_profile,
-            "sent_at": now,
-            "application_id": application_id,
-        })
+        raise
+    return True
+
+
+def _reserve_for_sending(conn, application_id: str) -> None:
+    """pending_approval -> sending, de forma atómica. ValueError si otro proceso ya la reservó o cambió de estado."""
+    cursor = conn.execute(
+        "UPDATE applications SET status='sending' WHERE id=? AND status='pending_approval'",
+        (application_id,),
+    )
+    if cursor.rowcount != 1:
+        conn.rollback()
+        raise ValueError(f"Application {application_id} not found or not in pending_approval status.")
+    conn.commit()
+
+
+def _release_after_failed_send(conn, application_id: str, reason: str) -> None:
+    """El email no salió: vuelve a pending_approval y el motivo queda en las notas de la candidatura."""
+    conn.execute(
+        "UPDATE applications SET status='pending_approval', notes=COALESCE(notes,'') || ? WHERE id=? AND status='sending'",
+        (f"\n[envío fallido {datetime.now().isoformat(timespec='seconds')}] {reason}", application_id),
+    )
+    conn.commit()
+    logger.warning("Envío fallido de %s: %s", application_id, reason)
+
+
+def resolve_unconfirmed_send(application_id: str, was_sent: bool) -> str:
+    """La persona confirma qué pasó con una candidatura atascada en 'sending' (el proceso murió o falló el
+    registro tras el SMTP). Devuelve el nuevo estado; ValueError si no existe o no está en 'sending'.
+
+    `was_sent=True`: el email sí salió -> 'sent' y entra en el historial de contactos (enfriamiento de recontacto).
+    `was_sent=False`: no salió -> vuelve a 'pending_approval'."""
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            """SELECT a.*, c.name as company_name, ct.value as contact_value
+               FROM applications a
+               LEFT JOIN companies c ON a.company_id = c.id
+               LEFT JOIN contacts ct ON a.contact_id = ct.id
+               WHERE a.id = ? AND a.status = 'sending'""",
+            (application_id,),
+        ).fetchone()
+        if not row:
+            raise ValueError(f"Application {application_id} not found or not in sending status.")
+        app = dict(row)
+        if was_sent:
+            _record_sent(conn, application_id, app, app.get("cv_profile") or default_track_id())
+            return "sent"
+        conn.execute("UPDATE applications SET status='pending_approval' WHERE id=?", (application_id,))
         conn.commit()
+        return "pending_approval"
+    finally:
+        conn.close()
 
-    return success
+
+def _record_sent(conn, application_id: str, app: dict, cv_profile: str) -> None:
+    now = datetime.now().isoformat()
+    conn.execute(
+        "UPDATE applications SET status='sent', sent_at=?, approved_at=? WHERE id=?",
+        (now, now, application_id),
+    )
+    domain = app["contact_value"].split("@")[-1] if "@" in (app.get("contact_value") or "") else ""
+    record_history(conn, {
+        "company_name": app.get("company_name", ""),
+        "company_domain": domain,
+        "email_used": app.get("contact_value") or "",
+        "profile_used": cv_profile,
+        "sent_at": now,
+        "application_id": application_id,
+    })
+    conn.commit()
 
 
 def mark_sent_manual(application_id: str) -> bool:
@@ -411,7 +485,12 @@ def send_pending(limit: int | None = None) -> dict:
            WHERE a.status = 'pending_approval'
            ORDER BY jo.relevance_score DESC"""
     ).fetchall()
+    stuck = conn.execute("SELECT COUNT(*) FROM applications WHERE status='sending'").fetchone()[0]
     conn.close()
+    if stuck:
+        logger.warning(
+            "%d candidatura(s) en 'sending': el email pudo salir sin registrarse. Revisar a mano; no se reenvían.", stuck
+        )
 
     batch = [dict(r) for r in rows]
     if limit is not None:

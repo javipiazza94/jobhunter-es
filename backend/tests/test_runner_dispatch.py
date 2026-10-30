@@ -181,7 +181,7 @@ def test_track_un_fallo_en_una_fuente_no_frena_a_las_demas(monkeypatch, caplog):
 
     seen = []
     _fake_track_sources(monkeypatch, seen, infojobs_falla=True)
-    with caplog.at_level("ERROR"):
+    with caplog.at_level("ERROR"), pytest.raises(runner.SourcesFailed):  # avisa al final, tras ejecutar todas
         asyncio.run(runner.run_track_source("sap", True, 1))
 
     names = {c[0] for c in seen}

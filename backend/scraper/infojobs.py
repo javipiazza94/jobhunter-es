@@ -11,7 +11,7 @@ import asyncio
 import logging
 from bs4 import BeautifulSoup
 from urllib.parse import urlencode
-from scraper.base import BaseScraper
+from scraper.base import BaseScraper, raise_if_all_failed
 from search_config import source_settings
 
 logger = logging.getLogger(__name__)
@@ -154,6 +154,7 @@ async def run_infojobs(
     if not keywords:
         logger.warning("InfoJobs: sin keywords (sources.infojobs.keywords o search_keywords del track en "
                        "jobhunter.yaml); no hay nada que buscar")
+    failures = 0
     for kw in keywords:
         logger.info("InfoJobs keyword: %s", kw)
         try:
@@ -162,6 +163,8 @@ async def run_infojobs(
                     seen.add(offer["url"])
                     all_offers.append(offer)
         except Exception as e:
+            failures += 1
             logger.error("InfoJobs keyword '%s' failed: %s", kw, e)
+    raise_if_all_failed("InfoJobs", len(keywords), failures)
     logger.info("InfoJobs total: %d unique offers", len(all_offers))
     return all_offers

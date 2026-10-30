@@ -378,8 +378,8 @@ def test_el_envio_espera_al_cerrojo_de_la_candidatura(env, fake_generator, monke
 
     application_documents.prepare_application(env["app_id"])
     sent: list = []
-    monkeypatch.setattr(application_engine, "send_email",
-                        lambda **kw: sent.append(kw) or (True, "<id@test>"))
+    monkeypatch.setattr(application_engine, "deliver_email",
+                        lambda **kw: sent.append(kw) or "<id@test>")
     lock = application_archive.application_lock(env["app_id"])
     lock.acquire()
     try:
